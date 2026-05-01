@@ -8,9 +8,16 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardFooter } from '@/components/ui/card'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
 import { Upload, X } from 'lucide-react'
-import { cn } from '@/lib/utils'
 import { idsEqual } from '@/lib/category-tree'
 import { buildSubmitNavigationTier1List } from '@/lib/submit-category-choices'
 import type { Category, NavigationMenuTreeNode, Tool } from '@/lib/types'
@@ -26,6 +33,8 @@ export type EditingToolPayload = Pick<
   | 'logo_url'
   | 'screenshot_url'
 >
+
+const SUBMIT_CAT_NONE = '__submit_cat_none__'
 
 function initialTier1Pick(
   categories: Category[],
@@ -280,10 +289,11 @@ export function SubmitToolForm({
 
           {/* Name */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground">
+            <Label htmlFor="tool-name" className="text-sm font-medium">
               工具名称 <span className="text-destructive">*</span>
-            </label>
+            </Label>
             <Input
+              id="tool-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="例如：ChatGPT"
@@ -293,10 +303,11 @@ export function SubmitToolForm({
 
           {/* Description */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground">
+            <Label htmlFor="tool-description" className="text-sm font-medium">
               工具描述 <span className="text-destructive">*</span>
-            </label>
+            </Label>
             <Textarea
+              id="tool-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="简要描述这个工具的功能和特点..."
@@ -310,10 +321,11 @@ export function SubmitToolForm({
 
           {/* Website URL */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground">
+            <Label htmlFor="tool-website" className="text-sm font-medium">
               网站地址 <span className="text-destructive">*</span>
-            </label>
+            </Label>
             <Input
+              id="tool-website"
               type="url"
               value={websiteUrl}
               onChange={(e) => setWebsiteUrl(e.target.value)}
@@ -322,77 +334,113 @@ export function SubmitToolForm({
           </div>
 
           <div className="space-y-3">
-            <div>
-              <label className="text-sm font-medium text-foreground">
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">
                 工具分类 <span className="text-destructive">*</span>
-              </label>
-              <p className="mt-0.5 text-xs text-muted-foreground">
+              </Label>
+              <p className="text-xs text-muted-foreground">
                 选项与侧栏菜单一致：折叠分组下会再选具体分类（如 pic1）。
               </p>
             </div>
 
             {tier1.length === 0 ? (
-              <p className="rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
+              <p className="rounded-md border border-dashed border-border/80 bg-muted/20 px-3 py-2.5 text-sm text-muted-foreground">
                 侧栏中尚未配置可提交分类。请在「菜单管理」中为项填写{' '}
-                <code className="rounded bg-muted px-1">/category/slug</code>{' '}
+                <code className="rounded-md bg-muted px-1.5 py-0.5 text-xs">
+                  /category/slug
+                </code>{' '}
                 链接，并为子菜单项绑定对应分类页。
               </p>
             ) : (
-              <div className="space-y-3">
-                <div className="space-y-1.5">
-                  <span className="text-xs font-medium text-muted-foreground">
-                    分类入口
-                  </span>
-                  <select
-                    className={cn(
-                      'flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none',
-                      'focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
-                    )}
-                    value={primaryIdx < 0 ? '' : String(primaryIdx)}
-                    onChange={(e) => onPrimaryChange(e.target.value)}
+              <div className="space-y-3 rounded-lg border border-border bg-card/50 p-4">
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="submit-category-primary"
+                    className="text-xs font-medium text-muted-foreground"
                   >
-                    <option value="">请选择</option>
-                    {tier1.map((row, i) => (
-                      <option
-                        key={
-                          row.kind === 'menu_group'
-                            ? `g-${row.navParentId}`
-                            : `l-${row.categoryId}`
-                        }
-                        value={String(i)}
-                      >
-                        {row.label}
-                      </option>
-                    ))}
-                  </select>
+                    分类入口
+                  </Label>
+                  <Select
+                    value={
+                      primaryIdx < 0 ? SUBMIT_CAT_NONE : String(primaryIdx)
+                    }
+                    onValueChange={(v) => {
+                      if (v === SUBMIT_CAT_NONE) onPrimaryChange('')
+                      else onPrimaryChange(v)
+                    }}
+                  >
+                    <SelectTrigger
+                      id="submit-category-primary"
+                      className="h-10 w-full bg-background"
+                    >
+                      <SelectValue placeholder="请选择分类入口" />
+                    </SelectTrigger>
+                    <SelectContent
+                      position="popper"
+                      className="max-h-[min(20rem,var(--radix-select-content-available-height))]"
+                    >
+                      <SelectItem value={SUBMIT_CAT_NONE}>
+                        请选择分类入口
+                      </SelectItem>
+                      {tier1.map((row, i) => (
+                        <SelectItem
+                          key={
+                            row.kind === 'menu_group'
+                              ? `g-${row.navParentId}`
+                              : `l-${row.categoryId}`
+                          }
+                          value={String(i)}
+                        >
+                          {row.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 {showLeafSelect && currentRow?.kind === 'menu_group' ? (
-                  <div className="space-y-1.5">
-                    <span className="text-xs font-medium text-muted-foreground">
-                      具体分类
-                    </span>
-                    <select
-                      className={cn(
-                        'flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none',
-                        'focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
-                      )}
-                      value={leafId}
-                      onChange={(e) => setLeafId(e.target.value)}
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="submit-category-leaf"
+                      className="text-xs font-medium text-muted-foreground"
                     >
-                      <option value="">请选择具体分类</option>
-                      {currentRow.children.map((ch) => (
-                        <option key={ch.categoryId} value={ch.categoryId}>
-                          {ch.label}
-                        </option>
-                      ))}
-                    </select>
+                      具体分类
+                    </Label>
+                    <Select
+                      value={leafId ? leafId : SUBMIT_CAT_NONE}
+                      onValueChange={(v) =>
+                        setLeafId(v === SUBMIT_CAT_NONE ? '' : v)
+                      }
+                    >
+                      <SelectTrigger
+                        id="submit-category-leaf"
+                        className="h-10 w-full bg-background"
+                      >
+                        <SelectValue placeholder="请选择具体分类" />
+                      </SelectTrigger>
+                      <SelectContent
+                        position="popper"
+                        className="max-h-[min(20rem,var(--radix-select-content-available-height))]"
+                      >
+                        <SelectItem value={SUBMIT_CAT_NONE}>
+                          请选择具体分类
+                        </SelectItem>
+                        {currentRow.children.map((ch) => (
+                          <SelectItem
+                            key={ch.categoryId}
+                            value={ch.categoryId}
+                          >
+                            {ch.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 ) : null}
 
                 {currentRow?.kind === 'menu_group' &&
                 currentRow.children.length === 1 ? (
-                  <p className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+                  <p className="rounded-md border border-border bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">
                     将归入「{currentRow.children[0].label}」
                   </p>
                 ) : null}
@@ -400,8 +448,8 @@ export function SubmitToolForm({
             )}
 
             {leafId ? (
-              <div className="rounded-md border border-border bg-muted/35 px-3 py-2 text-sm">
-                当前选择：
+              <div className="rounded-md border border-border bg-muted/30 px-3 py-2.5 text-sm">
+                <span className="text-muted-foreground">当前选择：</span>
                 <span className="ml-1 font-medium text-foreground">
                   {categories.find((c) => idsEqual(c.id, leafId))?.name ?? '—'}
                 </span>
@@ -418,9 +466,7 @@ export function SubmitToolForm({
 
           {/* Logo Upload */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground">
-              工具Logo
-            </label>
+            <Label className="text-sm font-medium">工具Logo</Label>
             <input
               ref={logoInputRef}
               type="file"
@@ -468,9 +514,7 @@ export function SubmitToolForm({
 
           {/* Screenshot Upload */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground">
-              工具截图
-            </label>
+            <Label className="text-sm font-medium">工具截图</Label>
             <input
               ref={screenshotInputRef}
               type="file"
