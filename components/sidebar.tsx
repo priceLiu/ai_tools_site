@@ -3,41 +3,15 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
-import type { Category } from '@/lib/types'
-import {
-  Flame,
-  MessageCircle,
-  Image,
-  Video,
-  Music,
-  PenTool,
-  Code,
-  Palette,
-  Briefcase,
-  Search,
-  GraduationCap,
-  TrendingUp,
-  Sparkles,
-  Plus,
-  Clock,
-  type LucideIcon,
-} from 'lucide-react'
+import type { NavigationMenuTreeNode } from '@/lib/types'
+import { navigationIcon } from '@/lib/navigation-icons'
+import { ChevronDown, Plus, Sparkles, type LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-
-const iconMap: Record<string, LucideIcon> = {
-  Flame,
-  MessageCircle,
-  Image,
-  Video,
-  Music,
-  PenTool,
-  Code,
-  Palette,
-  Briefcase,
-  Search,
-  GraduationCap,
-  TrendingUp,
-}
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 
 function scrollToAnchor(id: string) {
   const el = typeof document !== 'undefined' ? document.getElementById(id) : null
@@ -47,17 +21,143 @@ function scrollToAnchor(id: string) {
 }
 
 interface SidebarProps {
-  categories: Category[]
-  /** 在首页时改为同页锚点滚动，不跳转路由 */
+  navigation: NavigationMenuTreeNode[]
   enableHomeAnchors?: boolean
 }
 
+function itemRowClass(active: boolean) {
+  return cn(
+    'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+    active
+      ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+      : 'text-sidebar-foreground hover:bg-sidebar-accent/80',
+  )
+}
+
+function routeActive(pathname: string | null, href: string): boolean {
+  if (!pathname || href.startsWith('#') || href.startsWith('http')) return false
+  const u = href.split('?')[0]
+  return pathname === u || pathname.startsWith(`${u}/`)
+}
+
+function LeafLink({
+  href,
+  label,
+  Icon,
+  pathname,
+  homeAnchorMode,
+}: {
+  href: string
+  label: string
+  Icon: LucideIcon
+  pathname: string | null
+  homeAnchorMode: boolean
+}) {
+  const rowInner = (
+    <>
+      <Icon className="h-5 w-5 shrink-0" />
+      <span className="hidden min-w-0 flex-1 truncate md:block">{label}</span>
+    </>
+  )
+
+  if (href.startsWith('http://') || href.startsWith('https://')) {
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={itemRowClass(false)}
+      >
+        {rowInner}
+      </a>
+    )
+  }
+
+  if (href.startsWith('#')) {
+    const anchorId = href.slice(1)
+    if (homeAnchorMode) {
+      return (
+        <button type="button" onClick={() => scrollToAnchor(anchorId)} className={cn(itemRowClass(false), 'w-full text-left')}>
+          {rowInner}
+        </button>
+      )
+    }
+    return (
+      <Link href={`/${href}`} className={itemRowClass(false)}>
+        {rowInner}
+      </Link>
+    )
+  }
+
+  return (
+    <Link href={href} className={itemRowClass(routeActive(pathname, href))}>
+      {rowInner}
+    </Link>
+  )
+}
+
+function NavNode({
+  node,
+  pathname,
+  homeAnchorMode,
+}: {
+  node: NavigationMenuTreeNode
+  pathname: string | null
+  homeAnchorMode: boolean
+}) {
+  const Icon = navigationIcon(node.icon_name)
+  const children = node.children
+
+  if (children.length === 0) {
+    return (
+      <LeafLink
+        href={node.href}
+        label={node.label}
+        Icon={Icon}
+        pathname={pathname}
+        homeAnchorMode={homeAnchorMode}
+      />
+    )
+  }
+
+  return (
+    <Collapsible className="space-y-0.5">
+      <CollapsibleTrigger
+        className={cn(
+          itemRowClass(false),
+          'w-full text-left [&[data-state=open]>svg:last-child]:rotate-180',
+        )}
+      >
+        <Icon className="h-5 w-5 shrink-0 text-primary" />
+        <span className="hidden flex-1 md:block">{node.label}</span>
+        <ChevronDown className="ml-auto h-4 w-4 shrink-0 opacity-70 transition-transform" />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="space-y-0.5 pb-1 pl-2 pt-0.5 data-[state=closed]:animate-none md:ml-3 md:border-l md:border-border md:pl-3">
+        {children.map((ch) => {
+          const CIcon = navigationIcon(ch.icon_name)
+          return (
+            <LeafLink
+              key={ch.id}
+              href={ch.href}
+              label={ch.label}
+              Icon={CIcon}
+              pathname={pathname}
+              homeAnchorMode={homeAnchorMode}
+            />
+          )
+        })}
+      </CollapsibleContent>
+    </Collapsible>
+  )
+}
+
 export function Sidebar({
-  categories,
+  navigation,
   enableHomeAnchors = false,
 }: SidebarProps) {
   const pathname = usePathname()
-  const homeMode = enableHomeAnchors && pathname === '/'
+  const homeAnchorMode =
+    Boolean(enableHomeAnchors) && pathname === '/'
 
   return (
     <aside className="fixed left-0 top-0 z-40 h-screen w-16 border-r border-border bg-sidebar md:w-64">
@@ -74,79 +174,19 @@ export function Sidebar({
         </div>
 
         <nav className="flex-1 space-y-1 overflow-y-auto p-2">
-          {homeMode ? (
-            <>
-              <button
-                type="button"
-                onClick={() => scrollToAnchor('home-hot')}
-                className={cn(
-                  'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors',
-                  'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
-                )}
-              >
-                <Flame className="h-5 w-5 shrink-0 text-orange-500" />
-                <span className="hidden md:block">热门工具</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => scrollToAnchor('home-latest')}
-                className={cn(
-                  'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors',
-                  'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
-                )}
-              >
-                <Clock className="h-5 w-5 shrink-0 text-blue-500" />
-                <span className="hidden md:block">最新收录</span>
-              </button>
-              {categories
-                .filter((c) => c.slug !== 'hot')
-                .map((category) => {
-                  const Icon = iconMap[category.icon || ''] || Sparkles
-                  return (
-                    <button
-                      key={category.id}
-                      type="button"
-                      onClick={() =>
-                        scrollToAnchor(`home-cat-${category.slug}`)
-                      }
-                      className={cn(
-                        'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors',
-                        'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
-                      )}
-                    >
-                      <Icon className="h-5 w-5 shrink-0" />
-                      <span className="hidden md:block">{category.name}</span>
-                    </button>
-                  )
-                })}
-            </>
+          {navigation.length === 0 ? (
+            <p className="px-2 py-4 text-xs text-muted-foreground md:text-sm">
+              侧栏暂无菜单，请管理员在「菜单管理」中配置。
+            </p>
           ) : (
-            categories.map((category) => {
-              const Icon = iconMap[category.icon || ''] || Sparkles
-              const isActive = pathname === `/category/${category.slug}`
-
-              return (
-                <Link
-                  key={category.id}
-                  href={`/category/${category.slug}`}
-                  className={cn(
-                    'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
-                    'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
-                    isActive
-                      ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                      : 'text-sidebar-foreground',
-                  )}
-                >
-                  <Icon
-                    className={cn(
-                      'h-5 w-5 shrink-0',
-                      isActive && 'text-primary',
-                    )}
-                  />
-                  <span className="hidden md:block">{category.name}</span>
-                </Link>
-              )
-            })
+            navigation.map((node) => (
+              <NavNode
+                key={node.id}
+                node={node}
+                pathname={pathname}
+                homeAnchorMode={homeAnchorMode}
+              />
+            ))
           )}
         </nav>
 

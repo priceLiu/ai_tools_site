@@ -11,6 +11,7 @@ import {
   Plus,
   History,
   User,
+  LayoutGrid,
 } from 'lucide-react'
 
 type Variant = 'default' | 'admin'
@@ -48,7 +49,9 @@ export function CompactAppSidebar({ variant = 'default' }: CompactAppSidebarProp
     { href: '/account/profile', label: '个人信息', icon: User },
   ] as const
 
-  const adminSectionActive = pathname.startsWith('/admin')
+  const navigationAdminActive = pathname.startsWith('/admin/navigation')
+  const reviewsAdminActive =
+    pathname.startsWith('/admin') && !navigationAdminActive
 
   return (
     <aside
@@ -115,18 +118,32 @@ export function CompactAppSidebar({ variant = 'default' }: CompactAppSidebarProp
           )}
 
           {isAdmin && (
-            <Link
-              href="/admin"
-              className={cn(
-                'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
-                adminSectionActive
-                  ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                  : 'text-sidebar-foreground hover:bg-sidebar-accent/70',
-              )}
-            >
-              <ClipboardList className="h-4 w-4 shrink-0" />
-              审核列表
-            </Link>
+            <>
+              <Link
+                href="/admin"
+                className={cn(
+                  'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+                  reviewsAdminActive
+                    ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                    : 'text-sidebar-foreground hover:bg-sidebar-accent/70',
+                )}
+              >
+                <ClipboardList className="h-4 w-4 shrink-0" />
+                审核列表
+              </Link>
+              <Link
+                href="/admin/navigation"
+                className={cn(
+                  'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+                  navigationAdminActive
+                    ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                    : 'text-sidebar-foreground hover:bg-sidebar-accent/70',
+                )}
+              >
+                <LayoutGrid className="h-4 w-4 shrink-0" />
+                菜单管理
+              </Link>
+            </>
           )}
         </nav>
       </div>

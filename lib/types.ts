@@ -56,3 +56,17 @@ export interface ToolComment {
   website: string | null
   created_at: string
 }
+
+export interface NavigationMenuItemRow {
+  id: string
+  parent_id: string | null
+  label: string
+  href: string
+  icon_name: string | null
+  sort_order: number
+  is_visible: boolean
+}
+
+export interface NavigationMenuTreeNode extends NavigationMenuItemRow {
+  children: NavigationMenuTreeNode[]
+}

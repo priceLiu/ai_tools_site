@@ -3,7 +3,8 @@ import { notFound } from 'next/navigation'
 import { Sidebar } from '@/components/sidebar'
 import { Header } from '@/components/header'
 import { ToolCard } from '@/components/tool-card'
-import type { Category, Tool, Profile } from '@/lib/types'
+import type { Tool, Profile } from '@/lib/types'
+import { getNavigationMenuTree } from '@/lib/navigation-menu'
 import {
   Flame,
   MessageCircle,
@@ -85,13 +86,9 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
       .single()
     profile = data
   }
-  
-  // Get all categories for sidebar
-  const { data: categories } = await supabase
-    .from('categories')
-    .select('*')
-    .order('sort_order')
-  
+
+  const navigation = await getNavigationMenuTree()
+
   let tools: Tool[] = []
   let categoryName = ''
   let categoryIcon = ''
@@ -139,7 +136,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
 
   return (
     <div className="min-h-screen bg-background">
-      <Sidebar categories={(categories as Category[]) || []} />
+      <Sidebar navigation={navigation} />
       
       <div className="pl-16 md:pl-64">
         <Header user={user} profile={profile} />

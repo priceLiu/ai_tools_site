@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { getHomeToolBundle } from '@/lib/cached-home-data'
+import { getNavigationMenuTree } from '@/lib/navigation-menu'
 import { Sidebar } from '@/components/sidebar'
 import { Header } from '@/components/header'
 import { HomeToolSections } from '@/components/home-tool-sections'
@@ -9,9 +10,10 @@ import type { Profile } from '@/lib/types'
 export default async function HomePage() {
   const supabase = await createClient()
 
-  const [{ data: authData }, bundle] = await Promise.all([
+  const [{ data: authData }, bundle, navigation] = await Promise.all([
     supabase.auth.getUser(),
     getHomeToolBundle(),
+    getNavigationMenuTree(),
   ])
 
   const user = authData.user
@@ -28,7 +30,7 @@ export default async function HomePage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Sidebar categories={bundle.categories} enableHomeAnchors />
+      <Sidebar navigation={navigation} enableHomeAnchors />
 
       <div className="pl-16 md:pl-64">
         <Header user={user} profile={profile} />

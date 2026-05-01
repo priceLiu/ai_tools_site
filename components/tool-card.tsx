@@ -1,16 +1,20 @@
 'use client'
 
+import * as Tooltip from '@radix-ui/react-tooltip'
 import Link from 'next/link'
 import Image from 'next/image'
 import type { Tool } from '@/lib/types'
 import { Card, CardContent } from '@/components/ui/card'
 import { Sparkles, Bot, Eye, Heart } from 'lucide-react'
 
+const TOOL_TIP_CONTENT_CLASS =
+  'z-50 max-w-[340px] rounded-lg border-0 bg-neutral-950 px-4 py-3 text-xs text-white shadow-xl'
+
 interface ToolCardProps {
   tool: Tool
-  /** 站点收藏总数；不传则视为 0 */
+  /** 站点收藏总数；不传则读 tool.favorite_count */
   favoritesCount?: number
-  /** 首屏条目传 true：优先解码 logo，更快 LCP */
+  /** 首屏条目传 true：优先解码 logo */
   imagePriority?: boolean
 }
 
@@ -19,17 +23,22 @@ export const TOOL_CARD_HEIGHT = 100
 
 export function ToolCard({
   tool,
-  favoritesCount = 0,
+  favoritesCount,
   imagePriority = false,
 }: ToolCardProps) {
   const views = tool.view_count ?? 0
   const fav = favoritesCount ?? tool.favorite_count ?? 0
   const catName = tool.category?.name ?? 'AI工具'
+  const tooltipText = (
+    tool.introduction?.trim() ||
+    tool.description ||
+    ''
+  ).trim()
 
-  return (
+  const linkBlock = (
     <Link
       href={`/tool/${tool.slug}`}
-      className="inline-flex shrink-0"
+      className="inline-flex shrink-0 outline-none"
       style={{
         width: TOOL_CARD_WIDTH,
         minHeight: TOOL_CARD_HEIGHT,
@@ -37,7 +46,7 @@ export function ToolCard({
       }}
     >
       <Card
-        className="group flex min-h-0 w-full cursor-pointer flex-1 overflow-hidden transition-all hover:border-primary/30 hover:shadow-md"
+        className="group flex min-h-0 w-full cursor-pointer flex-1 overflow-hidden transition-all hover:border-primary/30 hover:shadow-md focus-within:ring-2 focus-within:ring-ring"
         style={{ height: TOOL_CARD_HEIGHT }}
       >
         <CardContent className="flex h-full w-full items-center gap-2.5 px-2.5 py-2">
@@ -73,7 +82,10 @@ export function ToolCard({
                 {views.toLocaleString()}
               </span>
               <span className="inline-flex items-center gap-0.5 whitespace-nowrap">
-                <Heart className="h-3 w-3 shrink-0 text-red-500/75" aria-hidden />
+                <Heart
+                  className="h-3 w-3 shrink-0 text-red-500/75"
+                  aria-hidden
+                />
                 {fav.toLocaleString()}
               </span>
             </div>
@@ -81,5 +93,37 @@ export function ToolCard({
         </CardContent>
       </Card>
     </Link>
+  )
+
+  if (!tooltipText) {
+    return linkBlock
+  }
+
+  return (
+    <Tooltip.Provider delayDuration={280}>
+      <Tooltip.Root delayDuration={280}>
+        <Tooltip.Trigger asChild>
+          <span
+            className="inline-flex shrink-0"
+            style={{ width: TOOL_CARD_WIDTH, maxWidth: '100%' }}
+          >
+            {linkBlock}
+          </span>
+        </Tooltip.Trigger>
+        <Tooltip.Portal>
+          <Tooltip.Content
+            side="bottom"
+            sideOffset={10}
+            avoidCollisions
+            className={TOOL_TIP_CONTENT_CLASS}
+          >
+            <p className="line-clamp-2 max-w-[300px] whitespace-pre-wrap text-center text-xs leading-relaxed text-white">
+              {tooltipText}
+            </p>
+            <Tooltip.Arrow className="fill-neutral-950" width={12} height={6} />
+          </Tooltip.Content>
+        </Tooltip.Portal>
+      </Tooltip.Root>
+    </Tooltip.Provider>
   )
 }

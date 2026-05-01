@@ -3,7 +3,8 @@ import { Sidebar } from '@/components/sidebar'
 import { Header } from '@/components/header'
 import { ToolCard } from '@/components/tool-card'
 import { Search as SearchIcon } from 'lucide-react'
-import type { Category, Tool, Profile } from '@/lib/types'
+import type { Tool, Profile } from '@/lib/types'
+import { getNavigationMenuTree } from '@/lib/navigation-menu'
 
 interface SearchPageProps {
   searchParams: Promise<{ q?: string }>
@@ -19,6 +20,7 @@ export async function generateMetadata({ searchParams }: SearchPageProps) {
 export default async function SearchPage({ searchParams }: SearchPageProps) {
   const { q } = await searchParams
   const supabase = await createClient()
+  const navigation = await getNavigationMenuTree()
   
   // Get current user
   const { data: { user } } = await supabase.auth.getUser()
@@ -33,12 +35,6 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       .single()
     profile = data
   }
-  
-  // Get categories for sidebar
-  const { data: categories } = await supabase
-    .from('categories')
-    .select('*')
-    .order('sort_order')
   
   // Search tools
   let tools: Tool[] = []
@@ -55,7 +51,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
   return (
     <div className="min-h-screen bg-background">
-      <Sidebar categories={(categories as Category[]) || []} />
+      <Sidebar navigation={navigation} />
       
       <div className="pl-16 md:pl-64">
         <Header user={user} profile={profile} />

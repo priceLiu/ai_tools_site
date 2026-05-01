@@ -22,7 +22,8 @@ import {
   Lightbulb,
 } from 'lucide-react'
 import { ToolCommentsSection } from '@/components/tool-comments-section'
-import type { Category, Tool, Profile } from '@/lib/types'
+import type { NavigationMenuItemRow, NavigationMenuTreeNode, Tool, Profile } from '@/lib/types'
+import { buildNavigationTree } from '@/lib/navigation-menu'
 import type { User } from '@supabase/supabase-js'
 
 export default function ToolPage() {
@@ -31,7 +32,7 @@ export default function ToolPage() {
   const supabase = createClient()
   
   const [tool, setTool] = useState<Tool | null>(null)
-  const [categories, setCategories] = useState<Category[]>([])
+  const [navigation, setNavigation] = useState<NavigationMenuTreeNode[]>([])
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [isFavorited, setIsFavorited] = useState(false)
@@ -53,13 +54,18 @@ export default function ToolPage() {
         setProfile(profileData)
       }
       
-      // Get categories for sidebar
-      const { data: categoriesData } = await supabase
-        .from('categories')
-        .select('*')
+      const { data: navData } = await supabase
+        .from('navigation_menu_items')
+        .select('id,parent_id,label,href,icon_name,sort_order,is_visible')
+        .eq('is_visible', true)
         .order('sort_order')
-      setCategories(categoriesData || [])
-      
+
+      setNavigation(
+        navData?.length
+          ? buildNavigationTree(navData as NavigationMenuItemRow[])
+          : [],
+      )
+
       // Get tool
       const { data: toolData } = await supabase
         .from('tools')
@@ -101,7 +107,7 @@ export default function ToolPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
-        <Sidebar categories={[]} />
+        <Sidebar navigation={[]} />
         <div className="pl-16 md:pl-64">
           <Header user={null} profile={null} />
           <main className="flex items-center justify-center p-6">
@@ -115,7 +121,7 @@ export default function ToolPage() {
   if (!tool) {
     return (
       <div className="min-h-screen bg-background">
-        <Sidebar categories={categories} />
+        <Sidebar navigation={navigation} />
         <div className="pl-16 md:pl-64">
           <Header user={user} profile={profile} />
           <main className="p-4 md:p-6">
@@ -134,7 +140,7 @@ export default function ToolPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Sidebar categories={categories} />
+      <Sidebar navigation={navigation} />
       
       <div className="pl-16 md:pl-64">
         <Header user={user} profile={profile} />
