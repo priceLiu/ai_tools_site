@@ -10,14 +10,41 @@ export async function revalidateNavigationMenuCache() {
   revalidateTag(NAVIGATION_MENU_CACHE_TAG, { expire: 0 })
 }
 
-/** 把侧栏里 /category/slug 子菜单对应的行补进 categories（仅缺省时插入） */
-export async function syncCategoriesFromNavigationAction(): Promise<{
+export type SyncCategoriesFromNavigationResult = {
   ok: boolean
   created: number
   slugs: string[]
   errors: string[]
   message?: string
-}> {
+}
+
+function revalidateAfterNavOrCategoriesChange() {
+  revalidateTag(NAVIGATION_MENU_CACHE_TAG, { expire: 0 })
+  revalidatePath('/')
+  revalidatePath('/submit')
+  revalidatePath('/admin/navigation')
+}
+
+async function syncMissingCategoriesWithServerClient(
+  supabaseClient?: Awaited<ReturnType<typeof createClient>>,
+): Promise<Omit<SyncCategoriesFromNavigationResult, 'message'>> {
+  const supabase = supabaseClient ?? (await createClient())
+  const [{ data: navRows }, { data: catRows }] = await Promise.all([
+    supabase.from('navigation_menu_items').select('*').order('sort_order'),
+    supabase.from('categories').select('*').order('sort_order'),
+  ])
+  const res = await syncMissingCategoriesFromNavigation(
+    supabase,
+    (navRows ?? []) as NavigationMenuItemRow[],
+    (catRows ?? []) as Category[],
+  )
+  revalidateAfterNavOrCategoriesChange()
+  const ok = res.created > 0 || res.errors.length === 0
+  return { ok, created: res.created, slugs: res.slugs, errors: res.errors }
+}
+
+/** 把侧栏里 /category/slug 子菜单对应的行补进 categories（仅缺省时插入） */
+export async function syncCategoriesFromNavigationAction(): Promise<SyncCategoriesFromNavigationResult> {
   const supabase = await createClient()
   const {
     data: { user },
@@ -48,24 +75,88 @@ export async function syncCategoriesFromNavigationAction(): Promise<{
     }
   }
 
-  const [{ data: navRows }, { data: catRows }] = await Promise.all([
-    supabase.from('navigation_menu_items').select('*').order('sort_order'),
-    supabase.from('categories').select('*').order('sort_order'),
-  ])
+  return syncMissingCategoriesWithServerClient(supabase)
+}
 
-  const res = await syncMissingCategoriesFromNavigation(
-    supabase,
-    (navRows ?? []) as NavigationMenuItemRow[],
-    (catRows ?? []) as Category[],
-  )
+async function requireAdminClient() {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { supabase, user: null, admin: false }
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('is_admin')
+    .eq('id', user.id)
+    .single()
+  return { supabase, user, admin: Boolean(profile?.is_admin) }
+}
 
-  revalidateTag(NAVIGATION_MENU_CACHE_TAG, { expire: 0 })
+export type NavMenuMutationResult = {
+  authMessage?: string
+  dbError?: string
+  sync?: Omit<SyncCategoriesFromNavigationResult, 'message'>
+}
 
-  const ok = res.created > 0 || res.errors.length === 0
-  return {
-    ok,
-    created: res.created,
-    slugs: res.slugs,
-    errors: res.errors,
-  }
+/** 在同一请求内写入菜单并同步分类表，避免客户端写入后服务端读不到最新行 */
+export async function addNavigationMenuItemAction(input: {
+  label: string
+  href: string
+  icon_name: string | null
+  sort_order: number
+  parent_id: string | null
+  is_visible: boolean
+}): Promise<NavMenuMutationResult> {
+  const { supabase, user, admin } = await requireAdminClient()
+  if (!user) return { authMessage: '未登录' }
+  if (!admin) return { authMessage: '无权限' }
+  const { error } = await supabase.from('navigation_menu_items').insert({
+    label: input.label,
+    href: input.href,
+    icon_name: input.icon_name,
+    sort_order: input.sort_order,
+    parent_id: input.parent_id,
+    is_visible: input.is_visible,
+  })
+  if (error) return { dbError: error.message }
+  return { sync: await syncMissingCategoriesWithServerClient(supabase) }
+}
+
+export async function updateNavigationMenuItemAction(
+  id: string,
+  patch: Partial<
+    Pick<
+      NavigationMenuItemRow,
+      | 'label'
+      | 'href'
+      | 'icon_name'
+      | 'sort_order'
+      | 'parent_id'
+      | 'is_visible'
+    >
+  >,
+): Promise<NavMenuMutationResult> {
+  const { supabase, user, admin } = await requireAdminClient()
+  if (!user) return { authMessage: '未登录' }
+  if (!admin) return { authMessage: '无权限' }
+  const { error } = await supabase
+    .from('navigation_menu_items')
+    .update(patch)
+    .eq('id', id)
+  if (error) return { dbError: error.message }
+  return { sync: await syncMissingCategoriesWithServerClient(supabase) }
+}
+
+export async function deleteNavigationMenuItemAction(
+  id: string,
+): Promise<NavMenuMutationResult> {
+  const { supabase, user, admin } = await requireAdminClient()
+  if (!user) return { authMessage: '未登录' }
+  if (!admin) return { authMessage: '无权限' }
+  const { error } = await supabase
+    .from('navigation_menu_items')
+    .delete()
+    .eq('id', id)
+  if (error) return { dbError: error.message }
+  return { sync: await syncMissingCategoriesWithServerClient(supabase) }
 }

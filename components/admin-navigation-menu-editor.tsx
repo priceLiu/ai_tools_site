@@ -2,7 +2,6 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
 import type { NavigationMenuItemRow } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -16,7 +15,12 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Spinner } from '@/components/ui/spinner'
-import { revalidateNavigationMenuCache, syncCategoriesFromNavigationAction } from '@/app/admin/navigation/actions'
+import {
+  syncCategoriesFromNavigationAction,
+  addNavigationMenuItemAction,
+  updateNavigationMenuItemAction,
+  deleteNavigationMenuItemAction,
+} from '@/app/admin/navigation/actions'
 import { Trash2, Plus } from 'lucide-react'
 
 interface AdminNavigationMenuEditorProps {
@@ -70,11 +74,33 @@ export function AdminNavigationMenuEditor({
 
   const invalidate = () => startTransition(() => router.refresh())
 
+  const applyMutationSyncHint = (
+    r: Awaited<ReturnType<typeof addNavigationMenuItemAction>>,
+    dbFailVerb: '保存' | '更新' | '删除',
+  ) => {
+    if (r.authMessage) {
+      setSyncHint(r.authMessage)
+      return
+    }
+    if (r.dbError) {
+      setSyncHint(`${dbFailVerb}失败：${r.dbError}`)
+      return
+    }
+    const sync = r.sync
+    if (!sync) return
+    if (sync.errors.length > 0) {
+      setSyncHint(
+        `分类自动同步未完全成功：${sync.errors.join('；')}。可点击下方按钮重试。`,
+      )
+    } else {
+      setSyncHint(null)
+    }
+  }
+
   const addRow = async () => {
     const trimmed = label.trim()
     if (!trimmed || !href.trim()) return
-    const supabase = createClient()
-    await supabase.from('navigation_menu_items').insert({
+    const r = await addNavigationMenuItemAction({
       label: trimmed,
       href: href.trim(),
       icon_name: iconName.trim() || null,
@@ -82,7 +108,8 @@ export function AdminNavigationMenuEditor({
       parent_id: parentId,
       is_visible: visibleNew,
     })
-    await revalidateNavigationMenuCache()
+    applyMutationSyncHint(r, '保存')
+    if (r.authMessage || r.dbError) return
     setLabel('')
     setHref('/')
     setIconName('Sparkles')
@@ -95,20 +122,20 @@ export function AdminNavigationMenuEditor({
     id: string,
     patch: Partial<Pick<NavigationMenuItemRow, 'label' | 'href' | 'icon_name' | 'sort_order' | 'parent_id' | 'is_visible'>>,
   ) => {
-    const supabase = createClient()
     setBusyId(id)
-    await supabase.from('navigation_menu_items').update(patch).eq('id', id)
-    await revalidateNavigationMenuCache()
+    const r = await updateNavigationMenuItemAction(id, patch)
+    applyMutationSyncHint(r, '更新')
     setBusyId(null)
+    if (r.authMessage || r.dbError) return
     invalidate()
   }
 
   const removeRow = async (id: string) => {
-    const supabase = createClient()
     setBusyId(id)
-    await supabase.from('navigation_menu_items').delete().eq('id', id)
-    await revalidateNavigationMenuCache()
+    const r = await deleteNavigationMenuItemAction(id)
+    applyMutationSyncHint(r, '删除')
     setBusyId(null)
+    if (r.authMessage || r.dbError) return
     invalidate()
   }
 
@@ -118,9 +145,10 @@ export function AdminNavigationMenuEditor({
         <div className="space-y-1 text-sm">
           <p className="font-medium text-foreground">分类表与菜单</p>
           <p className="text-muted-foreground">
-            首页版块、工具提交的分类均来自「分类」表。侧栏子菜单若指向{' '}
-            <code className="rounded bg-muted px-1">/category/xxx</code>，需在 categories
-            中存在相同 slug。可一键补全当前缺失项。
+            保存菜单后会<strong className="font-medium text-foreground">自动</strong>
+            把子菜单里的{' '}
+            <code className="rounded bg-muted px-1">/category/xxx</code>{' '}
+            同步到「分类」表（仅缺省时插入）。若同步失败会在此处提示，也可手动再点一次。
           </p>
           {syncHint ? (
             <p className="text-xs text-foreground whitespace-pre-wrap">{syncHint}</p>
@@ -159,7 +187,7 @@ export function AdminNavigationMenuEditor({
               同步中…
             </>
           ) : (
-            '同步子菜单 → 分类表'
+            '再次同步到分类表'
           )}
         </Button>
       </div>
