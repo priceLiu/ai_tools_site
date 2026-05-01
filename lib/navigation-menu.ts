@@ -2,36 +2,21 @@ import { unstable_cache } from 'next/cache'
 import { headers } from 'next/headers'
 import { createPublicSupabase } from '@/lib/supabase/public'
 import type { NavigationMenuItemRow, NavigationMenuTreeNode } from '@/lib/types'
+import { buildNavigationTree } from '@/lib/navigation-tree'
+import {
+  NAVIGATION_MENU_CACHE_REVALIDATE_SECONDS,
+  NAVIGATION_MENU_CACHE_TAG,
+} from '@/lib/navigation-menu-cache-config'
 
-export const NAVIGATION_MENU_CACHE_TAG = 'navigation-menu'
-export const NAVIGATION_MENU_CACHE_REVALIDATE_SECONDS = 600
+export {
+  NAVIGATION_MENU_CACHE_REVALIDATE_SECONDS,
+  NAVIGATION_MENU_CACHE_TAG,
+} from '@/lib/navigation-menu-cache-config'
 
-export function buildNavigationTree(
-  rows: NavigationMenuItemRow[],
-): NavigationMenuTreeNode[] {
-  const mapped = rows.map((r) => ({
-    ...r,
-    children: [] as NavigationMenuTreeNode[],
-  }))
-  const byId = new Map(mapped.map((n) => [n.id, n]))
-  const roots: NavigationMenuTreeNode[] = []
-  for (const node of mapped) {
-    const pid = node.parent_id
-    if (pid && byId.has(pid)) {
-      byId.get(pid)!.children.push(node)
-    } else {
-      roots.push(node)
-    }
-  }
-  const sortRec = (list: NavigationMenuTreeNode[]) => {
-    list.sort((a, b) => a.sort_order - b.sort_order)
-    list.forEach((n) => sortRec(n.children))
-  }
-  sortRec(roots)
-  return roots
-}
-
-async function loadNavigationMenuTree(): Promise<NavigationMenuTreeNode[]> {
+/** 仅查库建树，无 headers；可供其它 Data Cache 内部调用（避免 unstable_cache 嵌套 dynamic）。 */
+export async function loadNavigationMenuTree(): Promise<
+  NavigationMenuTreeNode[]
+> {
   const supabase = createPublicSupabase()
   const { data, error } = await supabase
     .from('navigation_menu_items')

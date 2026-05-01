@@ -32,6 +32,9 @@ const toastVariants = cva(
         default: 'border bg-background text-foreground',
         destructive:
           'destructive group border-destructive bg-destructive text-destructive-foreground',
+        /** 与主操作按钮（bg-primary）一致：实底 + 白字，用于管理后台成功提示 */
+        success:
+          'toast-success group border-0 bg-primary text-primary-foreground shadow-md rounded-lg',
       },
     },
     defaultVariants: {
@@ -77,7 +80,7 @@ const ToastClose = React.forwardRef<
   <ToastPrimitives.Close
     ref={ref}
     className={cn(
-      'absolute right-2 top-2 rounded-md p-1 text-foreground/50 opacity-0 transition-opacity hover:text-foreground focus:opacity-100 focus:outline-none focus:ring-2 group-hover:opacity-100 group-[.destructive]:text-red-300 group-[.destructive]:hover:text-red-50 group-[.destructive]:focus:ring-red-400 group-[.destructive]:focus:ring-offset-red-600',
+      'absolute right-2 top-2 rounded-md p-1 text-foreground/50 opacity-0 transition-opacity hover:text-foreground focus:opacity-100 focus:outline-none focus:ring-2 group-hover:opacity-100 group-[.destructive]:text-red-300 group-[.destructive]:hover:text-red-50 group-[.destructive]:focus:ring-red-400 group-[.destructive]:focus:ring-offset-red-600 group-[.toast-success]:text-primary-foreground/75 group-[.toast-success]:opacity-100 group-[.toast-success]:hover:text-primary-foreground',
       className,
     )}
     toast-close=""
@@ -106,7 +109,10 @@ const ToastDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <ToastPrimitives.Description
     ref={ref}
-    className={cn('text-sm opacity-90', className)}
+    className={cn(
+      'text-sm opacity-90 group-[.toast-success]:text-primary-foreground group-[.toast-success]:opacity-95',
+      className,
+    )}
     {...props}
   />
 ))

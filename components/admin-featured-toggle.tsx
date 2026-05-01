@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { Star } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { revalidateHomeToolBundleAction } from '@/app/actions/revalidate-home-tool-bundle'
 
 interface AdminFeaturedToggleProps {
   toolId: string
@@ -37,6 +38,8 @@ export function AdminFeaturedToggle({
       setFeatured(!next)
       return
     }
+
+    await revalidateHomeToolBundleAction()
 
     startTransition(() => {
       router.refresh()

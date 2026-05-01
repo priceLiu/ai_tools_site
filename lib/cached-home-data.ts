@@ -1,3 +1,5 @@
+import { unstable_cache } from 'next/cache'
+import { headers } from 'next/headers'
 import { createPublicSupabase } from '@/lib/supabase/public'
 import {
   ascendCategoryToRoot,
@@ -5,9 +7,13 @@ import {
   leafCategoriesOnly,
   pickerRootCategories,
 } from '@/lib/category-tree'
-import { getNavigationMenuTree } from '@/lib/navigation-menu'
+import { loadNavigationMenuTree } from '@/lib/navigation-menu'
 import { homeNavigationCategoryGroups } from '@/lib/submit-category-choices'
 import type { Category, Tool } from '@/lib/types'
+import {
+  HOME_TOOL_BUNDLE_CACHE_TAG,
+  NAVIGATION_MENU_CACHE_TAG,
+} from '@/lib/navigation-menu-cache-config'
 
 function toolsBucket(
   map: Map<string, Tool[]>,
@@ -77,7 +83,7 @@ async function loadHomeToolBundle(): Promise<HomeToolBundle> {
 
   const [{ data: categoriesRows }, navigation] = await Promise.all([
     supabase.from('categories').select('*').order('sort_order'),
-    getNavigationMenuTree(),
+    loadNavigationMenuTree(),
   ])
 
   const cats = (categoriesRows as Category[]) ?? []
@@ -198,6 +204,32 @@ async function loadHomeToolBundle(): Promise<HomeToolBundle> {
   }
 }
 
+const getHomeToolBundleCached = unstable_cache(
+  loadHomeToolBundle,
+  ['home-tool-bundle-v1'],
+  {
+    tags: [HOME_TOOL_BUNDLE_CACHE_TAG, NAVIGATION_MENU_CACHE_TAG],
+    revalidate: false,
+  },
+)
+
+/**
+ * 首页数据快照：默认走 Next Data Cache（等价于服务端持有 JSON），避免每次请求都打满查询。
+ * — 菜单/分类变更：`revalidateTag(NAVIGATION_MENU_CACHE_TAG)` 会一并失效本缓存。
+ * — 工具变更：`revalidateTag(HOME_TOOL_BUNDLE_CACHE_TAG)`（见 revalidateHomeToolBundleAction）。
+ * 浏览器强刷新（no-cache）时与导航树一致，跳过缓存读出最新数据。
+ */
 export async function getHomeToolBundle(): Promise<HomeToolBundle> {
-  return loadHomeToolBundle()
+  const h = await headers()
+  const cacheControl = h.get('cache-control')?.toLowerCase() ?? ''
+  const pragma = h.get('pragma')?.toLowerCase() ?? ''
+  const bypassCache =
+    pragma.includes('no-cache') ||
+    cacheControl.includes('no-cache') ||
+    cacheControl.includes('max-age=0')
+
+  if (bypassCache) {
+    return loadHomeToolBundle()
+  }
+  return getHomeToolBundleCached()
 }

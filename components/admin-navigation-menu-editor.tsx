@@ -21,7 +21,13 @@ import {
   updateNavigationMenuItemAction,
   deleteNavigationMenuItemAction,
 } from '@/app/admin/navigation/actions'
+import {
+  validateNavIconName,
+  validateNavigationMenuItem,
+  validateNavSortOrder,
+} from '@/lib/nav-menu-validation'
 import { Trash2, Plus } from 'lucide-react'
+import { useToast } from '@/hooks/use-toast'
 
 interface AdminNavigationMenuEditorProps {
   initialRows: NavigationMenuItemRow[]
@@ -31,6 +37,7 @@ export function AdminNavigationMenuEditor({
   initialRows,
 }: AdminNavigationMenuEditorProps) {
   const router = useRouter()
+  const { toast } = useToast()
   const [isPending, startTransition] = useTransition()
   const [busyId, setBusyId] = useState<string | null>(null)
 
@@ -74,16 +81,44 @@ export function AdminNavigationMenuEditor({
 
   const invalidate = () => startTransition(() => router.refresh())
 
+  const toastIfCategoriesCreated = (sync?: {
+    created: number
+    slugs: string[]
+  }) => {
+    if (sync && sync.created > 0) {
+      toast({
+        variant: 'success',
+        title: '添加分类成功',
+        description:
+          sync.created === 1
+            ? `slug：${sync.slugs[0]}`
+            : `已新增 ${sync.created} 条：${sync.slugs.join('、')}`,
+      })
+    }
+  }
+
+  const toastError = (title: string, description: string) => {
+    toast({ variant: 'destructive', title, description })
+  }
+
   const applyMutationSyncHint = (
     r: Awaited<ReturnType<typeof addNavigationMenuItemAction>>,
     dbFailVerb: '保存' | '更新' | '删除',
   ) => {
     if (r.authMessage) {
       setSyncHint(r.authMessage)
+      toastError('无法完成操作', r.authMessage)
+      return
+    }
+    if (r.validationError) {
+      setSyncHint(r.validationError)
+      toastError('校验未通过', r.validationError)
       return
     }
     if (r.dbError) {
-      setSyncHint(`${dbFailVerb}失败：${r.dbError}`)
+      const line = `${dbFailVerb}失败：${r.dbError}`
+      setSyncHint(line)
+      toastError(`${dbFailVerb}失败`, r.dbError)
       return
     }
     const sync = r.sync
@@ -99,10 +134,39 @@ export function AdminNavigationMenuEditor({
 
   const addRow = async () => {
     const trimmed = label.trim()
-    if (!trimmed || !href.trim()) return
+    const hrefTrim = href.trim()
+    if (!trimmed || !hrefTrim) {
+      const msg = !trimmed ? '请填写显示名称' : '请填写链接'
+      setSyncHint(msg)
+      toastError('无法添加', msg)
+      return
+    }
+    const iconErr = validateNavIconName(iconName.trim() || null)
+    if (iconErr) {
+      setSyncHint(iconErr)
+      toastError('无法添加', iconErr)
+      return
+    }
+    const sortErr = validateNavSortOrder(sortOrder)
+    if (sortErr) {
+      setSyncHint(sortErr)
+      toastError('无法添加', sortErr)
+      return
+    }
+    const rowErr = validateNavigationMenuItem(sorted, {
+      label: trimmed,
+      href: hrefTrim,
+      parent_id: parentId,
+    })
+    if (rowErr) {
+      setSyncHint(rowErr)
+      toastError('无法添加', rowErr)
+      return
+    }
+
     const r = await addNavigationMenuItemAction({
       label: trimmed,
-      href: href.trim(),
+      href: hrefTrim,
       icon_name: iconName.trim() || null,
       sort_order: sortOrder,
       parent_id: parentId,
@@ -110,6 +174,7 @@ export function AdminNavigationMenuEditor({
     })
     applyMutationSyncHint(r, '保存')
     if (r.authMessage || r.dbError) return
+    toastIfCategoriesCreated(r.sync)
     setLabel('')
     setHref('/')
     setIconName('Sparkles')
@@ -120,13 +185,60 @@ export function AdminNavigationMenuEditor({
 
   const updateField = async (
     id: string,
-    patch: Partial<Pick<NavigationMenuItemRow, 'label' | 'href' | 'icon_name' | 'sort_order' | 'parent_id' | 'is_visible'>>,
+    patch: Partial<
+      Pick<
+        NavigationMenuItemRow,
+        | 'label'
+        | 'href'
+        | 'icon_name'
+        | 'sort_order'
+        | 'parent_id'
+        | 'is_visible'
+      >
+    >,
   ) => {
+    const row = sorted.find((r) => r.id === id)
+    if (!row) {
+      toastError('更新失败', '找不到该菜单项，请刷新页面后重试')
+      return
+    }
+
+    if (patch.icon_name !== undefined) {
+      const ie = validateNavIconName(patch.icon_name)
+      if (ie) {
+        setSyncHint(ie)
+        toastError('校验未通过', ie)
+        return
+      }
+    }
+    if (patch.sort_order !== undefined) {
+      const se = validateNavSortOrder(Number(patch.sort_order))
+      if (se) {
+        setSyncHint(se)
+        toastError('校验未通过', se)
+        return
+      }
+    }
+
+    const merged = { ...row, ...patch }
+    const ve = validateNavigationMenuItem(sorted, {
+      label: merged.label,
+      href: merged.href,
+      parent_id: merged.parent_id,
+      excludeId: id,
+    })
+    if (ve) {
+      setSyncHint(ve)
+      toastError('校验未通过', ve)
+      return
+    }
+
     setBusyId(id)
     const r = await updateNavigationMenuItemAction(id, patch)
     applyMutationSyncHint(r, '更新')
     setBusyId(null)
     if (r.authMessage || r.dbError) return
+    toastIfCategoriesCreated(r.sync)
     invalidate()
   }
 
@@ -136,6 +248,7 @@ export function AdminNavigationMenuEditor({
     applyMutationSyncHint(r, '删除')
     setBusyId(null)
     if (r.authMessage || r.dbError) return
+    toastIfCategoriesCreated(r.sync)
     invalidate()
   }
 
@@ -166,12 +279,18 @@ export function AdminNavigationMenuEditor({
               const r = await syncCategoriesFromNavigationAction()
               if (r.message) {
                 setSyncHint(r.message)
+                toastError('同步未完成', r.message)
               } else if (r.created > 0) {
                 setSyncHint(
                   `已新增 ${r.created} 条分类：${r.slugs.join(', ')}`,
                 )
+                toastIfCategoriesCreated({
+                  created: r.created,
+                  slugs: r.slugs,
+                })
               } else if (r.errors.length > 0) {
                 setSyncHint(`未完成：${r.errors.join('；')}`)
+                toastError('同步未完全成功', r.errors.join('；'))
               } else {
                 setSyncHint('没有需要同步的项（子菜单 slug 在分类表里都已存在）。')
               }

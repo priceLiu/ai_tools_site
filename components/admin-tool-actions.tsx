@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dialog'
 import { CheckCircle, XCircle, Star } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { revalidateHomeToolBundleAction } from '@/app/actions/revalidate-home-tool-bundle'
 
 interface AdminToolActionsProps {
   toolId: string
@@ -49,7 +50,14 @@ export function AdminToolActions({ toolId }: AdminToolActionsProps) {
       updateData.is_featured = true
     }
 
-    await supabase.from('tools').update(updateData).eq('id', toolId)
+    const { error } = await supabase
+      .from('tools')
+      .update(updateData)
+      .eq('id', toolId)
+
+    if (!error) {
+      await revalidateHomeToolBundleAction()
+    }
 
     startTransition(() => {
       router.refresh()
@@ -85,6 +93,8 @@ export function AdminToolActions({ toolId }: AdminToolActionsProps) {
       setRejectError(error.message)
       return
     }
+
+    await revalidateHomeToolBundleAction()
 
     setRejectOpen(false)
     setRejectReason('')

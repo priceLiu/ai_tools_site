@@ -37,6 +37,21 @@ export function slugFromCategoryMenuHref(href: string): string | null {
   return null
 }
 
+/**
+ * 菜单文案与 categories.name 对齐时，忽略空白/大小写差异，
+ * 避免「AI 对话」与「AI对话」导致父级对不上、同步跳过、首页二级版块缺失。
+ */
+export function menuTitleMatchesCategoryName(
+  menuLabel: string,
+  categoryName: string,
+): boolean {
+  const norm = (s: string) =>
+    s.normalize('NFKC').trim().replace(/\s+/g, '').toLowerCase()
+  const a = norm(menuLabel)
+  const b = norm(categoryName)
+  return a.length > 0 && a === b
+}
+
 function walkCollectSlugs(nodes: NavigationMenuTreeNode[], out: Set<string>) {
   for (const n of nodes) {
     const s = slugFromCategoryMenuHref(n.href)
@@ -162,7 +177,7 @@ function rootCategoryMatchingMenuTitle(
     (c) =>
       c.slug !== 'hot' &&
       (c.parent_id ?? null) === null &&
-      c.name.trim() === title,
+      menuTitleMatchesCategoryName(title, c.name),
   )
   if (matches.length === 0) return undefined
   matches.sort(
@@ -196,7 +211,7 @@ function resolveCategoryFromMenuChildRow(
       (x) =>
         x.slug !== 'hot' &&
         idsEqual(x.parent_id, pid) &&
-        x.name.trim() === menuLabelRaw,
+        menuTitleMatchesCategoryName(menuLabelRaw, x.name),
     )
     if (under.length === 1) return under[0]
     under.sort(
@@ -213,7 +228,8 @@ function resolveCategoryFromMenuChildRow(
     if (viaSlug && viaSlug.slug !== 'hot') return viaSlug
 
     const sameName = categories.filter(
-      (x) => x.slug !== 'hot' && x.name.trim() === menuLabelRaw,
+      (x) =>
+        x.slug !== 'hot' && menuTitleMatchesCategoryName(menuLabelRaw, x.name),
     )
     if (sameName.length === 1) return sameName[0]
 
@@ -372,10 +388,14 @@ function foldableCategoryItems(
       const lab = (ch.label ?? '').trim()
       if (!lab) continue
       const sameNameCount = categories.filter(
-        (x) => x.slug !== 'hot' && x.name.trim() === lab,
+        (x) => x.slug !== 'hot' && menuTitleMatchesCategoryName(lab, x.name),
       ).length
       const hit = categories.find((x) => {
-        if (x.slug === 'hot' || x.name.trim() !== lab || byId.has(x.id)) {
+        if (
+          x.slug === 'hot' ||
+          !menuTitleMatchesCategoryName(lab, x.name) ||
+          byId.has(x.id)
+        ) {
           return false
         }
         if (idsEqual(x.parent_id, parentCat!.id)) return true

@@ -23,7 +23,7 @@ import {
 } from 'lucide-react'
 import { ToolCommentsSection } from '@/components/tool-comments-section'
 import type { NavigationMenuItemRow, NavigationMenuTreeNode, Tool, Profile } from '@/lib/types'
-import { buildNavigationTree } from '@/lib/navigation-menu'
+import { buildNavigationTree } from '@/lib/navigation-tree'
 import type { User } from '@supabase/supabase-js'
 
 export default function ToolPage() {

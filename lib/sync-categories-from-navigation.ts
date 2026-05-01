@@ -1,5 +1,8 @@
-import { buildNavigationTree } from '@/lib/navigation-menu'
-import { slugFromCategoryMenuHref } from '@/lib/submit-category-choices'
+import { buildNavigationTree } from '@/lib/navigation-tree'
+import {
+  menuTitleMatchesCategoryName,
+  slugFromCategoryMenuHref,
+} from '@/lib/submit-category-choices'
 import type { Category, NavigationMenuItemRow } from '@/lib/types'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -39,8 +42,8 @@ export function planMissingCategoriesFromNavigation(
     if (parentSlug) parentCat = slugToCat.get(parentSlug)
 
     if (!parentCat) {
-      parentCat = topLevelCandidates.find(
-        (c) => c.name.trim() === root.label.trim(),
+      parentCat = topLevelCandidates.find((c) =>
+        menuTitleMatchesCategoryName(root.label, c.name),
       )
     }
     if (!parentCat) continue

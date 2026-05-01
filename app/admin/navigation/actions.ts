@@ -2,9 +2,14 @@
 
 import { revalidatePath, revalidateTag } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
-import { NAVIGATION_MENU_CACHE_TAG } from '@/lib/navigation-menu'
+import { NAVIGATION_MENU_CACHE_TAG } from '@/lib/navigation-menu-cache-config'
 import { syncMissingCategoriesFromNavigation } from '@/lib/sync-categories-from-navigation'
 import type { Category, NavigationMenuItemRow } from '@/lib/types'
+import {
+  validateNavIconName,
+  validateNavigationMenuItem,
+  validateNavSortOrder,
+} from '@/lib/nav-menu-validation'
 
 export async function revalidateNavigationMenuCache() {
   revalidateTag(NAVIGATION_MENU_CACHE_TAG, { expire: 0 })
@@ -94,6 +99,7 @@ async function requireAdminClient() {
 
 export type NavMenuMutationResult = {
   authMessage?: string
+  validationError?: string
   dbError?: string
   sync?: Omit<SyncCategoriesFromNavigationResult, 'message'>
 }
@@ -110,6 +116,22 @@ export async function addNavigationMenuItemAction(input: {
   const { supabase, user, admin } = await requireAdminClient()
   if (!user) return { authMessage: '未登录' }
   if (!admin) return { authMessage: '无权限' }
+
+  const iconErr = validateNavIconName(input.icon_name)
+  if (iconErr) return { validationError: iconErr }
+  const sortErr = validateNavSortOrder(Number(input.sort_order))
+  if (sortErr) return { validationError: sortErr }
+
+  const { data: rows } = await supabase
+    .from('navigation_menu_items')
+    .select('id,label,href,parent_id')
+  const ve = validateNavigationMenuItem(rows ?? [], {
+    label: input.label,
+    href: input.href,
+    parent_id: input.parent_id,
+  })
+  if (ve) return { validationError: ve }
+
   const { error } = await supabase.from('navigation_menu_items').insert({
     label: input.label,
     href: input.href,
@@ -139,6 +161,40 @@ export async function updateNavigationMenuItemAction(
   const { supabase, user, admin } = await requireAdminClient()
   if (!user) return { authMessage: '未登录' }
   if (!admin) return { authMessage: '无权限' }
+
+  const { data: current, error: fetchErr } = await supabase
+    .from('navigation_menu_items')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle()
+  if (fetchErr) return { dbError: fetchErr.message }
+  if (!current) return { validationError: '该菜单项不存在或已被删除' }
+
+  const merged: NavigationMenuItemRow = {
+    ...(current as NavigationMenuItemRow),
+    ...patch,
+  }
+
+  if (patch.icon_name !== undefined) {
+    const ie = validateNavIconName(patch.icon_name)
+    if (ie) return { validationError: ie }
+  }
+  if (patch.sort_order !== undefined) {
+    const se = validateNavSortOrder(Number(patch.sort_order))
+    if (se) return { validationError: se }
+  }
+
+  const { data: rows } = await supabase
+    .from('navigation_menu_items')
+    .select('id,label,href,parent_id')
+  const ve = validateNavigationMenuItem(rows ?? [], {
+    label: merged.label,
+    href: merged.href,
+    parent_id: merged.parent_id,
+    excludeId: id,
+  })
+  if (ve) return { validationError: ve }
+
   const { error } = await supabase
     .from('navigation_menu_items')
     .update(patch)
