@@ -12,6 +12,8 @@ interface ToolListRowCardProps {
   logoHref: string
   /** Title link; defaults to logoHref */
   titleHref?: string
+  /** Logo 与标题链接是否在新标签页打开 */
+  openLinksInNewTab?: boolean
   favoritesCount?: number
   statusBadge?: ReactNode
   /** Extra rows under metrics (submission date, website, actions, alerts) */
@@ -23,6 +25,7 @@ export function ToolListRowCard({
   tool,
   logoHref,
   titleHref,
+  openLinksInNewTab = false,
   favoritesCount = 0,
   statusBadge,
   footer,
@@ -30,12 +33,18 @@ export function ToolListRowCard({
 }: ToolListRowCardProps) {
   const nameHref = titleHref ?? logoHref
   const views = tool.view_count ?? 0
+  const fav = favoritesCount ?? tool.favorite_count ?? 0
+
+  const linkProps = openLinksInNewTab
+    ? ({ target: '_blank' as const, rel: 'noopener noreferrer' as const })
+    : {}
 
   return (
     <Card className={cn(className)}>
       <CardContent className="flex items-start gap-4 p-4">
         <Link
           href={logoHref}
+          {...linkProps}
           className="relative block h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-muted outline-none ring-offset-background transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring"
         >
           {tool.logo_url ? (
@@ -56,6 +65,7 @@ export function ToolListRowCard({
           <div className="flex items-start justify-between gap-3">
             <Link
               href={nameHref}
+              {...linkProps}
               className="min-w-0 truncate text-base font-semibold text-foreground hover:text-primary"
             >
               {tool.name}
@@ -81,7 +91,7 @@ export function ToolListRowCard({
             </span>
             <span className="inline-flex items-center gap-1">
               <Heart className="h-3.5 w-3.5 shrink-0 text-red-500/80" aria-hidden />
-              <span>{favoritesCount.toLocaleString()}</span>
+              <span>{fav.toLocaleString()}</span>
             </span>
           </div>
 

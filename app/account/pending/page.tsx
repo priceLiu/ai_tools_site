@@ -1,13 +1,20 @@
 import { createClient } from '@/lib/supabase/server'
 import { UserSubmissionsList } from '@/components/user-submissions-list'
-import { getFavoriteCountsByToolIds } from '@/lib/favorite-counts'
+import { filterOwnTools } from '@/lib/filter-own-tools'
 import type { Tool } from '@/lib/types'
 
 export const metadata = {
-  title: '待审核的工具 - 个人中心',
+  title: '审核中的工具 - 个人中心',
 }
 
-export default async function AccountPendingPage() {
+interface AccountPendingPageProps {
+  searchParams: Promise<{ q?: string }>
+}
+
+export default async function AccountPendingPage({
+  searchParams,
+}: AccountPendingPageProps) {
+  const { q: queryParam } = await searchParams
   const supabase = await createClient()
   const {
     data: { user },
@@ -22,25 +29,35 @@ export default async function AccountPendingPage() {
     .order('created_at', { ascending: false })
 
   const list = (tools as Tool[]) || []
-  const favoriteCounts = await getFavoriteCountsByToolIds(
-    supabase,
-    list.map((t) => t.id),
-  )
+  const hasQuery = Boolean(queryParam?.trim())
+  const filtered = filterOwnTools(list, queryParam)
 
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-foreground">待审核的工具</h1>
+        <h1 className="text-2xl font-bold text-foreground">审核中的工具</h1>
         <p className="mt-1 text-muted-foreground">
           以下内容正在等待管理员审核
         </p>
       </div>
 
+      {hasQuery ? (
+        <p className="mb-4 text-sm text-muted-foreground">
+          在审核中的工具里搜索「{queryParam!.trim()}」：找到 {filtered.length}{' '}
+          条
+        </p>
+      ) : null}
+
       <UserSubmissionsList
-        tools={list}
-        favoriteCounts={favoriteCounts}
-        emptyTitle="暂无待审核"
-        emptyDescription="你没有正在审核中的工具提交，可以试试提交新站点。"
+        tools={filtered}
+        emptyTitle={
+          hasQuery ? '没有匹配的待审核工具' : '暂无审核中的工具'
+        }
+        emptyDescription={
+          hasQuery
+            ? '没有名称或简介包含该关键词的待审核条目。可在「工具提交历史」中搜索全部状态。'
+            : '你没有正在审核中的工具提交，可以试试「AI 工具提交」。'
+        }
       />
     </div>
   )

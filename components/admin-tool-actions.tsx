@@ -109,7 +109,7 @@ export function AdminToolActions({ toolId }: AdminToolActionsProps) {
           ) : (
             <Star className="h-3 w-3" />
           )}
-          推荐
+          热门并通过
         </Button>
         <Button
           size="sm"

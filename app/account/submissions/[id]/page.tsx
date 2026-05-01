@@ -7,7 +7,6 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ArrowLeft, ExternalLink } from 'lucide-react'
 import { submissionStatusConfig } from '@/components/user-submissions-list'
-import { getFavoriteCountsByToolIds } from '@/lib/favorite-counts'
 import type { Tool } from '@/lib/types'
 
 interface PageProps {
@@ -54,15 +53,13 @@ export default async function AccountSubmissionDetailPage({ params }: PageProps)
   const tool = row as Tool
   const status = submissionStatusConfig[tool.status]
   const StatusIcon = status.icon
-  const favMap = await getFavoriteCountsByToolIds(supabase, [tool.id])
-  const fav = favMap[tool.id] ?? 0
 
   return (
     <div>
       <Button asChild variant="ghost" size="sm" className="mb-6 -ml-2 gap-1">
         <Link href="/account/history">
           <ArrowLeft className="h-4 w-4" />
-          返回提交历史
+          返回工具提交历史
         </Link>
       </Button>
 
@@ -86,7 +83,7 @@ export default async function AccountSubmissionDetailPage({ params }: PageProps)
             ) : null}
           </div>
           <p className="mt-3 text-sm text-muted-foreground">
-            阅读量 {tool.view_count ?? 0} · 收藏 {fav}
+            阅读量 {tool.view_count ?? 0} · 收藏 {tool.favorite_count ?? 0}
           </p>
         </div>
       </div>

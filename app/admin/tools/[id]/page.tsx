@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ArrowLeft, ExternalLink } from 'lucide-react'
 import { submissionStatusConfig } from '@/components/user-submissions-list'
-import { getFavoriteCountsByToolIds } from '@/lib/favorite-counts'
+import { AdminFeaturedToggle } from '@/components/admin-featured-toggle'
 import type { Tool } from '@/lib/types'
 
 interface PageProps {
@@ -36,8 +36,6 @@ export default async function AdminToolPreviewPage({ params }: PageProps) {
   const tool = row as Tool
   const status = submissionStatusConfig[tool.status]
   const StatusIcon = status.icon
-  const favMap = await getFavoriteCountsByToolIds(supabase, [tool.id])
-  const fav = favMap[tool.id] ?? 0
 
   return (
     <div className="p-4 md:p-6">
@@ -69,7 +67,7 @@ export default async function AdminToolPreviewPage({ params }: PageProps) {
               ) : null}
             </div>
             <p className="mt-3 text-sm text-muted-foreground">
-              阅读量 {tool.view_count ?? 0} · 收藏 {fav}
+              阅读量 {tool.view_count ?? 0} · 收藏 {tool.favorite_count ?? 0}
             </p>
           </div>
         </div>
@@ -107,9 +105,17 @@ export default async function AdminToolPreviewPage({ params }: PageProps) {
         </Card>
 
         {tool.status === 'approved' ? (
-          <Button asChild className="mt-6">
-            <Link href={`/tool/${tool.slug}`}>打开公开页面</Link>
-          </Button>
+          <div className="mt-6 space-y-4">
+            <div className="rounded-lg border border-border bg-muted/30 p-4">
+              <AdminFeaturedToggle
+                toolId={tool.id}
+                initialFeatured={tool.is_featured}
+              />
+            </div>
+            <Button asChild>
+              <Link href={`/tool/${tool.slug}`}>打开公开页面</Link>
+            </Button>
+          </div>
         ) : null}
       </div>
     </div>

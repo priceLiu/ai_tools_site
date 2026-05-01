@@ -11,9 +11,16 @@ interface FavoriteButtonProps {
   toolId: string
   initialFavorited: boolean
   isLoggedIn: boolean
+  /** 用于详情页等与 tools.favorite_count 同步的乐观更新（数据库由触发器维护） */
+  onFavoriteCountDelta?: (delta: number) => void
 }
 
-export function FavoriteButton({ toolId, initialFavorited, isLoggedIn }: FavoriteButtonProps) {
+export function FavoriteButton({
+  toolId,
+  initialFavorited,
+  isLoggedIn,
+  onFavoriteCountDelta,
+}: FavoriteButtonProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [isFavorited, setIsFavorited] = useState(initialFavorited)
@@ -25,29 +32,35 @@ export function FavoriteButton({ toolId, initialFavorited, isLoggedIn }: Favorit
     }
 
     const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
     if (!user) {
       router.push('/auth/login')
       return
     }
 
     if (isFavorited) {
-      // Remove favorite
-      await supabase
+      const { error } = await supabase
         .from('favorites')
         .delete()
         .eq('user_id', user.id)
         .eq('tool_id', toolId)
-      
-      setIsFavorited(false)
+
+      if (!error) {
+        setIsFavorited(false)
+        onFavoriteCountDelta?.(-1)
+      }
     } else {
-      // Add favorite
-      await supabase
+      const { error } = await supabase
         .from('favorites')
         .insert({ user_id: user.id, tool_id: toolId })
-      
-      setIsFavorited(true)
+
+      if (!error) {
+        setIsFavorited(true)
+        onFavoriteCountDelta?.(1)
+      }
     }
 
     startTransition(() => {
@@ -63,7 +76,7 @@ export function FavoriteButton({ toolId, initialFavorited, isLoggedIn }: Favorit
       disabled={isPending}
       className={cn(
         'transition-colors',
-        isFavorited && 'text-red-500 hover:text-red-600'
+        isFavorited && 'text-red-500 hover:text-red-600',
       )}
     >
       <Heart className={cn('h-4 w-4', isFavorited && 'fill-current')} />

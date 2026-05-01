@@ -22,6 +22,8 @@ export interface Tool {
   rejection_reason: string | null
   is_featured: boolean
   view_count: number
+  /** 收藏人数，与 `favorites` 表由触发器同步 */
+  favorite_count?: number
   introduction: string | null
   use_cases: string | null
   created_at: string
@@ -43,4 +45,14 @@ export interface Favorite {
   tool_id: string
   created_at: string
   tool?: Tool
+}
+
+export interface ToolComment {
+  id: string
+  tool_id: string
+  body: string
+  nickname: string
+  email: string
+  website: string | null
+  created_at: string
 }

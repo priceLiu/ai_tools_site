@@ -1,7 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import { CompactAppSidebar } from '@/components/compact-app-sidebar'
-import { Header } from '@/components/header'
+import { AccountChrome } from '@/components/account-chrome'
 import {
   SubmitToolForm,
   type EditingToolPayload,
@@ -15,7 +14,7 @@ type SubmitPageProps = {
 export async function generateMetadata({ searchParams }: SubmitPageProps) {
   const { edit } = await searchParams
   return {
-    title: edit ? '修改并重新提交 - AI工具集' : '提交工具 - AI工具集',
+    title: edit ? '修改并重新提交 - AI工具集' : 'AI 工具提交 - AI工具集',
     description: '提交你发现的优质AI工具',
   }
 }
@@ -74,33 +73,25 @@ export default async function SubmitPage({ searchParams }: SubmitPageProps) {
   const cats = categories || []
 
   return (
-    <div className="min-h-screen bg-background">
-      <CompactAppSidebar />
+    <AccountChrome user={user} profile={profile as Profile}>
+      <div className="mx-auto max-w-2xl px-4 py-6 md:px-8">
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold text-foreground">
+            {editingTool ? '修改并重新提交' : 'AI 工具提交'}
+          </h1>
+          <p className="mt-2 text-muted-foreground">
+            {editingTool
+              ? '根据审核反馈修改信息后，将再次进入审核队列。'
+              : '分享你发现的优质AI工具，审核通过后将在网站展示'}
+          </p>
+        </div>
 
-      <div className="pl-52 md:pl-56">
-        <Header user={user} profile={profile as Profile} />
-
-        <main className="p-4 md:p-6">
-          <div className="mx-auto max-w-2xl">
-            <div className="mb-8">
-              <h1 className="text-2xl font-bold text-foreground">
-                {editingTool ? '修改并重新提交' : '提交AI工具'}
-              </h1>
-              <p className="mt-2 text-muted-foreground">
-                {editingTool
-                  ? '根据审核反馈修改信息后，将再次进入审核队列。'
-                  : '分享你发现的优质AI工具，审核通过后将在网站展示'}
-              </p>
-            </div>
-
-            <SubmitToolForm
-              categories={cats as Category[]}
-              userId={user.id}
-              editingTool={editingTool}
-            />
-          </div>
-        </main>
+        <SubmitToolForm
+          categories={cats as Category[]}
+          userId={user.id}
+          editingTool={editingTool}
+        />
       </div>
-    </div>
+    </AccountChrome>
   )
 }

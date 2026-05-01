@@ -12,7 +12,16 @@ import { FavoriteButton } from '@/components/favorite-button'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { ExternalLink, ArrowLeft, Eye, Sparkles, BookOpen, Lightbulb } from 'lucide-react'
+import {
+  ExternalLink,
+  ArrowLeft,
+  Eye,
+  Heart,
+  Sparkles,
+  BookOpen,
+  Lightbulb,
+} from 'lucide-react'
+import { ToolCommentsSection } from '@/components/tool-comments-section'
 import type { Category, Tool, Profile } from '@/lib/types'
 import type { User } from '@supabase/supabase-js'
 
@@ -60,14 +69,17 @@ export default function ToolPage() {
         .single()
       
       if (toolData) {
-        setTool(toolData)
-        
-        // Increment view count
+        const nextViews = Number(toolData.view_count ?? 0) + 1
         await supabase
           .from('tools')
-          .update({ view_count: (toolData.view_count || 0) + 1 })
+          .update({ view_count: nextViews })
           .eq('id', toolData.id)
-        
+
+        setTool({
+          ...(toolData as Tool),
+          view_count: nextViews,
+        })
+
         // Check if favorited
         if (currentUser) {
           const { data: favorite } = await supabase
@@ -171,7 +183,14 @@ export default function ToolPage() {
                           )}
                           <span className="flex items-center gap-1 text-sm text-muted-foreground">
                             <Eye className="h-4 w-4" />
-                            {tool.view_count || 0} 次访问
+                            {tool.view_count ?? 0} 次访问
+                          </span>
+                          <span className="flex items-center gap-1 text-sm text-muted-foreground">
+                            <Heart
+                              className="h-4 w-4 shrink-0 text-red-500/70"
+                              aria-hidden
+                            />
+                            {(tool.favorite_count ?? 0).toLocaleString()} 收藏
                           </span>
                         </div>
                       </div>
@@ -180,6 +199,19 @@ export default function ToolPage() {
                           toolId={tool.id} 
                           initialFavorited={isFavorited}
                           isLoggedIn={!!user}
+                          onFavoriteCountDelta={(delta) => {
+                            setTool((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    favorite_count: Math.max(
+                                      0,
+                                      (prev.favorite_count ?? 0) + delta,
+                                    ),
+                                  }
+                                : prev,
+                            )
+                          }}
                         />
                         <Button asChild>
                           <a href={tool.website_url} target="_blank" rel="noopener noreferrer">
@@ -245,6 +277,12 @@ export default function ToolPage() {
                 </CardContent>
               </Card>
             )}
+
+            <ToolCommentsSection
+              toolId={tool.id}
+              initialUser={user}
+              initialNickname={profile?.display_name ?? null}
+            />
           </div>
         </main>
       </div>

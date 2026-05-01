@@ -38,13 +38,13 @@ export function CompactAppSidebar({ variant = 'default' }: CompactAppSidebarProp
   const homeActive = pathname === '/'
 
   const personalLinks = [
-    { href: '/account/pending', label: '待审核的工具', icon: ClipboardList },
+    { href: '/account/pending', label: '审核中的工具', icon: ClipboardList },
     {
       href: '/submit',
-      label: '提交工具',
+      label: 'AI 工具提交',
       icon: Plus,
     },
-    { href: '/account/history', label: '提交历史', icon: History },
+    { href: '/account/history', label: '工具提交历史', icon: History },
     { href: '/account/profile', label: '个人信息', icon: User },
   ] as const
 

@@ -37,7 +37,6 @@ interface UserSubmissionsListProps {
   emptyTitle: string
   emptyDescription: string
   submitHref?: string
-  favoriteCounts?: Record<string, number>
 }
 
 export function UserSubmissionsList({
@@ -45,7 +44,6 @@ export function UserSubmissionsList({
   emptyTitle,
   emptyDescription,
   submitHref = '/submit',
-  favoriteCounts = {},
 }: UserSubmissionsListProps) {
   if (!tools.length) {
     return (
@@ -58,7 +56,7 @@ export function UserSubmissionsList({
         <Button asChild className="mt-6">
           <Link href={submitHref}>
             <Plus className="mr-2 h-4 w-4" />
-            提交工具
+            AI 工具提交
           </Link>
         </Button>
       </div>
@@ -71,7 +69,6 @@ export function UserSubmissionsList({
         const status = submissionStatusConfig[tool.status]
         const StatusIcon = status.icon
         const href = ownerDetailHref(tool)
-        const fav = favoriteCounts[tool.id] ?? 0
 
         const statusBadge = (
           <Badge variant={status.variant} className="shrink-0">
@@ -86,7 +83,6 @@ export function UserSubmissionsList({
             tool={tool}
             logoHref={href}
             titleHref={href}
-            favoritesCount={fav}
             statusBadge={statusBadge}
             footer={
               <>

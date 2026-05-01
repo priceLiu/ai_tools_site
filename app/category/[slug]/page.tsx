@@ -2,8 +2,8 @@ import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import { Sidebar } from '@/components/sidebar'
 import { Header } from '@/components/header'
+import { ToolCard } from '@/components/tool-card'
 import type { Category, Tool, Profile } from '@/lib/types'
-import { getFavoriteCountsByToolIds } from '@/lib/favorite-counts'
 import {
   Flame,
   MessageCircle,
@@ -137,14 +137,6 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
   
   const Icon = iconMap[categoryIcon] || Sparkles
 
-  const favCounts =
-    tools.length > 0
-      ? await getFavoriteCountsByToolIds(
-          supabase,
-          tools.map((t) => t.id),
-        )
-      : {}
-
   return (
     <div className="min-h-screen bg-background">
       <Sidebar categories={(categories as Category[]) || []} />
@@ -171,12 +163,11 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
             
             {/* Tools Grid */}
             {tools.length > 0 ? (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              <div className="flex flex-wrap justify-center gap-4 sm:justify-start">
                 {tools.map((tool) => (
                   <ToolCard
                     key={tool.id}
                     tool={tool}
-                    favoritesCount={favCounts[tool.id] ?? 0}
                   />
                 ))}
               </div>
