@@ -5,6 +5,7 @@ import { Header } from '@/components/header'
 import { ToolCard } from '@/components/tool-card'
 import type { Tool, Profile } from '@/lib/types'
 import { getNavigationMenuTree } from '@/lib/navigation-menu'
+import { collectSubtreeCategoryIds } from '@/lib/category-tree'
 import {
   Flame,
   MessageCircle,
@@ -121,14 +122,20 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
     categoryName = category.name
     categoryIcon = category.icon || ''
     
-    // Get tools in this category
+    const { data: hierarchy } = await supabase
+      .from('categories')
+      .select('id,parent_id')
+
+    const subtreeIds = collectSubtreeCategoryIds(hierarchy ?? [], category.id)
+
+    // Get tools in this category and descendants (二级分类下的工具汇总到父分类页)
     const { data } = await supabase
       .from('tools')
       .select('*, category:categories(*)')
       .eq('status', 'approved')
-      .eq('category_id', category.id)
+      .in('category_id', subtreeIds)
       .order('view_count', { ascending: false })
-    
+
     tools = data || []
   }
   

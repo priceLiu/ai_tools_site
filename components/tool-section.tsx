@@ -20,7 +20,9 @@ export function ToolSection({
   anchorId,
   imagePriorityFirstN = 0,
 }: ToolSectionProps) {
-  if (tools.length === 0) return null
+  if (tools.length === 0 && (icon === 'hot' || icon === 'new')) {
+    return null
+  }
 
   return (
     <section
@@ -43,15 +45,25 @@ export function ToolSection({
           <span className="font-medium">{title}</span>
         </Badge>
       </div>
-      <div className="flex flex-wrap justify-center gap-4 sm:justify-start">
-        {tools.map((tool, idx) => (
-          <ToolCard
-            key={tool.id}
-            tool={tool}
-            imagePriority={idx < imagePriorityFirstN}
-          />
-        ))}
-      </div>
+      {tools.length === 0 ? (
+        <p className="px-1 text-sm text-muted-foreground">
+          暂无已通过审核的工具收录，可先
+          <a href="/submit" className="underline underline-offset-2">
+            提交工具
+          </a>
+          。
+        </p>
+      ) : (
+        <div className="flex flex-wrap justify-center gap-4 sm:justify-start">
+          {tools.map((tool, idx) => (
+            <ToolCard
+              key={tool.id}
+              tool={tool}
+              imagePriority={idx < imagePriorityFirstN}
+            />
+          ))}
+        </div>
+      )}
     </section>
   )
 }

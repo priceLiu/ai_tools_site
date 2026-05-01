@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Spinner } from '@/components/ui/spinner'
+import { revalidateNavigationMenuCache, syncCategoriesFromNavigationAction } from '@/app/admin/navigation/actions'
 import { Trash2, Plus } from 'lucide-react'
 
 interface AdminNavigationMenuEditorProps {
@@ -35,6 +36,9 @@ export function AdminNavigationMenuEditor({
   const [sortOrder, setSortOrder] = useState(100)
   const [parentId, setParentId] = useState<string | null>(null)
   const [visibleNew, setVisibleNew] = useState(true)
+
+  const [syncHint, setSyncHint] = useState<string | null>(null)
+  const [isSyncing, setIsSyncing] = useState(false)
 
   const sorted = useMemo(
     () => [...initialRows].sort((a, b) => a.sort_order - b.sort_order),
@@ -78,6 +82,7 @@ export function AdminNavigationMenuEditor({
       parent_id: parentId,
       is_visible: visibleNew,
     })
+    await revalidateNavigationMenuCache()
     setLabel('')
     setHref('/')
     setIconName('Sparkles')
@@ -93,6 +98,7 @@ export function AdminNavigationMenuEditor({
     const supabase = createClient()
     setBusyId(id)
     await supabase.from('navigation_menu_items').update(patch).eq('id', id)
+    await revalidateNavigationMenuCache()
     setBusyId(null)
     invalidate()
   }
@@ -101,12 +107,63 @@ export function AdminNavigationMenuEditor({
     const supabase = createClient()
     setBusyId(id)
     await supabase.from('navigation_menu_items').delete().eq('id', id)
+    await revalidateNavigationMenuCache()
     setBusyId(null)
     invalidate()
   }
 
   return (
     <div className="space-y-10">
+      <div className="rounded-lg border border-border bg-card p-4 md:flex md:flex-wrap md:items-center md:justify-between md:gap-4">
+        <div className="space-y-1 text-sm">
+          <p className="font-medium text-foreground">分类表与菜单</p>
+          <p className="text-muted-foreground">
+            首页版块、工具提交的分类均来自「分类」表。侧栏子菜单若指向{' '}
+            <code className="rounded bg-muted px-1">/category/xxx</code>，需在 categories
+            中存在相同 slug。可一键补全当前缺失项。
+          </p>
+          {syncHint ? (
+            <p className="text-xs text-foreground whitespace-pre-wrap">{syncHint}</p>
+          ) : null}
+        </div>
+        <Button
+          type="button"
+          variant="secondary"
+          className="mt-3 shrink-0 md:mt-0"
+          disabled={isSyncing || isPending}
+          onClick={async () => {
+            setSyncHint(null)
+            setIsSyncing(true)
+            try {
+              const r = await syncCategoriesFromNavigationAction()
+              if (r.message) {
+                setSyncHint(r.message)
+              } else if (r.created > 0) {
+                setSyncHint(
+                  `已新增 ${r.created} 条分类：${r.slugs.join(', ')}`,
+                )
+              } else if (r.errors.length > 0) {
+                setSyncHint(`未完成：${r.errors.join('；')}`)
+              } else {
+                setSyncHint('没有需要同步的项（子菜单 slug 在分类表里都已存在）。')
+              }
+              invalidate()
+            } finally {
+              setIsSyncing(false)
+            }
+          }}
+        >
+          {isSyncing ? (
+            <>
+              <Spinner className="mr-2 h-4 w-4" />
+              同步中…
+            </>
+          ) : (
+            '同步子菜单 → 分类表'
+          )}
+        </Button>
+      </div>
+
       <div className="rounded-lg border border-border bg-muted/30 p-4 md:p-6">
         <h2 className="mb-4 text-lg font-semibold">新增菜单项</h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

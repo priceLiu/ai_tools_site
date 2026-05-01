@@ -5,6 +5,8 @@ import {
   SubmitToolForm,
   type EditingToolPayload,
 } from '@/components/submit-tool-form'
+import { navigationMenuCategoryIdWhitelist } from '@/lib/submit-category-choices'
+import { getNavigationMenuTree } from '@/lib/navigation-menu'
 import type { Category, Profile } from '@/lib/types'
 
 type SubmitPageProps = {
@@ -38,12 +40,20 @@ export default async function SubmitPage({ searchParams }: SubmitPageProps) {
     .eq('id', user.id)
     .single()
 
-  const { data: categories } = await supabase
-    .from('categories')
-    .select('*')
-    .order('sort_order')
+  const [categoriesRes, navigation] = await Promise.all([
+    supabase.from('categories').select('*').order('sort_order'),
+    getNavigationMenuTree(),
+  ])
+  const categories = categoriesRes.data || []
+  const cats = categories as Category[]
+
+  const whitelistCategoryIds = navigationMenuCategoryIdWhitelist(
+    navigation,
+    cats,
+  )
 
   let editingTool: EditingToolPayload | undefined
+  let orphanEditingCategory: Category | null = null
 
   if (editId) {
     const { data: row } = await supabase
@@ -68,9 +78,15 @@ export default async function SubmitPage({ searchParams }: SubmitPageProps) {
       logo_url: row.logo_url,
       screenshot_url: row.screenshot_url,
     }
+    const ec = cats.find((c) => c.id === row.category_id)
+    if (
+      ec &&
+      whitelistCategoryIds &&
+      !whitelistCategoryIds.has(ec.id)
+    ) {
+      orphanEditingCategory = ec
+    }
   }
-
-  const cats = categories || []
 
   return (
     <AccountChrome user={user} profile={profile as Profile}>
@@ -87,7 +103,11 @@ export default async function SubmitPage({ searchParams }: SubmitPageProps) {
         </div>
 
         <SubmitToolForm
-          categories={cats as Category[]}
+          key={editingTool?.id ?? 'create'}
+          categories={cats}
+          navigation={navigation}
+          whitelistCategoryIds={null}
+          orphanEditingCategory={orphanEditingCategory}
           userId={user.id}
           editingTool={editingTool}
         />

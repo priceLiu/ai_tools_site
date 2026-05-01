@@ -4,6 +4,8 @@ export interface Category {
   slug: string
   icon: string | null
   sort_order: number
+  /** 父分类 id；null 为一级分类 */
+  parent_id?: string | null
   created_at: string
 }
 
