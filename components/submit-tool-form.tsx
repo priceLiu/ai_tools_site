@@ -37,6 +37,7 @@ import {
   type IntroductionFormat,
 } from '@/lib/introduction-format'
 import { fileToImageDataUrl } from '@/lib/image-data-url'
+import { toolPublicPath } from '@/lib/tool-public-path'
 import { ToolDetailView } from '@/components/tool-detail-view'
 import { Badge } from '@/components/ui/badge'
 import type { Category, NavigationMenuTreeNode, Tool } from '@/lib/types'
@@ -275,7 +276,7 @@ export function SubmitToolForm({
 
   const previewLogoHref = useMemo(() => {
     if (editingTool?.slug?.trim()) {
-      return `/tool/${editingTool.slug.trim()}`
+      return toolPublicPath(editingTool.slug.trim())
     }
     const w = websiteUrl.trim()
     if (!w) return null

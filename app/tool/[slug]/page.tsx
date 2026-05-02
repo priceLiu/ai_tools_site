@@ -21,6 +21,8 @@ import type {
   Profile,
 } from '@/lib/types'
 import { buildNavigationTree } from '@/lib/navigation-tree'
+import { toolPublicPath } from '@/lib/tool-public-path'
+import { FrontendLoadingHint } from '@/components/frontend-loading-hint'
 import type { User } from '@supabase/supabase-js'
 
 export default function ToolPage() {
@@ -122,11 +124,11 @@ export default function ToolPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
-        <Sidebar navigation={[]} enableHomeAnchors />
+        <Sidebar navigation={navigation} enableHomeAnchors={false} />
         <div className="pl-16 md:pl-64">
-          <Header user={null} profile={null} />
-          <main className="flex items-center justify-center p-6">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <Header user={user} profile={profile} />
+          <main className="flex min-h-[50vh] items-center justify-center p-6">
+            <FrontendLoadingHint />
           </main>
         </div>
       </div>
@@ -136,7 +138,7 @@ export default function ToolPage() {
   if (!tool) {
     return (
       <div className="min-h-screen bg-background">
-        <Sidebar navigation={navigation} enableHomeAnchors />
+        <Sidebar navigation={navigation} enableHomeAnchors={false} />
         <div className="pl-16 md:pl-64">
           <Header user={user} profile={profile} />
           <main className={toolDetailPageGutterClass}>
@@ -155,7 +157,7 @@ export default function ToolPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Sidebar navigation={navigation} enableHomeAnchors />
+      <Sidebar navigation={navigation} enableHomeAnchors={false} />
 
       <div className="pl-16 md:pl-64">
         <Header user={user} profile={profile} />
@@ -172,7 +174,7 @@ export default function ToolPage() {
 
             <ToolDetailView
               tool={tool}
-              logoHref={`/tool/${tool.slug}`}
+              logoHref={toolPublicPath(tool.slug)}
               showComments={!hideCommentsForAdminPreview}
               badges={
                 <>

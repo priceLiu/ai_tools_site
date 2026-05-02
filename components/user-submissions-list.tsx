@@ -6,6 +6,8 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { ToolListRowCard } from '@/components/tool-list-row-card'
 import type { Tool } from '@/lib/types'
 
+import { toolPublicPath } from '@/lib/tool-public-path'
+
 export const submissionStatusConfig = {
   pending: {
     label: '审核中',
@@ -28,7 +30,7 @@ export const submissionStatusConfig = {
 }
 
 function ownerDetailHref(tool: Tool) {
-  if (tool.status === 'approved') return `/tool/${tool.slug}`
+  if (tool.status === 'approved') return toolPublicPath(tool.slug)
   return `/account/submissions/${tool.id}`
 }
 

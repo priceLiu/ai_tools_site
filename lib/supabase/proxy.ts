@@ -2,6 +2,27 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function updateSession(request: NextRequest) {
+  const pathname = request.nextUrl.pathname
+  /** slug 含未编码 `/` 时会被拆成多段 → 404；合并为单段并编码 */
+  if (pathname.startsWith('/tool/') && pathname.length > '/tool/'.length) {
+    const rest = pathname.slice('/tool/'.length)
+    const segments = rest.split('/')
+    if (segments.length > 1) {
+      const slug = segments
+        .map((seg) => {
+          try {
+            return decodeURIComponent(seg)
+          } catch {
+            return seg
+          }
+        })
+        .join('/')
+      const url = request.nextUrl.clone()
+      url.pathname = `/tool/${encodeURIComponent(slug)}`
+      return NextResponse.redirect(url, 308)
+    }
+  }
+
   let supabaseResponse = NextResponse.next({
     request,
   })

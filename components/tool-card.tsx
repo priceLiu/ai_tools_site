@@ -4,7 +4,7 @@ import * as Tooltip from '@radix-ui/react-tooltip'
 import Link from 'next/link'
 import Image from 'next/image'
 import type { Tool } from '@/lib/types'
-import { recordToolViewBySlug } from '@/lib/client-record-tool-view'
+import { toolPublicPath } from '@/lib/tool-public-path'
 import { Card, CardContent } from '@/components/ui/card'
 import { Sparkles, Bot, Eye, Heart } from 'lucide-react'
 
@@ -38,7 +38,7 @@ export function ToolCard({
     ''
   ).trim()
 
-  const detailHref = `/tool/${tool.slug}`
+  const detailHref = toolPublicPath(tool.slug)
 
   const cardInner = (
     <Card

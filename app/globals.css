@@ -123,3 +123,13 @@
     @apply bg-background text-foreground;
   }
 }
+
+@keyframes bot-run {
+  0%,
+  100% {
+    transform: translateX(0) rotate(-5deg);
+  }
+  50% {
+    transform: translateX(10px) rotate(5deg);
+  }
+}

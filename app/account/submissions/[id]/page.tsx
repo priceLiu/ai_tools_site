@@ -9,6 +9,7 @@ import { ToolDetailView } from '@/components/tool-detail-view'
 import { toolDetailMaxWidthClass } from '@/lib/tool-detail-layout'
 import { cn } from '@/lib/utils'
 import type { Tool } from '@/lib/types'
+import { toolPublicPath } from '@/lib/tool-public-path'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -63,7 +64,7 @@ export default async function AccountSubmissionDetailPage({ params }: PageProps)
 
   const submissionLogoHref =
     tool.status === 'approved' && tool.slug?.trim()
-      ? `/tool/${tool.slug.trim()}`
+      ? toolPublicPath(tool.slug.trim())
       : `/account/submissions/${tool.id}`
 
   const panelFooter =
@@ -123,7 +124,7 @@ export default async function AccountSubmissionDetailPage({ params }: PageProps)
       >
         {tool.status === 'approved' ? (
           <Button asChild className="mt-6">
-            <Link href={`/tool/${tool.slug}`}>查看站点公开页</Link>
+            <Link href={toolPublicPath(tool.slug)}>查看站点公开页</Link>
           </Button>
         ) : null}
       </ToolDetailView>

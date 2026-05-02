@@ -12,6 +12,7 @@ import {
   toolDetailMaxWidthClass,
 } from '@/lib/tool-detail-layout'
 import type { Tool } from '@/lib/types'
+import { toolPublicPath } from '@/lib/tool-public-path'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -42,7 +43,7 @@ export default async function AdminToolPreviewPage({ params }: PageProps) {
 
   const adminPreviewLogoHref =
     tool.status === 'approved' && tool.slug?.trim()
-      ? `/tool/${tool.slug.trim()}`
+      ? toolPublicPath(tool.slug.trim())
       : `/admin/tools/${tool.id}`
 
   const panelFooter =

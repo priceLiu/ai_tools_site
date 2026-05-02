@@ -3,14 +3,15 @@ import { Button } from '@/components/ui/button'
 import { Eye } from 'lucide-react'
 import type { Tool } from '@/lib/types'
 
+import { toolPublicPath } from '@/lib/tool-public-path'
+
 /** 管理端列表「预览」在公开详情页通过此 query 隐藏评论（仅影响展示） */
 export const ADMIN_TOOL_PREVIEW_QUERY = 'admin_preview=1'
 
 /** 管理列表「预览」：已通过且 slug 存在 → 站点公开页（带 admin_preview）；否则 → 后台预览页 */
 export function adminToolListPreviewHref(tool: Tool): string {
   if (tool.status === 'approved' && tool.slug?.trim()) {
-    const s = tool.slug.trim()
-    return `/tool/${encodeURIComponent(s)}?${ADMIN_TOOL_PREVIEW_QUERY}`
+    return `${toolPublicPath(tool.slug)}?${ADMIN_TOOL_PREVIEW_QUERY}`
   }
   return `/admin/tools/${tool.id}`
 }

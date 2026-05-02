@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { revalidateHomeToolBundleAction } from '@/app/actions/revalidate-home-tool-bundle'
+import { toolPublicPath } from '@/lib/tool-public-path'
 
 export async function updateApprovedToolAdminAction(input: {
   toolId: string
@@ -68,7 +69,7 @@ export async function updateApprovedToolAdminAction(input: {
 
   await revalidateHomeToolBundleAction()
   revalidatePath('/')
-  revalidatePath(`/tool/${tool.slug}`)
+  revalidatePath(toolPublicPath(tool.slug))
   revalidatePath(`/admin/tools/${input.toolId}`)
   revalidatePath('/admin')
   return {}

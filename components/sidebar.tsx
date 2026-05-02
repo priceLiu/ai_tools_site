@@ -93,7 +93,7 @@ function LeafLink({
     )
   }
 
-  const anchorId = enableHomeAnchors ? homeSectionAnchorId(href) : null
+  const anchorId = homeSectionAnchorId(href)
   if (anchorId) {
     if (pathname === '/') {
       return (
@@ -101,8 +101,10 @@ function LeafLink({
           type="button"
           onClick={() => onHomeSectionNavigate(anchorId)}
           className={cn(
-            itemRowClass(activeHomeAnchorId === anchorId),
-            'w-full text-left',
+            enableHomeAnchors && activeHomeAnchorId === anchorId
+              ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+              : 'text-sidebar-foreground hover:bg-sidebar-accent/80',
+            'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors',
           )}
         >
           {rowInner}

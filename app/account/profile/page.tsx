@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
-import Image from 'next/image'
 import { AccountProfileForm } from '@/components/account-profile-form'
+import { AccountAvatarEditor } from '@/components/account-avatar-editor'
 import type { Profile } from '@/lib/types'
 
 export const metadata = {
@@ -29,20 +29,7 @@ export default async function AccountProfilePage() {
         <p className="mt-1 text-muted-foreground">管理在当前站点展示的账号信息</p>
       </div>
 
-      <div className="mb-6 flex items-center gap-4">
-        <div className="relative h-16 w-16 overflow-hidden rounded-full border bg-muted">
-          {p?.avatar_url ? (
-            <Image src={p.avatar_url} alt="" fill className="object-cover" />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">
-              头像
-            </div>
-          )}
-        </div>
-        <p className="text-sm text-muted-foreground">
-          头像由登录账号关联，暂在此仅展示。
-        </p>
-      </div>
+      <AccountAvatarEditor profile={p} />
 
       <AccountProfileForm profile={p} email={user.email ?? null} />
     </div>
