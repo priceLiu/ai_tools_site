@@ -14,7 +14,7 @@ import { Label } from '@/components/ui/label'
 import { Sparkles } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 
 function safeRedirectTarget(raw: string | null): string {
   if (!raw || !raw.startsWith('/') || raw.startsWith('//')) {
@@ -29,26 +29,6 @@ export default function Page() {
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
-
-  useEffect(() => {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    console.log('NEXT_PUBLIC_SUPABASE_URL', url)
-    console.log('NEXT_PUBLIC_SUPABASE_ANON_KEY', anonKey)
-    if (
-      typeof window !== 'undefined' &&
-      process.env.NODE_ENV === 'development'
-    ) {
-      ;(
-        window as unknown as {
-          __SUPABASE_ENV__?: { url?: string; anonKey?: string }
-        }
-      ).__SUPABASE_ENV__ = { url, anonKey }
-      console.info(
-        '[dev] 浏览器控制台没有 Node 的 process。可在本页输入：window.__SUPABASE_ENV__',
-      )
-    }
-  }, [])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
