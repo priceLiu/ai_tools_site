@@ -3,7 +3,7 @@
 import * as Tooltip from '@radix-ui/react-tooltip'
 import Link from 'next/link'
 import Image from 'next/image'
-import type { Tool } from '@/lib/types'
+import type { HomeListedTool } from '@/lib/types'
 import { toolPublicPath } from '@/lib/tool-public-path'
 import { Card, CardContent } from '@/components/ui/card'
 import { Sparkles, Bot, Eye, Heart } from 'lucide-react'
@@ -12,7 +12,7 @@ const TOOL_TIP_CONTENT_CLASS =
   'z-50 max-w-[340px] rounded-lg border-0 bg-neutral-950 px-4 py-3 text-xs text-white shadow-xl'
 
 interface ToolCardProps {
-  tool: Tool
+  tool: HomeListedTool
   /** 站点收藏总数；不传则读 tool.favorite_count */
   favoritesCount?: number
   /** 首屏条目传 true：优先解码 logo */

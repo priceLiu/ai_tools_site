@@ -41,6 +41,30 @@ export interface Tool {
   category?: Category
 }
 
+/**
+ * 首页 bundle / 列表卡片展示所需字段（不含 introduction、use_cases 等大列），
+ * 避免 `unstable_cache` 序列化超过 Next.js Data Cache 2MB 上限。
+ */
+export type HomeListedTool = Pick<
+  Tool,
+  | 'id'
+  | 'name'
+  | 'slug'
+  | 'description'
+  | 'logo_url'
+  | 'category_id'
+  | 'view_count'
+  | 'is_featured'
+  | 'status'
+  | 'created_at'
+  | 'updated_at'
+> &
+  Partial<Pick<Tool, 'favorite_count' | 'is_disabled'>> & {
+    category?: Category
+    /** 列表查询通常不带；tooltip 回退到 description */
+    introduction?: string | null
+  }
+
 export interface Profile {
   id: string
   display_name: string | null

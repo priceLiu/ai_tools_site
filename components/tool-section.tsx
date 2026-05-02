@@ -1,11 +1,11 @@
 import { ToolCard } from '@/components/tool-card'
 import { Badge } from '@/components/ui/badge'
-import type { Tool } from '@/lib/types'
+import type { HomeListedTool } from '@/lib/types'
 import { Flame, Clock } from 'lucide-react'
 
 interface ToolSectionProps {
   title: string
-  tools: Tool[]
+  tools: HomeListedTool[]
   icon?: 'hot' | 'new'
   /** 首页锚点 id，用于侧边栏平滑滚动定位 */
   anchorId?: string

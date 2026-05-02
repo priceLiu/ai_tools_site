@@ -9,16 +9,16 @@ import {
 } from '@/lib/category-tree'
 import { loadNavigationMenuTree } from '@/lib/navigation-menu'
 import { homeNavigationCategoryGroups } from '@/lib/submit-category-choices'
-import type { Category, Tool } from '@/lib/types'
+import type { Category, HomeListedTool, Tool } from '@/lib/types'
 import {
   HOME_TOOL_BUNDLE_CACHE_TAG,
   NAVIGATION_MENU_CACHE_TAG,
 } from '@/lib/navigation-menu-cache-config'
 
 function toolsBucket(
-  map: Map<string, Tool[]>,
+  map: Map<string, HomeListedTool[]>,
   categoryId: string,
-): Tool[] {
+): HomeListedTool[] {
   const u = map.get(categoryId)
   if (u) return u
   for (const [k, v] of map.entries()) {
@@ -29,14 +29,52 @@ function toolsBucket(
 
 export type HomeCategoryBlock = {
   root: Category
-  sections: { category: Category; tools: Tool[] }[]
+  sections: { category: Category; tools: HomeListedTool[] }[]
 }
 
 export type HomeToolBundle = {
   categories: Category[]
-  featured: Tool[]
-  latest: Tool[]
+  featured: HomeListedTool[]
+  latest: HomeListedTool[]
   homeCategoryBlocks: HomeCategoryBlock[]
+}
+
+/** 与分类页一致的关联查询；再在内存中映射为 {@link HomeListedTool}，使写入 Data Cache 的 JSON 仍为小体积 */
+const TOOLS_QUERY_WITH_CATEGORY = '*, category:categories(*)' as const
+
+function toHomeListedTool(row: Tool): HomeListedTool {
+  const cat = row.category
+  return {
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    description: row.description,
+    logo_url: row.logo_url,
+    category_id: row.category_id,
+    view_count: row.view_count,
+    favorite_count: row.favorite_count,
+    is_featured: row.is_featured,
+    status: row.status,
+    is_disabled: row.is_disabled,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    category: cat
+      ? {
+          id: cat.id,
+          name: cat.name,
+          slug: cat.slug,
+          icon: cat.icon,
+          sort_order: cat.sort_order,
+          parent_id: cat.parent_id ?? null,
+          created_at: cat.created_at,
+        }
+      : undefined,
+  }
+}
+
+function mapToolsToListed(rows: Tool[] | null | undefined): HomeListedTool[] {
+  if (!rows?.length) return []
+  return rows.map(toHomeListedTool)
 }
 
 /** 无导航或导航未解析出分组时，仅用 DB parent_id 建树（旧逻辑） */
@@ -139,7 +177,7 @@ async function loadHomeToolBundle(): Promise<HomeToolBundle> {
     idList.length > 0
       ? supabase
           .from('tools')
-          .select('*, category:categories(*)')
+          .select(TOOLS_QUERY_WITH_CATEGORY)
           .eq('status', 'approved')
           .eq('is_disabled', false)
           .in('category_id', idList)
@@ -150,22 +188,24 @@ async function loadHomeToolBundle(): Promise<HomeToolBundle> {
     await Promise.all([
       supabase
         .from('tools')
-        .select('*, category:categories(*)')
+        .select(TOOLS_QUERY_WITH_CATEGORY)
         .eq('status', 'approved')
         .eq('is_disabled', false)
         .eq('is_featured', true)
         .order('view_count', { ascending: false }),
       supabase
         .from('tools')
-        .select('*, category:categories(*)')
+        .select(TOOLS_QUERY_WITH_CATEGORY)
         .eq('status', 'approved')
         .eq('is_disabled', false)
         .order('created_at', { ascending: false }),
       toolsQuery,
     ])
 
-  const toolsByCat = new Map<string, Tool[]>()
-  for (const t of ((sectionTools as Tool[]) ?? []) as Tool[]) {
+  const sectionListed = mapToolsToListed(sectionTools as Tool[] | undefined)
+
+  const toolsByCat = new Map<string, HomeListedTool[]>()
+  for (const t of sectionListed) {
     const cid = t.category_id
     if (!cid) continue
     if (!toolsByCat.has(cid)) toolsByCat.set(cid, [])
@@ -174,7 +214,7 @@ async function loadHomeToolBundle(): Promise<HomeToolBundle> {
 
   const homeCategoryBlocks: HomeCategoryBlock[] = []
   for (const g of sectionPlan) {
-    const sections: { category: Category; tools: Tool[] }[] = []
+    const sections: { category: Category; tools: HomeListedTool[] }[] = []
     const hasRootSection = g.sectionCategories.some((c) =>
       idsEqual(c.id, g.rootCategory.id),
     )
@@ -196,8 +236,8 @@ async function loadHomeToolBundle(): Promise<HomeToolBundle> {
     homeCategoryBlocks.push({ root: g.rootCategory, sections })
   }
 
-  const featured = ((featuredTools as Tool[]) ?? []) as Tool[]
-  const latest = ((latestTools as Tool[]) ?? []) as Tool[]
+  const featured = mapToolsToListed(featuredTools as Tool[] | undefined)
+  const latest = mapToolsToListed(latestTools as Tool[] | undefined)
 
   return {
     categories: cats,
@@ -209,7 +249,7 @@ async function loadHomeToolBundle(): Promise<HomeToolBundle> {
 
 const getHomeToolBundleCached = unstable_cache(
   loadHomeToolBundle,
-  ['home-tool-bundle-v1'],
+  ['home-tool-bundle-v3'],
   {
     tags: [HOME_TOOL_BUNDLE_CACHE_TAG, NAVIGATION_MENU_CACHE_TAG],
     revalidate: false,
@@ -217,7 +257,9 @@ const getHomeToolBundleCached = unstable_cache(
 )
 
 /**
- * 首页数据快照：默认走 Next Data Cache（等价于服务端持有 JSON），避免每次请求都打满查询。
+ * 首页数据快照：默认走 Next Data Cache，避免每次请求都打满查询。
+ * DB 仍用完整 tools 行拉取（与分类页相同，避免嵌套 select 与线上 schema 不一致导致空数据）；
+ * 写入缓存前映射为 HomeListedTool（无 introduction 等大字段），保证缓存条目低于 Next 2MB 上限。
  * — 菜单/分类变更：`revalidateTag(NAVIGATION_MENU_CACHE_TAG)` 会一并失效本缓存。
  * — 工具变更：`revalidateTag(HOME_TOOL_BUNDLE_CACHE_TAG)`（见 revalidateHomeToolBundleAction）。
  * 浏览器强刷新（no-cache）时与导航树一致，跳过缓存读出最新数据。
