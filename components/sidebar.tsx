@@ -2,8 +2,10 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useCallback, useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
 import type { NavigationMenuTreeNode } from '@/lib/types'
+import { slugFromCategoryMenuHref } from '@/lib/submit-category-choices'
 import { navigationIcon } from '@/lib/navigation-icons'
 import { ChevronDown, Plus, Sparkles, type LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -13,11 +15,25 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
 
-function scrollToAnchor(id: string) {
+function scrollToAnchorId(id: string) {
   const el = typeof document !== 'undefined' ? document.getElementById(id) : null
   if (el) {
     el.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
+}
+
+/**
+ * 侧栏里对应首页某个锚点区块的 DOM id（#hot、或 /category/slug → home-cat-slug）。
+ * 仅在传入 enableHomeAnchors 的页面参与导航；从详情/分类等页用 `/#id` 回到首页并定位。
+ */
+function homeSectionAnchorId(href: string): string | null {
+  const t = href.trim()
+  if (t.startsWith('#')) {
+    const id = t.slice(1)
+    return id.length > 0 ? id : null
+  }
+  const slug = slugFromCategoryMenuHref(t)
+  return slug ? `home-cat-${slug}` : null
 }
 
 interface SidebarProps {
@@ -45,13 +61,17 @@ function LeafLink({
   label,
   Icon,
   pathname,
-  homeAnchorMode,
+  enableHomeAnchors,
+  activeHomeAnchorId,
+  onHomeSectionNavigate,
 }: {
   href: string
   label: string
   Icon: LucideIcon
   pathname: string | null
-  homeAnchorMode: boolean
+  enableHomeAnchors: boolean
+  activeHomeAnchorId: string | null
+  onHomeSectionNavigate: (id: string) => void
 }) {
   const rowInner = (
     <>
@@ -73,15 +93,34 @@ function LeafLink({
     )
   }
 
-  if (href.startsWith('#')) {
-    const anchorId = href.slice(1)
-    if (homeAnchorMode) {
+  const anchorId = enableHomeAnchors ? homeSectionAnchorId(href) : null
+  if (anchorId) {
+    if (pathname === '/') {
       return (
-        <button type="button" onClick={() => scrollToAnchor(anchorId)} className={cn(itemRowClass(false), 'w-full text-left')}>
+        <button
+          type="button"
+          onClick={() => onHomeSectionNavigate(anchorId)}
+          className={cn(
+            itemRowClass(activeHomeAnchorId === anchorId),
+            'w-full text-left',
+          )}
+        >
           {rowInner}
         </button>
       )
     }
+    return (
+      <Link
+        href={`/#${anchorId}`}
+        scroll={false}
+        className={itemRowClass(false)}
+      >
+        {rowInner}
+      </Link>
+    )
+  }
+
+  if (href.startsWith('#')) {
     return (
       <Link href={`/${href}`} className={itemRowClass(false)}>
         {rowInner}
@@ -99,11 +138,15 @@ function LeafLink({
 function NavNode({
   node,
   pathname,
-  homeAnchorMode,
+  enableHomeAnchors,
+  activeHomeAnchorId,
+  onHomeSectionNavigate,
 }: {
   node: NavigationMenuTreeNode
   pathname: string | null
-  homeAnchorMode: boolean
+  enableHomeAnchors: boolean
+  activeHomeAnchorId: string | null
+  onHomeSectionNavigate: (id: string) => void
 }) {
   const Icon = navigationIcon(node.icon_name)
   const children = node.children
@@ -115,7 +158,9 @@ function NavNode({
         label={node.label}
         Icon={Icon}
         pathname={pathname}
-        homeAnchorMode={homeAnchorMode}
+        enableHomeAnchors={enableHomeAnchors}
+        activeHomeAnchorId={activeHomeAnchorId}
+        onHomeSectionNavigate={onHomeSectionNavigate}
       />
     )
   }
@@ -142,7 +187,9 @@ function NavNode({
               label={ch.label}
               Icon={CIcon}
               pathname={pathname}
-              homeAnchorMode={homeAnchorMode}
+              enableHomeAnchors={enableHomeAnchors}
+              activeHomeAnchorId={activeHomeAnchorId}
+              onHomeSectionNavigate={onHomeSectionNavigate}
             />
           )
         })}
@@ -156,8 +203,36 @@ export function Sidebar({
   enableHomeAnchors = false,
 }: SidebarProps) {
   const pathname = usePathname()
-  const homeAnchorMode =
-    Boolean(enableHomeAnchors) && pathname === '/'
+  const [homeAnchor, setHomeAnchor] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (pathname !== '/') {
+      setHomeAnchor(null)
+      return
+    }
+    const syncFromUrl = () => {
+      const h = window.location.hash.replace(/^#/, '')
+      setHomeAnchor(h.length > 0 ? h : null)
+    }
+    syncFromUrl()
+    window.addEventListener('hashchange', syncFromUrl)
+    window.addEventListener('popstate', syncFromUrl)
+    return () => {
+      window.removeEventListener('hashchange', syncFromUrl)
+      window.removeEventListener('popstate', syncFromUrl)
+    }
+  }, [pathname])
+
+  const onHomeSectionNavigate = useCallback((id: string) => {
+    window.history.replaceState(null, '', `/#${id}`)
+    setHomeAnchor(id)
+    requestAnimationFrame(() => {
+      scrollToAnchorId(id)
+    })
+  }, [])
+
+  const activeHomeAnchorId =
+    enableHomeAnchors && pathname === '/' ? homeAnchor : null
 
   return (
     <aside className="fixed left-0 top-0 z-40 h-screen w-16 border-r border-border bg-sidebar md:w-64">
@@ -184,7 +259,9 @@ export function Sidebar({
                 key={node.id}
                 node={node}
                 pathname={pathname}
-                homeAnchorMode={homeAnchorMode}
+                enableHomeAnchors={enableHomeAnchors}
+                activeHomeAnchorId={activeHomeAnchorId}
+                onHomeSectionNavigate={onHomeSectionNavigate}
               />
             ))
           )}

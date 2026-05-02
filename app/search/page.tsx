@@ -43,6 +43,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       .from('tools')
       .select('*, category:categories(*)')
       .eq('status', 'approved')
+      .eq('is_disabled', false)
       .or(`name.ilike.%${q}%,description.ilike.%${q}%`)
       .order('view_count', { ascending: false })
     
@@ -51,7 +52,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
   return (
     <div className="min-h-screen bg-background">
-      <Sidebar navigation={navigation} />
+      <Sidebar navigation={navigation} enableHomeAnchors />
       
       <div className="pl-16 md:pl-64">
         <Header user={user} profile={profile} />

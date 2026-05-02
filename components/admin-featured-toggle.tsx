@@ -11,12 +11,18 @@ import { revalidateHomeToolBundleAction } from '@/app/actions/revalidate-home-to
 interface AdminFeaturedToggleProps {
   toolId: string
   initialFeatured: boolean
+  /** toolbar：与审核列表「热门并通过」同款的黄描边小按钮，无旁白标签 */
+  appearance?: 'default' | 'toolbar'
+  /** 与列表/编辑区按钮高度对齐 */
+  buttonSize?: 'sm' | 'default'
 }
 
 /** 将已通过工具在首页「热门工具」区展示（对应 tools.is_featured） */
 export function AdminFeaturedToggle({
   toolId,
   initialFeatured,
+  appearance = 'default',
+  buttonSize = 'sm',
 }: AdminFeaturedToggleProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -46,14 +52,28 @@ export function AdminFeaturedToggle({
     })
   }
 
+  const isToolbar = appearance === 'toolbar'
+
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <span className="text-xs text-muted-foreground">首页热门</span>
+    <div
+      className={
+        isToolbar
+          ? 'inline-flex'
+          : 'flex flex-wrap items-center gap-2'
+      }
+    >
+      {!isToolbar ? (
+        <span className="text-xs text-muted-foreground">首页热门</span>
+      ) : null}
       <Button
         type="button"
-        size="sm"
-        variant={featured ? 'default' : 'outline'}
-        className="h-8 gap-1"
+        size={buttonSize}
+        variant={isToolbar ? 'outline' : featured ? 'default' : 'outline'}
+        className={
+          isToolbar
+            ? `${buttonSize === 'default' ? 'gap-1.5' : 'h-8 gap-1'} ${featured ? 'border-yellow-500/80 bg-yellow-500/10 text-yellow-700 hover:bg-yellow-500/15 dark:text-yellow-400' : 'gap-1 text-yellow-600 hover:text-yellow-700'}`
+            : 'h-8 gap-1'
+        }
         onClick={() => void toggle()}
         disabled={isPending}
       >

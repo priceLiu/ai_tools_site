@@ -263,6 +263,7 @@ export function SubmitToolForm({
         screenshot_url: screenshotUrl || null,
         user_id: userId,
         status: 'pending',
+        is_disabled: false,
       })
 
       if (insertError) {

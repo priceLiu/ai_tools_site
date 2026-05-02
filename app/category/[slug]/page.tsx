@@ -103,6 +103,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
       .from('tools')
       .select('*, category:categories(*)')
       .eq('status', 'approved')
+      .eq('is_disabled', false)
       .eq('is_featured', true)
       .order('view_count', { ascending: false })
     
@@ -133,6 +134,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
       .from('tools')
       .select('*, category:categories(*)')
       .eq('status', 'approved')
+      .eq('is_disabled', false)
       .in('category_id', subtreeIds)
       .order('view_count', { ascending: false })
 
@@ -143,7 +145,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
 
   return (
     <div className="min-h-screen bg-background">
-      <Sidebar navigation={navigation} />
+      <Sidebar navigation={navigation} enableHomeAnchors />
       
       <div className="pl-16 md:pl-64">
         <Header user={user} profile={profile} />

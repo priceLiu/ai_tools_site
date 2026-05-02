@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ArrowLeft, ExternalLink } from 'lucide-react'
 import { submissionStatusConfig } from '@/components/user-submissions-list'
-import { AdminFeaturedToggle } from '@/components/admin-featured-toggle'
+import { AdminApprovedToolEditor } from '@/components/admin-approved-tool-editor'
 import type { Tool } from '@/lib/types'
 
 interface PageProps {
@@ -60,6 +60,11 @@ export default async function AdminToolPreviewPage({ params }: PageProps) {
                 <StatusIcon className={`mr-1 h-3 w-3 ${status.className}`} />
                 {status.label}
               </Badge>
+              {tool.is_disabled ? (
+                <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-950/50 dark:text-amber-200">
+                  前台已禁用
+                </span>
+              ) : null}
               {tool.category ? (
                 <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium">
                   {tool.category.name}
@@ -105,16 +110,16 @@ export default async function AdminToolPreviewPage({ params }: PageProps) {
         </Card>
 
         {tool.status === 'approved' ? (
-          <div className="mt-6 space-y-4">
-            <div className="rounded-lg border border-border bg-muted/30 p-4">
-              <AdminFeaturedToggle
-                toolId={tool.id}
-                initialFeatured={tool.is_featured}
-              />
-            </div>
-            <Button asChild>
-              <Link href={`/tool/${tool.slug}`}>打开公开页面</Link>
-            </Button>
+          <div className="mt-6">
+            <AdminApprovedToolEditor
+              key={`${tool.id}-${tool.updated_at}`}
+              toolId={tool.id}
+              initialName={tool.name}
+              initialDescription={tool.description}
+              initialWebsiteUrl={tool.website_url}
+              initialDisabled={Boolean(tool.is_disabled)}
+              initialFeatured={Boolean(tool.is_featured)}
+            />
           </div>
         ) : null}
       </div>

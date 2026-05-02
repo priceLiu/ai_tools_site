@@ -19,6 +19,8 @@ interface ToolListRowCardProps {
   /** Extra rows under metrics (submission date, website, actions, alerts) */
   footer?: ReactNode
   className?: string
+  /** 管理后台等场景：更紧凑的边距与字号 */
+  density?: 'default' | 'compact'
 }
 
 export function ToolListRowCard({
@@ -30,10 +32,12 @@ export function ToolListRowCard({
   statusBadge,
   footer,
   className,
+  density = 'default',
 }: ToolListRowCardProps) {
   const nameHref = titleHref ?? logoHref
   const views = tool.view_count ?? 0
   const fav = favoritesCount ?? tool.favorite_count ?? 0
+  const compact = density === 'compact'
 
   const linkProps = openLinksInNewTab
     ? ({ target: '_blank' as const, rel: 'noopener noreferrer' as const })
@@ -41,11 +45,19 @@ export function ToolListRowCard({
 
   return (
     <Card className={cn(className)}>
-      <CardContent className="flex items-start gap-4 p-4">
+      <CardContent
+        className={cn(
+          'flex items-start',
+          compact ? 'gap-2.5 px-3 py-2' : 'gap-4 p-4',
+        )}
+      >
         <Link
           href={logoHref}
           {...linkProps}
-          className="relative block h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-muted outline-none ring-offset-background transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring"
+          className={cn(
+            'relative block shrink-0 overflow-hidden rounded-lg bg-muted outline-none ring-offset-background transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring',
+            compact ? 'h-12 w-12 rounded-md' : 'h-16 w-16 rounded-xl',
+          )}
         >
           {tool.logo_url ? (
             <Image
@@ -56,7 +68,9 @@ export function ToolListRowCard({
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary/20 to-primary/40">
-              <Sparkles className="h-8 w-8 text-primary" />
+              <Sparkles
+                className={cn('text-primary', compact ? 'h-6 w-6' : 'h-8 w-8')}
+              />
             </div>
           )}
         </Link>
@@ -66,7 +80,10 @@ export function ToolListRowCard({
             <Link
               href={nameHref}
               {...linkProps}
-              className="min-w-0 truncate text-base font-semibold text-foreground hover:text-primary"
+              className={cn(
+                'min-w-0 truncate font-semibold text-foreground hover:text-primary',
+                compact ? 'text-sm' : 'text-base',
+              )}
             >
               {tool.name}
             </Link>
@@ -75,13 +92,28 @@ export function ToolListRowCard({
             ) : null}
           </div>
 
-          <p className="mt-1 truncate text-sm text-muted-foreground">
+          <p
+            className={cn(
+              'truncate text-muted-foreground',
+              compact ? 'mt-0.5 text-xs' : 'mt-1 text-sm',
+            )}
+          >
             {tool.description}
           </p>
 
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <div
+            className={cn(
+              'flex flex-wrap items-center text-muted-foreground',
+              compact ? 'mt-1 gap-1.5 text-[11px]' : 'mt-2 gap-2 text-xs',
+            )}
+          >
             {tool.category ? (
-              <span className="rounded-full bg-muted px-2.5 py-0.5 font-medium text-foreground">
+              <span
+                className={cn(
+                  'rounded-full bg-muted font-medium text-foreground',
+                  compact ? 'px-2 py-px text-[11px]' : 'px-2.5 py-0.5',
+                )}
+              >
                 {tool.category.name}
               </span>
             ) : null}
@@ -95,7 +127,9 @@ export function ToolListRowCard({
             </span>
           </div>
 
-          {footer ? <div className="mt-3">{footer}</div> : null}
+          {footer ? (
+            <div className={compact ? 'mt-1.5' : 'mt-3'}>{footer}</div>
+          ) : null}
         </div>
       </CardContent>
     </Card>

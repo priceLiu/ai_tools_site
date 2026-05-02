@@ -141,6 +141,7 @@ async function loadHomeToolBundle(): Promise<HomeToolBundle> {
           .from('tools')
           .select('*, category:categories(*)')
           .eq('status', 'approved')
+          .eq('is_disabled', false)
           .in('category_id', idList)
           .order('view_count', { ascending: false })
       : Promise.resolve({ data: [] as Tool[] | null })
@@ -151,12 +152,14 @@ async function loadHomeToolBundle(): Promise<HomeToolBundle> {
         .from('tools')
         .select('*, category:categories(*)')
         .eq('status', 'approved')
+        .eq('is_disabled', false)
         .eq('is_featured', true)
         .order('view_count', { ascending: false }),
       supabase
         .from('tools')
         .select('*, category:categories(*)')
         .eq('status', 'approved')
+        .eq('is_disabled', false)
         .order('created_at', { ascending: false }),
       toolsQuery,
     ])

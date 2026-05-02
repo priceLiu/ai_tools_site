@@ -23,6 +23,8 @@ export interface Tool {
   /** Filled when status is rejected; shown to submitter in 我的提交 */
   rejection_reason: string | null
   is_featured: boolean
+  /** 管理员禁用后前台不展示；缺省视为 false */
+  is_disabled?: boolean
   view_count: number
   /** 收藏人数，与 `favorites` 表由触发器同步 */
   favorite_count?: number

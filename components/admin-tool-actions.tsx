@@ -38,10 +38,12 @@ export function AdminToolActions({ toolId }: AdminToolActionsProps) {
     const updateData: {
       status: string
       is_featured?: boolean
+      is_disabled: boolean
       updated_at: string
       rejection_reason: null
     } = {
       status: 'approved',
+      is_disabled: false,
       updated_at: new Date().toISOString(),
       rejection_reason: null,
     }

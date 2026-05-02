@@ -4,6 +4,7 @@ import { getNavigationMenuTree } from '@/lib/navigation-menu'
 import { Sidebar } from '@/components/sidebar'
 import { Header } from '@/components/header'
 import { HomeToolSections } from '@/components/home-tool-sections'
+import { HomeScrollToHash } from '@/components/home-scroll-to-hash'
 import { Sparkles } from 'lucide-react'
 import type { Profile } from '@/lib/types'
 
@@ -30,6 +31,7 @@ export default async function HomePage() {
 
   return (
     <div className="min-h-screen bg-background">
+      <HomeScrollToHash />
       <Sidebar navigation={navigation} enableHomeAnchors />
 
       <div className="pl-16 md:pl-64">

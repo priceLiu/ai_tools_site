@@ -72,6 +72,7 @@ export default function ToolPage() {
         .select('*, category:categories(*)')
         .eq('slug', slug)
         .eq('status', 'approved')
+        .eq('is_disabled', false)
         .single()
       
       if (toolData) {
@@ -107,7 +108,7 @@ export default function ToolPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
-        <Sidebar navigation={[]} />
+        <Sidebar navigation={[]} enableHomeAnchors />
         <div className="pl-16 md:pl-64">
           <Header user={null} profile={null} />
           <main className="flex items-center justify-center p-6">
@@ -121,7 +122,7 @@ export default function ToolPage() {
   if (!tool) {
     return (
       <div className="min-h-screen bg-background">
-        <Sidebar navigation={navigation} />
+        <Sidebar navigation={navigation} enableHomeAnchors />
         <div className="pl-16 md:pl-64">
           <Header user={user} profile={profile} />
           <main className="p-4 md:p-6">
@@ -140,7 +141,7 @@ export default function ToolPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Sidebar navigation={navigation} />
+      <Sidebar navigation={navigation} enableHomeAnchors />
       
       <div className="pl-16 md:pl-64">
         <Header user={user} profile={profile} />

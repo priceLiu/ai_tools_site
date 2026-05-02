@@ -41,7 +41,7 @@ export default async function FavoritesPage() {
     favorites?.filter((f) => {
       const raw = f.tool as unknown
       const t = (Array.isArray(raw) ? raw[0] : raw) as Tool | undefined
-      return t && t.status === 'approved'
+      return t && t.status === 'approved' && !t.is_disabled
     }) || []
 
   return (

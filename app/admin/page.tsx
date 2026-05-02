@@ -3,13 +3,19 @@ import { createClient } from '@/lib/supabase/server'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AdminToolActions } from '@/components/admin-tool-actions'
-import { AdminFeaturedToggle } from '@/components/admin-featured-toggle'
+import { AdminApprovedListActions } from '@/components/admin-approved-list-actions'
 import { ToolListRowCard } from '@/components/tool-list-row-card'
 import { submissionStatusConfig } from '@/components/user-submissions-list'
 import { buildAdminToolsSearchPattern } from '@/lib/admin-tools-search'
-import { Shield, Clock, CheckCircle, XCircle, ExternalLink } from 'lucide-react'
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+} from '@/components/ui/pagination'
+import { Shield, Clock, CheckCircle, XCircle, ExternalLink, ChevronLeft, ChevronRight } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import type { ReactNode } from 'react'
 import type { Tool } from '@/lib/types'
 
@@ -17,22 +23,68 @@ export const metadata = {
   title: '管理后台 - AI工具集',
 }
 
-const LIST_LIMIT = 50
+const PAGE_SIZE = 10
 const ADMIN_SEARCH_LIMIT = 120
+
+type AdminTab = 'pending' | 'approved' | 'rejected'
+
+function parseTab(raw: string | undefined): AdminTab {
+  if (raw === 'approved' || raw === 'rejected') return raw
+  return 'pending'
+}
+
+function buildAdminHref(opts: { tab: AdminTab; page?: number; q?: string }) {
+  const p = new URLSearchParams()
+  if (opts.q?.trim()) p.set('q', opts.q.trim())
+  if (opts.tab !== 'pending') p.set('tab', opts.tab)
+  if (opts.page && opts.page > 1) p.set('page', String(opts.page))
+  const s = p.toString()
+  return s ? `/admin?${s}` : '/admin'
+}
 
 function adminDetailHref(tool: Tool) {
   return `/admin/tools/${tool.id}`
 }
 
 interface AdminPageProps {
-  searchParams: Promise<{ q?: string }>
+  searchParams: Promise<{ q?: string; tab?: string; page?: string }>
+}
+
+function TabLink({
+  href,
+  active,
+  children,
+}: {
+  href: string
+  active: boolean
+  children: ReactNode
+}) {
+  return (
+    <Link
+      href={href}
+      className={cn(
+        'inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-transparent px-2.5 py-1 text-sm font-medium whitespace-nowrap transition-colors',
+        active
+          ? 'bg-background text-foreground shadow-sm'
+          : 'text-muted-foreground hover:text-foreground',
+      )}
+    >
+      {children}
+    </Link>
+  )
 }
 
 export default async function AdminPage({ searchParams }: AdminPageProps) {
   const supabase = await createClient()
-  const { q: rawQ } = await searchParams
-  const searchTrim = rawQ?.trim() ?? ''
+  const params = await searchParams
+  const rawQ = params.q ?? ''
+  const searchTrim = rawQ.trim()
   const hasSearch = searchTrim.length > 0
+
+  const tab = parseTab(params.tab)
+  const rawPage = parseInt(params.page ?? '1', 10)
+  const pageNum =
+    Number.isFinite(rawPage) && rawPage >= 1 ? Math.floor(rawPage) : 1
 
   const pattern = hasSearch ? buildAdminToolsSearchPattern(searchTrim) : null
 
@@ -40,9 +92,6 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
     pendingCountRes,
     approvedCountRes,
     rejectedCountRes,
-    pendingToolsRes,
-    approvedToolsRes,
-    rejectedToolsRes,
   ] = await Promise.all([
     supabase
       .from('tools')
@@ -56,24 +105,42 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
       .from('tools')
       .select('*', { count: 'exact', head: true })
       .eq('status', 'rejected'),
-    supabase
-      .from('tools')
-      .select('*, category:categories(*)')
-      .eq('status', 'pending')
-      .order('created_at', { ascending: false }),
-    supabase
-      .from('tools')
-      .select('*, category:categories(*)')
-      .eq('status', 'approved')
-      .order('created_at', { ascending: false })
-      .limit(LIST_LIMIT),
-      supabase
-        .from('tools')
-        .select('*, category:categories(*)')
-        .eq('status', 'rejected')
-        .order('created_at', { ascending: false })
-        .limit(LIST_LIMIT),
   ])
+
+  const pendingTotal = pendingCountRes.count ?? 0
+  const approvedTotal = approvedCountRes.count ?? 0
+  const rejectedTotal = rejectedCountRes.count ?? 0
+
+  const totalForTab =
+    tab === 'pending'
+      ? pendingTotal
+      : tab === 'approved'
+        ? approvedTotal
+        : rejectedTotal
+
+  const totalPages = Math.max(1, Math.ceil(totalForTab / PAGE_SIZE))
+  const safePage = Math.min(pageNum, totalPages)
+  const from = (safePage - 1) * PAGE_SIZE
+  const to = from + PAGE_SIZE - 1
+
+  const fetchTabSlice = async (status: 'pending' | 'approved' | 'rejected') => {
+    const { data } = await supabase
+      .from('tools')
+      .select('*, category:categories(*)')
+      .eq('status', status)
+      .order('created_at', { ascending: false })
+      .range(from, to)
+    return (data as Tool[]) || []
+  }
+
+  let tabList: Tool[] = []
+  if (tab === 'pending') {
+    tabList = await fetchTabSlice('pending')
+  } else if (tab === 'approved') {
+    tabList = await fetchTabSlice('approved')
+  } else {
+    tabList = await fetchTabSlice('rejected')
+  }
 
   let searchTools: Tool[] = []
   if (hasSearch && pattern) {
@@ -88,13 +155,6 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
     searchTools = (data as Tool[]) || []
   }
 
-  const pendingTotal = pendingCountRes.count ?? 0
-  const approvedTotal = approvedCountRes.count ?? 0
-  const rejectedTotal = rejectedCountRes.count ?? 0
-  const pending = (pendingToolsRes.data as Tool[]) || []
-  const approved = (approvedToolsRes.data as Tool[]) || []
-  const rejected = (rejectedToolsRes.data as Tool[]) || []
-
   function toolStatusBadge(tool: Tool): ReactNode {
     const status = submissionStatusConfig[tool.status]
     const StatusIcon = status.icon
@@ -106,17 +166,19 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
     )
   }
 
+  const qOpt = searchTrim.length > 0 ? searchTrim : undefined
+
   const renderCard = (
     tool: Tool,
     opts: {
       showApproveActions?: boolean
-      showFeaturedToggle?: boolean
+      showApprovedListActions?: boolean
       statusBadge?: ReactNode
     } = {},
   ) => {
     const {
       showApproveActions = false,
-      showFeaturedToggle = false,
+      showApprovedListActions = false,
       statusBadge,
     } = opts
     const href = adminDetailHref(tool)
@@ -126,10 +188,10 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
         tool={tool}
         logoHref={href}
         titleHref={href}
-        openLinksInNewTab
         statusBadge={statusBadge}
+        density="compact"
         footer={
-          <div className="space-y-3">
+          <div className="space-y-1">
             <a
               href={tool.website_url}
               target="_blank"
@@ -139,18 +201,15 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
               <ExternalLink className="h-3 w-3 shrink-0" />
               {tool.website_url}
             </a>
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-xs text-muted-foreground">
                 提交于 {new Date(tool.created_at).toLocaleDateString('zh-CN')}
               </span>
               {showApproveActions ? <AdminToolActions toolId={tool.id} /> : null}
+              {showApprovedListActions ? (
+                <AdminApprovedListActions tool={tool} editHref={href} />
+              ) : null}
             </div>
-            {showFeaturedToggle ? (
-              <AdminFeaturedToggle
-                toolId={tool.id}
-                initialFeatured={tool.is_featured}
-              />
-            ) : null}
           </div>
         }
       />
@@ -161,162 +220,265 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
     return renderCard(tool, {
       statusBadge: toolStatusBadge(tool),
       showApproveActions: tool.status === 'pending',
-      showFeaturedToggle: tool.status === 'approved',
+      showApprovedListActions: tool.status === 'approved',
     })
   }
 
-  const approvedListTruncated =
-    approvedTotal > LIST_LIMIT && approved.length === LIST_LIMIT
-  const rejectedListTruncated =
-    rejectedTotal > LIST_LIMIT && rejected.length === LIST_LIMIT
+  const prevHref =
+    safePage > 1
+      ? buildAdminHref({ tab, page: safePage - 1, q: qOpt })
+      : null
+  const nextHref =
+    safePage < totalPages
+      ? buildAdminHref({ tab, page: safePage + 1, q: qOpt })
+      : null
+
+  let tabPanel: ReactNode = null
+
+  if (tab === 'pending') {
+    tabPanel =
+      tabList.length > 0 ? (
+        <>
+          <div className="space-y-1.5">
+            {tabList.map((t) => renderCard(t, { showApproveActions: true }))}
+          </div>
+          {totalPages > 1 ? (
+            <AdminPagination
+              safePage={safePage}
+              totalPages={totalPages}
+              prevHref={prevHref}
+              nextHref={nextHref}
+            />
+          ) : null}
+        </>
+      ) : (
+        <div className="py-8 text-center text-sm text-muted-foreground">
+          暂无审核中的工具
+        </div>
+      )
+  } else if (tab === 'approved') {
+    tabPanel =
+      tabList.length > 0 ? (
+        <>
+          <p className="mb-1.5 text-xs text-muted-foreground">
+            点头像或标题进入编辑页。
+          </p>
+          <div className="space-y-1.5">
+            {tabList.map((t) =>
+              renderCard(t, {
+                showApprovedListActions: true,
+              }),
+            )}
+          </div>
+          {totalPages > 1 ? (
+            <AdminPagination
+              safePage={safePage}
+              totalPages={totalPages}
+              prevHref={prevHref}
+              nextHref={nextHref}
+            />
+          ) : null}
+        </>
+      ) : (
+        <div className="py-8 text-center text-sm text-muted-foreground">
+          暂无已通过的工具
+        </div>
+      )
+  } else {
+    tabPanel =
+      tabList.length > 0 ? (
+        <>
+          <div className="space-y-1.5">
+            {tabList.map((t) => renderCard(t))}
+          </div>
+          {totalPages > 1 ? (
+            <AdminPagination
+              safePage={safePage}
+              totalPages={totalPages}
+              prevHref={prevHref}
+              nextHref={nextHref}
+            />
+          ) : null}
+        </>
+      ) : (
+        <div className="py-8 text-center text-sm text-muted-foreground">
+          暂无未通过的工具
+        </div>
+      )
+  }
 
   return (
-    <main className="p-4 md:p-6">
+    <main className="p-3 md:p-5">
       <div className="mx-auto max-w-4xl">
-        <div className="mb-8">
+        <div className="mb-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
-              <Shield className="h-6 w-6 text-primary" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+              <Shield className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-foreground">管理后台</h1>
-              <p className="text-sm text-muted-foreground">
+              <h1 className="text-xl font-bold text-foreground md:text-2xl">管理后台</h1>
+              <p className="text-xs text-muted-foreground md:text-sm">
                 审核和管理提交的 AI 工具
               </p>
             </div>
           </div>
         </div>
 
-        <div className="mb-8 grid gap-4 sm:grid-cols-3">
+        <div className="mb-4 grid gap-2 sm:grid-cols-3 sm:gap-3">
           <Card>
-            <CardContent className="flex items-center gap-4 p-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-yellow-100">
-                <Clock className="h-5 w-5 text-yellow-600" />
+            <CardContent className="flex items-center gap-3 p-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-yellow-100">
+                <Clock className="h-4 w-4 text-yellow-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-foreground">{pendingTotal}</p>
-                <p className="text-sm text-muted-foreground">审核中</p>
+                <p className="text-xl font-bold text-foreground">{pendingTotal}</p>
+                <p className="text-xs text-muted-foreground">审核中</p>
               </div>
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="flex items-center gap-4 p-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-100">
-                <CheckCircle className="h-5 w-5 text-green-600" />
+            <CardContent className="flex items-center gap-3 p-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-green-100">
+                <CheckCircle className="h-4 w-4 text-green-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-foreground">{approvedTotal}</p>
-                <p className="text-sm text-muted-foreground">已通过</p>
+                <p className="text-xl font-bold text-foreground">{approvedTotal}</p>
+                <p className="text-xs text-muted-foreground">已通过</p>
               </div>
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="flex items-center gap-4 p-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-100">
-                <XCircle className="h-5 w-5 text-red-600" />
+            <CardContent className="flex items-center gap-3 p-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-red-100">
+                <XCircle className="h-4 w-4 text-red-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-foreground">{rejectedTotal}</p>
-                <p className="text-sm text-muted-foreground">未通过</p>
+                <p className="text-xl font-bold text-foreground">{rejectedTotal}</p>
+                <p className="text-xs text-muted-foreground">未通过</p>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        <p className="mb-4 text-xs text-muted-foreground">
-          列表「已通过 / 未通过」各最多展示最近 {LIST_LIMIT} 条（数字为库里该状态总数）。顶部搜索为全站匹配，结果在下方单列展示；
-          Tab 可随时切换原始列表。
+        <p className="mb-3 text-xs text-muted-foreground">
+          各 Tab 列表每页 {PAGE_SIZE} 条，数字为库里该状态总数。顶部搜索为全站匹配（至多 {ADMIN_SEARCH_LIMIT}{' '}
+          条）；清除关键词后仅隐藏搜索区。
         </p>
 
         {hasSearch ? (
-          <div className="mb-8 rounded-lg border border-border bg-muted/20 p-4 space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm text-muted-foreground">
-                搜索结果「{searchTrim}」：共 {searchTools.length} 条（至多{' '}
-                {ADMIN_SEARCH_LIMIT} 条），含审核状态。清除关键词后仅隐藏本区。
+          <div className="mb-5 rounded-lg border border-border bg-muted/20 p-3 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-muted-foreground md:text-sm">
+                搜索结果「{searchTrim}」：共 {searchTools.length} 条，含审核状态。
               </p>
               <Button asChild variant="outline" size="sm">
                 <Link href="/admin">清除搜索</Link>
               </Button>
             </div>
             {searchTools.length > 0 ? (
-              <div className="space-y-4">
+              <div className="space-y-1.5">
                 {searchTools.map((t) => renderSearchResultCard(t))}
               </div>
             ) : (
-              <div className="py-8 text-center text-sm text-muted-foreground">
-                没有匹配的工具，请尝试其他关键词；仍可在下方 Tab 浏览列表。
+              <div className="py-6 text-center text-xs text-muted-foreground md:text-sm">
+                没有匹配的工具；仍可在下方 Tab 浏览分页列表。
               </div>
             )}
           </div>
         ) : null}
 
-        <Tabs defaultValue="pending">
-          <TabsList className="mb-6 h-auto flex-wrap gap-1">
-            <TabsTrigger value="pending" className="gap-2">
-              <Clock className="h-4 w-4 shrink-0" />
-              审核中 ({pending.length}
-              {pendingTotal !== pending.length ? ` / 共 ${pendingTotal}` : ''})
-            </TabsTrigger>
-            <TabsTrigger value="approved" className="gap-2">
-              <CheckCircle className="h-4 w-4 shrink-0" />
-              已通过 ({approved.length}
-              {approvedTotal !== approved.length ? ` / 共 ${approvedTotal}` : ''})
-            </TabsTrigger>
-            <TabsTrigger value="rejected" className="gap-2">
-              <XCircle className="h-4 w-4 shrink-0" />
-              未通过 ({rejected.length}
-              {rejectedTotal !== rejected.length ? ` / 共 ${rejectedTotal}` : ''})
-            </TabsTrigger>
-          </TabsList>
+        <div className="bg-muted inline-flex h-auto w-full max-w-full flex-wrap items-center gap-0.5 rounded-lg p-1 md:w-fit">
+          <TabLink
+            href={buildAdminHref({ tab: 'pending', page: 1, q: qOpt })}
+            active={tab === 'pending'}
+          >
+            <Clock className="h-4 w-4 shrink-0" />
+            审核中 ({pendingTotal})
+          </TabLink>
+          <TabLink
+            href={buildAdminHref({ tab: 'approved', page: 1, q: qOpt })}
+            active={tab === 'approved'}
+          >
+            <CheckCircle className="h-4 w-4 shrink-0" />
+            已通过 ({approvedTotal})
+          </TabLink>
+          <TabLink
+            href={buildAdminHref({ tab: 'rejected', page: 1, q: qOpt })}
+            active={tab === 'rejected'}
+          >
+            <XCircle className="h-4 w-4 shrink-0" />
+            未通过 ({rejectedTotal})
+          </TabLink>
+        </div>
 
-          <TabsContent value="pending">
-            {pending.length > 0 ? (
-              <div className="space-y-4">
-                {pending.map((t) => renderCard(t, { showApproveActions: true }))}
-              </div>
-            ) : (
-              <div className="py-12 text-center text-muted-foreground">
-                暂无审核中的工具
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="approved">
-            {approvedListTruncated ? (
-              <p className="mb-3 text-xs text-amber-700 dark:text-amber-500">
-                仅显示最近 {LIST_LIMIT} 条；当前共有 {approvedTotal} 条已通过记录。
-              </p>
-            ) : null}
-            {approved.length > 0 ? (
-              <div className="space-y-4">
-                {approved.map((t) => renderCard(t, { showFeaturedToggle: true }))}
-              </div>
-            ) : (
-              <div className="py-12 text-center text-muted-foreground">
-                暂无已通过的工具
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="rejected">
-            {rejectedListTruncated ? (
-              <p className="mb-3 text-xs text-amber-700 dark:text-amber-500">
-                仅显示最近 {LIST_LIMIT} 条；当前共有 {rejectedTotal} 条未通过记录。
-              </p>
-            ) : null}
-            {rejected.length > 0 ? (
-              <div className="space-y-4">
-                {rejected.map((t) => renderCard(t))}
-              </div>
-            ) : (
-              <div className="py-12 text-center text-muted-foreground">
-                暂无未通过的工具
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
+        <div className="mt-3">{tabPanel}</div>
       </div>
     </main>
+  )
+}
+
+function AdminPagination({
+  safePage,
+  totalPages,
+  prevHref,
+  nextHref,
+}: {
+  safePage: number
+  totalPages: number
+  prevHref: string | null
+  nextHref: string | null
+}) {
+  return (
+    <Pagination className="mt-3 justify-end">
+      <PaginationContent className="flex-wrap justify-end gap-1">
+        <PaginationItem>
+          {prevHref ? (
+            <PaginationLink
+              href={prevHref}
+              size="default"
+              className="gap-1 px-2.5 sm:pl-2.5"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              <span>上一页</span>
+            </PaginationLink>
+          ) : (
+            <span
+              className={cn(
+                'inline-flex h-9 items-center gap-1 rounded-md px-2 text-sm text-muted-foreground opacity-50',
+              )}
+            >
+              <ChevronLeft className="h-4 w-4" />
+              上一页
+            </span>
+          )}
+        </PaginationItem>
+        <PaginationItem>
+          <span className="flex h-9 items-center px-2 text-sm tabular-nums text-muted-foreground">
+            第 {safePage} / {totalPages} 页
+          </span>
+        </PaginationItem>
+        <PaginationItem>
+          {nextHref ? (
+            <PaginationLink
+              href={nextHref}
+              size="default"
+              className="gap-1 px-2.5 sm:pr-2.5"
+            >
+              <span>下一页</span>
+              <ChevronRight className="h-4 w-4" />
+            </PaginationLink>
+          ) : (
+            <span
+              className={cn(
+                'inline-flex h-9 items-center gap-1 rounded-md px-2 text-sm text-muted-foreground opacity-50',
+              )}
+            >
+              下一页
+              <ChevronRight className="h-4 w-4" />
+            </span>
+          )}
+        </PaginationItem>
+      </PaginationContent>
+    </Pagination>
   )
 }
