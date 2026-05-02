@@ -188,6 +188,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
         tool={tool}
         logoHref={href}
         titleHref={href}
+        openLogoInNewTab
         statusBadge={statusBadge}
         density="compact"
         footer={
@@ -261,7 +262,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
       tabList.length > 0 ? (
         <>
           <p className="mb-1.5 text-xs text-muted-foreground">
-            点头像或标题进入编辑页。
+            点标题进入编辑；点头像在新标签打开（已通过工具将打开站点公开页）。
           </p>
           <div className="space-y-1.5">
             {tabList.map((t) =>

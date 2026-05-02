@@ -55,7 +55,7 @@ export default async function AccountPendingPage({
         }
         emptyDescription={
           hasQuery
-            ? '没有名称或简介包含该关键词的待审核条目。可在「工具提交历史」中搜索全部状态。'
+            ? '没有名称或工具介绍包含该关键词的待审核条目。可在「工具提交历史」中搜索全部状态。'
             : '你没有正在审核中的工具提交，可以试试「AI 工具提交」。'
         }
       />

@@ -15,7 +15,9 @@ import {
 } from '@/components/ui/dialog'
 import { CheckCircle, XCircle, Star } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { randomToolViewSeed } from '@/lib/tool-view-seed'
 import { revalidateHomeToolBundleAction } from '@/app/actions/revalidate-home-tool-bundle'
+import { toast } from 'sonner'
 
 interface AdminToolActionsProps {
   toolId: string
@@ -35,17 +37,33 @@ export function AdminToolActions({ toolId }: AdminToolActionsProps) {
 
     const supabase = createClient()
 
+    const { data: existing } = await supabase
+      .from('tools')
+      .select('view_count')
+      .eq('id', toolId)
+      .maybeSingle()
+
+    const seedViews =
+      existing != null && (existing.view_count ?? 0) >= 3000
+        ? undefined
+        : randomToolViewSeed()
+
     const updateData: {
       status: string
       is_featured?: boolean
       is_disabled: boolean
       updated_at: string
       rejection_reason: null
+      view_count?: number
     } = {
       status: 'approved',
       is_disabled: false,
       updated_at: new Date().toISOString(),
       rejection_reason: null,
+    }
+
+    if (seedViews !== undefined) {
+      updateData.view_count = seedViews
     }
 
     if (featured) {
@@ -57,9 +75,14 @@ export function AdminToolActions({ toolId }: AdminToolActionsProps) {
       .update(updateData)
       .eq('id', toolId)
 
-    if (!error) {
-      await revalidateHomeToolBundleAction()
+    if (error) {
+      toast.error(error.message || '审核失败')
+      setAction(null)
+      return
     }
+
+    await revalidateHomeToolBundleAction()
+    toast.success('审核通过', { duration: 2600, position: 'top-center' })
 
     startTransition(() => {
       router.refresh()
@@ -89,17 +112,19 @@ export function AdminToolActions({ toolId }: AdminToolActionsProps) {
       .eq('id', toolId)
 
     setRejectSubmitting(false)
-    setAction(null)
 
     if (error) {
       setRejectError(error.message)
+      setAction(null)
       return
     }
 
     await revalidateHomeToolBundleAction()
+    toast.success('已拒绝该提交', { duration: 2600, position: 'top-center' })
 
     setRejectOpen(false)
     setRejectReason('')
+    setAction(null)
 
     startTransition(() => {
       router.refresh()

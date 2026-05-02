@@ -42,6 +42,29 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   if (
+    user &&
+    !request.nextUrl.pathname.startsWith('/auth/account-disabled')
+  ) {
+    const { data: row } = await supabase
+      .from('profiles')
+      .select('is_disabled')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    if (row?.is_disabled === true) {
+      await supabase.auth.signOut()
+      const url = request.nextUrl.clone()
+      url.pathname = '/auth/account-disabled'
+      url.search = ''
+      const redirectResponse = NextResponse.redirect(url)
+      redirectResponse.cookies.setAll(supabaseResponse.cookies.getAll())
+      return redirectResponse
+    }
+  }
+
+  // 仅 /protected 等显式路径需要登录；首页、分类、工具详情、搜索等均可匿名访问。
+  // 个人中心 /account、提交页 /submit、收藏 /favorites、后台 /admin 在各自 layout 中校验登录。
+  if (
     // if the user is not logged in and the app path, in this case, /protected, is accessed, redirect to the login page
     request.nextUrl.pathname.startsWith('/protected') &&
     !user

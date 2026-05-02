@@ -2,6 +2,10 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { AccountChrome } from '@/components/account-chrome'
 import type { Profile } from '@/lib/types'
+import { cn } from '@/lib/utils'
+import {
+  toolDetailPageGutterClass,
+} from '@/lib/tool-detail-layout'
 
 export default async function AccountLayout({
   children,
@@ -23,7 +27,7 @@ export default async function AccountLayout({
 
   return (
     <AccountChrome user={user} profile={profile as Profile | null}>
-      <div className="mx-auto max-w-3xl px-4 py-6 md:max-w-4xl md:px-8">
+      <div className={cn('w-full', toolDetailPageGutterClass)}>
         {children}
       </div>
     </AccountChrome>

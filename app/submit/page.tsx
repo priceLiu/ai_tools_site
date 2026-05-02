@@ -8,6 +8,7 @@ import {
 import { navigationMenuCategoryIdWhitelist } from '@/lib/submit-category-choices'
 import { getNavigationMenuTree } from '@/lib/navigation-menu'
 import type { Category, Profile } from '@/lib/types'
+import { normalizeIntroductionFormat } from '@/lib/introduction-format'
 
 type SubmitPageProps = {
   searchParams: Promise<{ edit?: string }>
@@ -59,7 +60,7 @@ export default async function SubmitPage({ searchParams }: SubmitPageProps) {
     const { data: row } = await supabase
       .from('tools')
       .select(
-        'id, slug, name, description, website_url, category_id, logo_url, screenshot_url, user_id, status',
+      'id, slug, name, description, website_url, category_id, logo_url, screenshot_url, user_id, status, introduction, introduction_format',
       )
       .eq('id', editId)
       .maybeSingle()
@@ -77,6 +78,10 @@ export default async function SubmitPage({ searchParams }: SubmitPageProps) {
       category_id: row.category_id,
       logo_url: row.logo_url,
       screenshot_url: row.screenshot_url,
+      introduction: row.introduction,
+      introduction_format: normalizeIntroductionFormat(
+        (row as { introduction_format?: string }).introduction_format,
+      ),
     }
     const ec = cats.find((c) => c.id === row.category_id)
     if (

@@ -1,4 +1,4 @@
-/** 在用户自己的工具列表中按名称 / 简介做不区分大小写子串匹配 */
+/** 在用户自己的工具列表中按名称 / 工具介绍做不区分大小写子串匹配 */
 export function filterOwnTools<T extends { name: string; description: string }>(
   tools: T[],
   raw: string | undefined,

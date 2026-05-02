@@ -29,7 +29,7 @@ export async function updateApprovedToolAdminAction(input: {
   const description = input.description.trim()
   const website_url = input.website_url.trim()
   if (!name) return { error: '名称不能为空' }
-  if (!description) return { error: '描述不能为空' }
+  if (!description) return { error: '概述描述不能为空' }
   if (!website_url) return { error: '网站地址不能为空' }
   try {
     new URL(website_url)

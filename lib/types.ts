@@ -1,3 +1,5 @@
+import type { IntroductionFormat } from './introduction-format'
+
 export interface Category {
   id: string
   name: string
@@ -28,7 +30,11 @@ export interface Tool {
   view_count: number
   /** 收藏人数，与 `favorites` 表由触发器同步 */
   favorite_count?: number
+  /** 详情页正文：纯文本 / Markdown / HTML */
   introduction: string | null
+  /** 与 introduction 对应的渲染方式 */
+  /** 与 introduction 对应的渲染方式 */
+  introduction_format?: IntroductionFormat
   use_cases: string | null
   created_at: string
   updated_at: string
@@ -40,6 +46,8 @@ export interface Profile {
   display_name: string | null
   avatar_url: string | null
   is_admin: boolean
+  /** true 时禁止登录使用（中间件会退出会话） */
+  is_disabled?: boolean
   created_at: string
 }
 

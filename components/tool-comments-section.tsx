@@ -1,10 +1,13 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import { MessageCircle, Send } from 'lucide-react'
@@ -22,6 +25,10 @@ export function ToolCommentsSection({
   initialUser,
   initialNickname,
 }: ToolCommentsSectionProps) {
+  const pathname = usePathname()
+  const loginHref = `/auth/login?redirect=${encodeURIComponent(pathname || '/')}`
+
+  const [user, setUser] = useState<User | null>(initialUser ?? null)
   const [comments, setComments] = useState<ToolComment[]>([])
   const [loadingList, setLoadingList] = useState(true)
   const [nickname, setNickname] = useState(initialNickname ?? '')
@@ -51,8 +58,36 @@ export function ToolCommentsSection({
     loadComments()
   }, [loadComments])
 
+  useEffect(() => {
+    const supabase = createClient()
+
+    void supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null)
+    })
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (user?.email) {
+      setEmail(user.email)
+    }
+  }, [user?.email])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!user) {
+      setError('请先登录后再发表评论')
+      return
+    }
     setError('')
     const n = nickname.trim()
     const em = email.trim()
@@ -105,70 +140,100 @@ export function ToolCommentsSection({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6 pt-6">
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="flex gap-4">
-            <div className="relative mt-1 h-10 w-10 shrink-0 overflow-hidden rounded-full border bg-muted">
-              {initialNickname || initialUser?.email ? (
-                <span className="flex h-full w-full items-center justify-center text-xs font-medium text-muted-foreground">
-                  {(nickname || initialNickname || '?').slice(0, 1).toUpperCase()}
-                </span>
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-muted-foreground">
-                  <MessageCircle className="h-4 w-4" />
+        {user ? (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="flex gap-4">
+              <div className="relative mt-1 h-10 w-10 shrink-0 overflow-hidden rounded-full border bg-muted">
+                {nickname || user.email ? (
+                  <span className="flex h-full w-full items-center justify-center text-xs font-medium text-muted-foreground">
+                    {(nickname || user.email || '?').slice(0, 1).toUpperCase()}
+                  </span>
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+                    <MessageCircle className="h-4 w-4" />
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0 flex-1 space-y-3">
+                <Label className="text-sm font-medium text-foreground">
+                  评论正文 <span className="text-destructive">*</span>
+                </Label>
+                <Textarea
+                  value={body}
+                  onChange={(e) => setBody(e.target.value)}
+                  placeholder="写下你对该工具的体验、建议或问题…"
+                  rows={4}
+                  maxLength={5000}
+                  className="resize-none bg-muted/50 text-sm"
+                  disabled={submitting}
+                />
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="comment-nickname" className="text-sm font-medium">
+                      昵称 <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="comment-nickname"
+                      value={nickname}
+                      onChange={(e) => setNickname(e.target.value)}
+                      placeholder="例如：AI 爱好者"
+                      maxLength={80}
+                      disabled={submitting}
+                      className="bg-muted/50 text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="comment-email" className="text-sm font-medium">
+                      联系邮箱 <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="comment-email"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="you@example.com"
+                      maxLength={255}
+                      disabled={submitting}
+                      className="bg-muted/50 text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="comment-website" className="text-sm font-medium">
+                      个人网站（选填）
+                    </Label>
+                    <Input
+                      id="comment-website"
+                      type="url"
+                      value={website}
+                      onChange={(e) => setWebsite(e.target.value)}
+                      placeholder="https://"
+                      maxLength={500}
+                      disabled={submitting}
+                      className="bg-muted/50 text-sm"
+                    />
+                  </div>
                 </div>
-              )}
-            </div>
-            <div className="min-w-0 flex-1 space-y-3">
-              <Textarea
-                value={body}
-                onChange={(e) => setBody(e.target.value)}
-                placeholder="输入评论内容..."
-                rows={4}
-                maxLength={5000}
-                className="resize-none bg-muted/50 text-sm"
-                disabled={submitting}
-              />
-              <div className="grid gap-3 sm:grid-cols-3">
-                <Input
-                  value={nickname}
-                  onChange={(e) => setNickname(e.target.value)}
-                  placeholder="昵称"
-                  maxLength={80}
-                  disabled={submitting}
-                  className="bg-muted/50 text-sm"
-                />
-                <Input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="邮箱"
-                  maxLength={255}
-                  disabled={submitting}
-                  className="bg-muted/50 text-sm"
-                />
-                <Input
-                  type="url"
-                  value={website}
-                  onChange={(e) => setWebsite(e.target.value)}
-                  placeholder="网址（选填）"
-                  maxLength={500}
-                  disabled={submitting}
-                  className="bg-muted/50 text-sm"
-                />
+                <div className="flex justify-end">
+                  <Button type="submit" disabled={submitting}>
+                    {submitting && <Spinner className="mr-2 h-4 w-4" />}
+                    <Send className="mr-2 h-4 w-4" />
+                    发表评论
+                  </Button>
+                </div>
+                {error ? (
+                  <p className="text-sm text-destructive">{error}</p>
+                ) : null}
               </div>
-              <div className="flex justify-end">
-                <Button type="submit" disabled={submitting}>
-                  {submitting && <Spinner className="mr-2 h-4 w-4" />}
-                  <Send className="mr-2 h-4 w-4" />
-                  发表评论
-                </Button>
-              </div>
-              {error ? (
-                <p className="text-sm text-destructive">{error}</p>
-              ) : null}
             </div>
-          </div>
-        </form>
+          </form>
+        ) : (
+          <p className="rounded-lg border border-dashed bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+            登录后可发表评论；访客可浏览下方已有评论。{' '}
+            <Button asChild variant="link" className="h-auto p-0 text-sm">
+              <Link href={loginHref}>去登录</Link>
+            </Button>
+          </p>
+        )}
 
         <div className="rounded-lg border bg-muted/30">
           {loadingList ? (

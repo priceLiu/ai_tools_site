@@ -1,3 +1,5 @@
+'use client'
+
 import Link from 'next/link'
 import Image from 'next/image'
 import type { ReactNode } from 'react'
@@ -5,6 +7,7 @@ import { Eye, Heart, Sparkles } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import type { Tool } from '@/lib/types'
+import { recordToolViewBySlug } from '@/lib/client-record-tool-view'
 
 interface ToolListRowCardProps {
   tool: Tool
@@ -12,8 +15,10 @@ interface ToolListRowCardProps {
   logoHref: string
   /** Title link; defaults to logoHref */
   titleHref?: string
-  /** Logo 与标题链接是否在新标签页打开 */
-  openLinksInNewTab?: boolean
+  /** 仅工具 Logo 在新标签打开 */
+  openLogoInNewTab?: boolean
+  /** 标题是否在新标签打开 */
+  openTitleInNewTab?: boolean
   favoritesCount?: number
   statusBadge?: ReactNode
   /** Extra rows under metrics (submission date, website, actions, alerts) */
@@ -21,25 +26,35 @@ interface ToolListRowCardProps {
   className?: string
   /** 管理后台等场景：更紧凑的边距与字号 */
   density?: 'default' | 'compact'
+  /** 传入已通过工具的 slug 时，点击跳转会记入访问量（进入 /tool/slug） */
+  recordViewSlug?: string | null
 }
 
 export function ToolListRowCard({
   tool,
   logoHref,
   titleHref,
-  openLinksInNewTab = false,
+  openLogoInNewTab = false,
+  openTitleInNewTab = false,
   favoritesCount = 0,
   statusBadge,
   footer,
   className,
   density = 'default',
+  recordViewSlug = null,
 }: ToolListRowCardProps) {
   const nameHref = titleHref ?? logoHref
+  const bumpView = () => {
+    if (recordViewSlug) recordToolViewBySlug(recordViewSlug)
+  }
   const views = tool.view_count ?? 0
   const fav = favoritesCount ?? tool.favorite_count ?? 0
   const compact = density === 'compact'
 
-  const linkProps = openLinksInNewTab
+  const logoTabProps = openLogoInNewTab
+    ? ({ target: '_blank' as const, rel: 'noopener noreferrer' as const })
+    : {}
+  const titleTabProps = openTitleInNewTab
     ? ({ target: '_blank' as const, rel: 'noopener noreferrer' as const })
     : {}
 
@@ -53,7 +68,8 @@ export function ToolListRowCard({
       >
         <Link
           href={logoHref}
-          {...linkProps}
+          {...logoTabProps}
+          onClick={bumpView}
           className={cn(
             'relative block shrink-0 overflow-hidden rounded-lg bg-muted outline-none ring-offset-background transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring',
             compact ? 'h-12 w-12 rounded-md' : 'h-16 w-16 rounded-xl',
@@ -79,7 +95,8 @@ export function ToolListRowCard({
           <div className="flex items-start justify-between gap-3">
             <Link
               href={nameHref}
-              {...linkProps}
+              {...titleTabProps}
+              onClick={bumpView}
               className={cn(
                 'min-w-0 truncate font-semibold text-foreground hover:text-primary',
                 compact ? 'text-sm' : 'text-base',

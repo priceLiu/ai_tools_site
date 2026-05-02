@@ -10,6 +10,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { AdminFeaturedToggle } from '@/components/admin-featured-toggle'
 import { AdminDisableToggleButton } from '@/components/admin-disable-toggle-button'
 import { updateApprovedToolAdminAction } from '@/app/admin/tools/actions'
+import { LISTING_DESCRIPTION_MAX } from '@/lib/introduction-format'
 
 interface AdminApprovedToolEditorProps {
   toolId: string
@@ -55,7 +56,7 @@ export function AdminApprovedToolEditor({
     <div className="space-y-4 rounded-lg border border-border bg-card p-4">
       <h3 className="text-sm font-semibold text-foreground">编辑公开信息</h3>
       <p className="text-xs text-muted-foreground">
-        「禁用 / 设为热门」立即生效；名称、简介与官网需点下方保存。
+        「禁用 / 设为热门」立即生效；名称、概述描述与官网需点下方保存。
       </p>
 
       {message ? (
@@ -82,13 +83,13 @@ export function AdminApprovedToolEditor({
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor={`admin-tool-desc-${toolId}`}>简介</Label>
+        <Label htmlFor={`admin-tool-desc-${toolId}`}>概述描述</Label>
         <Textarea
           id={`admin-tool-desc-${toolId}`}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           rows={5}
-          maxLength={2000}
+          maxLength={LISTING_DESCRIPTION_MAX}
         />
       </div>
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useMemo } from 'react'
+import { useState, useRef, useMemo, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
@@ -17,10 +17,31 @@ import {
 } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
-import { Upload, X } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { Upload, X, ExternalLink } from 'lucide-react'
 import { idsEqual } from '@/lib/category-tree'
 import { buildSubmitNavigationTier1List } from '@/lib/submit-category-choices'
+import {
+  excerptForListing,
+  INTRO_LIMIT_PLAIN,
+  INTRO_LIMIT_RICH,
+  LISTING_DESCRIPTION_MAX,
+  normalizeIntroductionFormat,
+  type IntroductionFormat,
+} from '@/lib/introduction-format'
+import { fileToImageDataUrl } from '@/lib/image-data-url'
+import { ToolDetailView } from '@/components/tool-detail-view'
+import { Badge } from '@/components/ui/badge'
 import type { Category, NavigationMenuTreeNode, Tool } from '@/lib/types'
+
+export type IntroInputKind = 'plain' | 'markdown' | 'html' | 'file'
 
 export type EditingToolPayload = Pick<
   Tool,
@@ -32,9 +53,25 @@ export type EditingToolPayload = Pick<
   | 'category_id'
   | 'logo_url'
   | 'screenshot_url'
+  | 'introduction'
+  | 'introduction_format'
 >
 
 const SUBMIT_CAT_NONE = '__submit_cat_none__'
+
+function initialIntroState(
+  editing?: EditingToolPayload,
+): { kind: IntroInputKind; text: string } {
+  if (!editing) return { kind: 'plain', text: '' }
+  const intro = editing.introduction?.trim()
+  if (intro) {
+    const fmt = normalizeIntroductionFormat(editing.introduction_format)
+    if (fmt === 'plain') return { kind: 'plain', text: intro }
+    if (fmt === 'markdown') return { kind: 'markdown', text: intro }
+    return { kind: 'html', text: intro }
+  }
+  return { kind: 'plain', text: editing.description ?? '' }
+}
 
 function initialTier1Pick(
   categories: Category[],
@@ -60,11 +97,8 @@ function initialTier1Pick(
 
 interface SubmitToolFormProps {
   categories: Category[]
-  /** 与侧栏一致的菜单树，用于解析与「二级菜单」对齐的可选分类 */
   navigation: NavigationMenuTreeNode[]
-  /** 保留字段：预留按菜单白名单筛选（当前与侧栏一致时不需要） */
   whitelistCategoryIds: string[] | null
-  /** 编辑时原分类已从菜单下架，仍可保留该项 */
   orphanEditingCategory?: Category | null
   userId: string
   editingTool?: EditingToolPayload
@@ -83,16 +117,32 @@ export function SubmitToolForm({
   const router = useRouter()
   const logoInputRef = useRef<HTMLInputElement>(null)
   const screenshotInputRef = useRef<HTMLInputElement>(null)
+  const mdFileRef = useRef<HTMLInputElement>(null)
+
+  const introInit = useMemo(
+    () => initialIntroState(editingTool),
+    [editingTool],
+  )
 
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [previewOpen, setPreviewOpen] = useState(false)
 
   const [name, setName] = useState(editingTool?.name ?? '')
-  const [description, setDescription] = useState(editingTool?.description ?? '')
+  const [introKind, setIntroKind] = useState<IntroInputKind>(() => introInit.kind)
+  const [introText, setIntroText] = useState(() => introInit.text)
+  const [mdFileLabel, setMdFileLabel] = useState('')
+
   const [websiteUrl, setWebsiteUrl] = useState(editingTool?.website_url ?? '')
   const [logoUrl, setLogoUrl] = useState(editingTool?.logo_url ?? '')
   const [screenshotUrl, setScreenshotUrl] = useState(
     editingTool?.screenshot_url ?? '',
+  )
+  const [summaryDescription, setSummaryDescription] = useState(
+    () => editingTool?.description?.trim() ?? '',
+  )
+  const [summaryUserEdited, setSummaryUserEdited] = useState(
+    () => Boolean(editingTool?.description?.trim()),
   )
 
   const tier1 = useMemo(
@@ -137,40 +187,221 @@ export function SubmitToolForm({
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [uploadingScreenshot, setUploadingScreenshot] = useState(false)
 
-  const handleFileUpload = async (
-    file: File,
-    setUrl: (url: string) => void,
-    setUploading: (uploading: boolean) => void,
-  ) => {
+  useEffect(() => {
+    if (summaryUserEdited) return
+    const body = introText.trim()
+    const dbFormat: IntroductionFormat =
+      introKind === 'file' || introKind === 'markdown'
+        ? 'markdown'
+        : introKind === 'html'
+          ? 'html'
+          : 'plain'
+    if (!body) {
+      setSummaryDescription('')
+      return
+    }
+    setSummaryDescription(excerptForListing(body, dbFormat))
+  }, [introText, introKind, summaryUserEdited])
+
+  const handleImagePick = async (file: File, kind: 'logo' | 'screenshot') => {
+    const setUrl = kind === 'logo' ? setLogoUrl : setScreenshotUrl
+    const setUploading =
+      kind === 'logo' ? setUploadingLogo : setUploadingScreenshot
     setUploading(true)
     setError('')
-
     try {
-      const formData = new FormData()
-      formData.append('file', file)
-
-      const response = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || '上传失败')
-      }
-
-      setUrl(data.url)
+      const dataUrl = await fileToImageDataUrl(file)
+      setUrl(dataUrl)
     } catch (err) {
-      setError(err instanceof Error ? err.message : '上传失败')
+      setError(err instanceof Error ? err.message : '图片处理失败')
     } finally {
       setUploading(false)
     }
   }
 
-  const generateSlug = (name: string) => {
+  const regenerateSummaryFromIntro = () => {
+    setError('')
+    const body = introText.trim()
+    if (!body) {
+      setError('请先填写工具介绍')
+      return
+    }
+    const dbFormat: IntroductionFormat =
+      introKind === 'file' || introKind === 'markdown'
+        ? 'markdown'
+        : introKind === 'html'
+          ? 'html'
+          : 'plain'
+    const next = excerptForListing(body, dbFormat)
+    if (!next) {
+      setError('介绍过短，无法生成概述')
+      return
+    }
+    setSummaryDescription(next)
+    setSummaryUserEdited(false)
+  }
+
+  const onIntroKindChange = (v: string) => {
+    const k = v as IntroInputKind
+    setIntroKind(k)
+    if (k !== 'file') {
+      setMdFileLabel('')
+      if (mdFileRef.current) mdFileRef.current.value = ''
+    }
+  }
+
+  const onMdPicked = (file: File | undefined) => {
+    if (!file) return
+    if (!file.name.toLowerCase().endsWith('.md')) {
+      setError('仅支持 .md 文件')
+      return
+    }
+    setError('')
+    const reader = new FileReader()
+    reader.onload = () => {
+      const t = typeof reader.result === 'string' ? reader.result : ''
+      setIntroText(t)
+      setMdFileLabel(file.name)
+    }
+    reader.readAsText(file, 'UTF-8')
+  }
+
+  const previewFormat: IntroductionFormat =
+    introKind === 'file' || introKind === 'markdown'
+      ? 'markdown'
+      : introKind === 'html'
+        ? 'html'
+        : 'plain'
+
+  const previewLogoHref = useMemo(() => {
+    if (editingTool?.slug?.trim()) {
+      return `/tool/${editingTool.slug.trim()}`
+    }
+    const w = websiteUrl.trim()
+    if (!w) return null
+    try {
+      new URL(w)
+      return w
+    } catch {
+      return null
+    }
+  }, [editingTool?.slug, websiteUrl])
+
+  const previewTool = useMemo((): Tool => {
+    let resolvedCategoryId = ''
+    if (primaryIdx >= 0 && primaryIdx < tier1.length) {
+      const row = tier1[primaryIdx]
+      if (row.kind === 'menu_leaf') {
+        resolvedCategoryId = row.categoryId
+      } else if (row.children.length === 1) {
+        resolvedCategoryId = row.children[0].categoryId
+      } else if (
+        leafId &&
+        row.children.some((c) => idsEqual(c.categoryId, leafId))
+      ) {
+        resolvedCategoryId = leafId
+      }
+    } else if (
+      editingTool?.category_id &&
+      orphanEditingCategory &&
+      idsEqual(leafId, editingTool.category_id)
+    ) {
+      resolvedCategoryId = leafId
+    }
+
+    const cat = resolvedCategoryId
+      ? categories.find((c) => idsEqual(c.id, resolvedCategoryId))
+      : undefined
+
+    const intro = introText.trim()
+    const summary =
+      summaryDescription.trim() ||
+      (intro ? excerptForListing(intro, previewFormat) : '') ||
+      ' '
+
+    let ws = websiteUrl.trim()
+    if (!ws) ws = 'https://example.com'
+    try {
+      new URL(ws)
+    } catch {
+      ws = 'https://example.com'
+    }
+
+    const now = new Date().toISOString()
+    return {
+      id: editingTool?.id ?? 'preview',
+      name: name.trim() || '工具名称',
+      slug: editingTool?.slug ?? 'preview',
+      description: summary,
+      website_url: ws,
+      logo_url: logoUrl || null,
+      screenshot_url: screenshotUrl || null,
+      category_id: cat?.id ?? editingTool?.category_id ?? null,
+      user_id: userId,
+      status: 'pending',
+      rejection_reason: null,
+      is_featured: false,
+      is_disabled: false,
+      view_count: 0,
+      favorite_count: 0,
+      introduction: intro || null,
+      introduction_format: previewFormat,
+      use_cases: null,
+      created_at: now,
+      updated_at: now,
+      category: cat,
+    }
+  }, [
+    primaryIdx,
+    tier1,
+    leafId,
+    categories,
+    editingTool,
+    orphanEditingCategory,
+    introText,
+    summaryDescription,
+    previewFormat,
+    websiteUrl,
+    logoUrl,
+    screenshotUrl,
+    userId,
+    name,
+  ])
+
+  const buildPayload = useCallback(() => {
+    const body = introText.trim()
+    const dbFormat: IntroductionFormat =
+      introKind === 'file' || introKind === 'markdown'
+        ? 'markdown'
+        : introKind === 'html'
+          ? 'html'
+          : 'plain'
+
+    if (!body) throw new Error('请填写工具介绍')
+    if (introKind === 'plain' && body.length > INTRO_LIMIT_PLAIN) {
+      throw new Error(`纯文本介绍最多 ${INTRO_LIMIT_PLAIN} 字`)
+    }
+    if (
+      (introKind === 'markdown' ||
+        introKind === 'html' ||
+        introKind === 'file') &&
+      body.length > INTRO_LIMIT_RICH
+    ) {
+      throw new Error(`当前格式下介绍内容过长（上限 ${INTRO_LIMIT_RICH} 字）`)
+    }
+
+    const description = summaryDescription.trim()
+    if (!description) throw new Error('请填写概述描述')
+    if (description.length > LISTING_DESCRIPTION_MAX) {
+      throw new Error(`概述描述最多 ${LISTING_DESCRIPTION_MAX} 字`)
+    }
+
+    return { body, dbFormat, description }
+  }, [introText, introKind, summaryDescription])
+
+  const generateSlug = (toolName: string) => {
     return (
-      name
+      toolName
         .toLowerCase()
         .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '-')
         .replace(/^-|-$/g, '')
@@ -208,7 +439,6 @@ export function SubmitToolForm({
 
     try {
       if (!name.trim()) throw new Error('请输入工具名称')
-      if (!description.trim()) throw new Error('请输入工具描述')
       if (!websiteUrl.trim()) throw new Error('请输入网站地址')
 
       if (!resolvedCategoryId) {
@@ -218,12 +448,13 @@ export function SubmitToolForm({
       const cat = categories.find((c) => idsEqual(c.id, resolvedCategoryId))
       if (!cat) throw new Error('所选分类无效')
 
-      // Validate URL
       try {
         new URL(websiteUrl)
       } catch {
         throw new Error('请输入有效的网站地址')
       }
+
+      const { body, dbFormat, description } = buildPayload()
 
       const supabase = createClient()
 
@@ -233,7 +464,9 @@ export function SubmitToolForm({
           .update({
             name: name.trim(),
             slug: editingTool.slug,
-            description: description.trim(),
+            description,
+            introduction: body,
+            introduction_format: dbFormat,
             website_url: websiteUrl.trim(),
             category_id: resolvedCategoryId,
             logo_url: logoUrl || null,
@@ -256,7 +489,9 @@ export function SubmitToolForm({
       const { error: insertError } = await supabase.from('tools').insert({
         name: name.trim(),
         slug: generateSlug(name),
-        description: description.trim(),
+        description,
+        introduction: body,
+        introduction_format: dbFormat,
         website_url: websiteUrl.trim(),
         category_id: resolvedCategoryId,
         logo_url: logoUrl || null,
@@ -278,6 +513,20 @@ export function SubmitToolForm({
     }
   }
 
+  const openPreview = () => {
+    setError('')
+    try {
+      buildPayload()
+      setPreviewOpen(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '无法预览')
+    }
+  }
+
+  const introTextareaRows = introKind === 'html' ? 10 : 8
+  const introMaxLen =
+    introKind === 'plain' ? INTRO_LIMIT_PLAIN : INTRO_LIMIT_RICH
+
   return (
     <form onSubmit={handleSubmit}>
       <Card>
@@ -288,7 +537,6 @@ export function SubmitToolForm({
             </div>
           )}
 
-          {/* Name */}
           <div className="space-y-2">
             <Label htmlFor="tool-name" className="text-sm font-medium">
               工具名称 <span className="text-destructive">*</span>
@@ -302,25 +550,135 @@ export function SubmitToolForm({
             />
           </div>
 
-          {/* Description */}
-          <div className="space-y-2">
-            <Label htmlFor="tool-description" className="text-sm font-medium">
-              工具描述 <span className="text-destructive">*</span>
+          <div className="space-y-3 rounded-lg border border-border bg-card/50 p-4">
+            <Label className="text-sm font-medium">
+              工具介绍 <span className="text-destructive">*</span>
             </Label>
-            <Textarea
-              id="tool-description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="简要描述这个工具的功能和特点..."
-              rows={4}
-              maxLength={500}
-            />
             <p className="text-xs text-muted-foreground">
-              {description.length}/500
+              选择一种方式填写；详情页将按所选类型渲染（纯文本 / Markdown / HTML）。上传文件仅支持
+              .md，内容按 Markdown 解析。
+            </p>
+
+            <RadioGroup
+              value={introKind}
+              onValueChange={onIntroKindChange}
+              className="grid gap-2 sm:grid-cols-2"
+            >
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="plain" id="intro-plain" />
+                <Label htmlFor="intro-plain" className="cursor-pointer font-normal">
+                  纯文本（最多 {INTRO_LIMIT_PLAIN} 字）
+                </Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="markdown" id="intro-md" />
+                <Label htmlFor="intro-md" className="cursor-pointer font-normal">
+                  Markdown
+                </Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="html" id="intro-html" />
+                <Label htmlFor="intro-html" className="cursor-pointer font-normal">
+                  HTML
+                </Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="file" id="intro-file" />
+                <Label htmlFor="intro-file" className="cursor-pointer font-normal">
+                  上传 .md 文件
+                </Label>
+              </div>
+            </RadioGroup>
+
+            {introKind === 'file' ? (
+              <div className="space-y-2">
+                <input
+                  ref={mdFileRef}
+                  type="file"
+                  accept=".md,text/markdown"
+                  className="hidden"
+                  onChange={(e) => onMdPicked(e.target.files?.[0])}
+                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => mdFileRef.current?.click()}
+                  >
+                    <Upload className="mr-2 h-4 w-4" />
+                    选择 Markdown 文件
+                  </Button>
+                  {mdFileLabel ? (
+                    <span className="text-xs text-muted-foreground">
+                      已选：{mdFileLabel}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            ) : (
+              <Textarea
+                id="tool-introduction"
+                value={introText}
+                onChange={(e) => setIntroText(e.target.value)}
+                placeholder={
+                  introKind === 'plain'
+                    ? '用文字介绍工具功能、亮点与适用人群…'
+                    : introKind === 'markdown'
+                      ? '支持 Markdown 标题、列表、链接、代码块等'
+                      : '粘贴安全的 HTML 片段（脚本等将被过滤）'
+                }
+                rows={introTextareaRows}
+                maxLength={introMaxLen}
+                className="min-h-[140px] font-mono text-sm"
+              />
+            )}
+
+            {introKind !== 'file' ? (
+              <p className="text-xs text-muted-foreground tabular-nums">
+                {introText.length}/{introMaxLen}
+              </p>
+            ) : introText.trim() ? (
+              <p className="text-xs text-muted-foreground tabular-nums">
+                已载入 {introText.length} 字（上限 {INTRO_LIMIT_RICH}）
+              </p>
+            ) : null}
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Label htmlFor="tool-summary" className="text-sm font-medium">
+                概述描述 <span className="text-destructive">*</span>
+              </Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0 text-xs"
+                onClick={regenerateSummaryFromIntro}
+              >
+                根据介绍重新生成
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              用于列表与详情顶栏等处的短文案；系统会根据「工具介绍」自动截取，你可以修改后再提交。
+            </p>
+            <Textarea
+              id="tool-summary"
+              value={summaryDescription}
+              onChange={(e) => {
+                setSummaryUserEdited(true)
+                setSummaryDescription(e.target.value)
+              }}
+              placeholder="填写介绍后将自动生成，也可在此直接编辑"
+              rows={4}
+              maxLength={LISTING_DESCRIPTION_MAX}
+              className="min-h-[100px] text-sm"
+            />
+            <p className="text-xs text-muted-foreground tabular-nums">
+              {summaryDescription.length}/{LISTING_DESCRIPTION_MAX}
             </p>
           </div>
 
-          {/* Website URL */}
           <div className="space-y-2">
             <Label htmlFor="tool-website" className="text-sm font-medium">
               网站地址 <span className="text-destructive">*</span>
@@ -340,7 +698,7 @@ export function SubmitToolForm({
                 工具分类 <span className="text-destructive">*</span>
               </Label>
               <p className="text-xs text-muted-foreground">
-                选项与侧栏菜单一致：折叠分组下会再选具体分类（如 pic1）。
+                选项与侧栏菜单一致：折叠分组下会再选具体分类。
               </p>
             </div>
 
@@ -465,7 +823,6 @@ export function SubmitToolForm({
             ) : null}
           </div>
 
-          {/* Logo Upload */}
           <div className="space-y-2">
             <Label className="text-sm font-medium">工具Logo</Label>
             <input
@@ -475,20 +832,34 @@ export function SubmitToolForm({
               className="hidden"
               onChange={(e) => {
                 const file = e.target.files?.[0]
-                if (file) handleFileUpload(file, setLogoUrl, setUploadingLogo)
+                if (file) void handleImagePick(file, 'logo')
+                e.target.value = ''
               }}
             />
             {logoUrl ? (
               <div className="relative inline-block">
-                <div className="relative h-20 w-20 overflow-hidden rounded-xl border">
-                  <Image src={logoUrl} alt="Logo" fill className="object-cover" />
-                </div>
+                {previewLogoHref ? (
+                  <a
+                    href={previewLogoHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="relative block h-20 w-20 overflow-hidden rounded-xl border outline-none ring-offset-background hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-label="在新标签打开链接"
+                  >
+                    <Image src={logoUrl} alt="Logo" fill className="object-cover" />
+                  </a>
+                ) : (
+                  <div className="relative h-20 w-20 overflow-hidden rounded-xl border">
+                    <Image src={logoUrl} alt="Logo" fill className="object-cover" />
+                  </div>
+                )}
                 <Button
                   type="button"
                   variant="destructive"
                   size="icon"
                   className="absolute -right-2 -top-2 h-6 w-6"
                   onClick={() => setLogoUrl('')}
+                  disabled={uploadingLogo}
                 >
                   <X className="h-3 w-3" />
                 </Button>
@@ -509,11 +880,10 @@ export function SubmitToolForm({
               </Button>
             )}
             <p className="text-xs text-muted-foreground">
-              建议上传正方形图片，不超过5MB
+              建议正方形，不超过2MB；将转为 Base64 保存在数据库中。
             </p>
           </div>
 
-          {/* Screenshot Upload */}
           <div className="space-y-2">
             <Label className="text-sm font-medium">工具截图</Label>
             <input
@@ -523,8 +893,8 @@ export function SubmitToolForm({
               className="hidden"
               onChange={(e) => {
                 const file = e.target.files?.[0]
-                if (file)
-                  handleFileUpload(file, setScreenshotUrl, setUploadingScreenshot)
+                if (file) void handleImagePick(file, 'screenshot')
+                e.target.value = ''
               }}
             />
             {screenshotUrl ? (
@@ -543,6 +913,7 @@ export function SubmitToolForm({
                   size="icon"
                   className="absolute -right-2 -top-2 h-6 w-6"
                   onClick={() => setScreenshotUrl('')}
+                  disabled={uploadingScreenshot}
                 >
                   <X className="h-3 w-3" />
                 </Button>
@@ -563,12 +934,12 @@ export function SubmitToolForm({
               </Button>
             )}
             <p className="text-xs text-muted-foreground">
-              建议上传16:9的截图，不超过5MB
+              建议16:9，不超过2MB；将转为 Base64 保存在数据库中。
             </p>
           </div>
         </CardContent>
 
-        <CardFooter className="flex justify-end gap-3">
+        <CardFooter className="flex flex-wrap justify-end gap-3">
           <Button
             type="button"
             variant="outline"
@@ -577,12 +948,71 @@ export function SubmitToolForm({
           >
             取消
           </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={openPreview}
+            disabled={isSubmitting}
+          >
+            预览
+          </Button>
           <Button type="submit" disabled={isSubmitting}>
             {isSubmitting && <Spinner className="mr-2 h-4 w-4" />}
             {editingTool ? '保存并重新提交审核' : '提交审核'}
           </Button>
         </CardFooter>
       </Card>
+
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-h-[min(92vh,920px)] max-w-4xl gap-0 overflow-hidden p-0">
+          <DialogHeader className="space-y-1 border-b px-6 py-4 sm:px-10">
+            <DialogTitle>预览详情页</DialogTitle>
+            <DialogDescription>
+              与站点工具详情、后台预览的布局一致。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[calc(min(92vh,920px)-5.5rem)] overflow-y-auto px-6 py-4 sm:px-10 md:px-14">
+            <ToolDetailView
+              tool={previewTool}
+              logoHref={previewLogoHref ?? false}
+              badges={
+                <>
+                  <Badge variant="outline">预览</Badge>
+                  {previewTool.category ? (
+                    <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium">
+                      {previewTool.category.name}
+                    </span>
+                  ) : null}
+                </>
+              }
+              headerActions={
+                (() => {
+                  const w = websiteUrl.trim()
+                  try {
+                    if (!w) return null
+                    new URL(w)
+                  } catch {
+                    return null
+                  }
+                  return (
+                    <Button asChild size="sm" type="button">
+                      <a
+                        href={w}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <ExternalLink className="mr-2 h-4 w-4" />
+                        访问网站
+                      </a>
+                    </Button>
+                  )
+                })()
+              }
+              showComments={false}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
     </form>
   )
 }

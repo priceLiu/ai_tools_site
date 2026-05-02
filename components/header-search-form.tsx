@@ -41,7 +41,7 @@ function HeaderSearchFormInner() {
   }
 
   const placeholder = inAccount
-    ? '在我的提交里搜索名称或简介…'
+    ? '在我的提交里搜索名称或工具介绍…'
     : inAdmin
       ? '搜索站内工具（含审核状态）…'
       : '站内 AI 工具搜索'

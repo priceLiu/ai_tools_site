@@ -1,7 +1,6 @@
 'use client'
 
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { HeaderSearchForm } from '@/components/header-search-form'
 import {
@@ -22,12 +21,13 @@ interface HeaderProps {
 }
 
 export function Header({ user, profile }: HeaderProps) {
-  const router = useRouter()
-
-  const handleLogout = async () => {
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    router.refresh()
+  const handleLogout = () => {
+    void (async () => {
+      const supabase = createClient()
+      await supabase.auth.signOut()
+      // 整页跳转以确保服务端 Cookie 与客户端会话一致（仅 refresh 可能仍显示已登录）
+      window.location.assign('/')
+    })()
   }
 
   return (
@@ -97,7 +97,12 @@ export function Header({ user, profile }: HeaderProps) {
                     </>
                   )}
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-destructive">
+                  <DropdownMenuItem
+                    className="cursor-pointer text-destructive"
+                    onSelect={() => {
+                      handleLogout()
+                    }}
+                  >
                     <LogOut className="mr-2 h-4 w-4" />
                     退出登录
                   </DropdownMenuItem>

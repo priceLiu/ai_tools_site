@@ -83,6 +83,10 @@ export function UserSubmissionsList({
             tool={tool}
             logoHref={href}
             titleHref={href}
+            openLogoInNewTab
+            recordViewSlug={
+              tool.status === 'approved' ? tool.slug : null
+            }
             statusBadge={statusBadge}
             footer={
               <>

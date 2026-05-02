@@ -1,12 +1,13 @@
 import Link from 'next/link'
-import Image from 'next/image'
 import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ArrowLeft, ExternalLink } from 'lucide-react'
 import { submissionStatusConfig } from '@/components/user-submissions-list'
+import { ToolDetailView } from '@/components/tool-detail-view'
+import { toolDetailMaxWidthClass } from '@/lib/tool-detail-layout'
+import { cn } from '@/lib/utils'
 import type { Tool } from '@/lib/types'
 
 interface PageProps {
@@ -41,6 +42,12 @@ export default async function AccountSubmissionDetailPage({ params }: PageProps)
     )
   }
 
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('display_name')
+    .eq('id', user.id)
+    .maybeSingle()
+
   const { data: row } = await supabase
     .from('tools')
     .select('*, category:categories(*)')
@@ -54,8 +61,23 @@ export default async function AccountSubmissionDetailPage({ params }: PageProps)
   const status = submissionStatusConfig[tool.status]
   const StatusIcon = status.icon
 
+  const submissionLogoHref =
+    tool.status === 'approved' && tool.slug?.trim()
+      ? `/tool/${tool.slug.trim()}`
+      : `/account/submissions/${tool.id}`
+
+  const panelFooter =
+    tool.status === 'rejected' && tool.rejection_reason?.trim() ? (
+      <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-destructive">
+        <p className="font-medium">拒绝原因</p>
+        <p className="mt-1 whitespace-pre-wrap text-sm">
+          {tool.rejection_reason}
+        </p>
+      </div>
+    ) : null
+
   return (
-    <div>
+    <div className={cn(toolDetailMaxWidthClass)}>
       <Button asChild variant="ghost" size="sm" className="mb-6 -ml-2 gap-1">
         <Link href="/account/history">
           <ArrowLeft className="h-4 w-4" />
@@ -63,15 +85,11 @@ export default async function AccountSubmissionDetailPage({ params }: PageProps)
         </Link>
       </Button>
 
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start">
-        <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-xl border bg-muted">
-          {tool.logo_url ? (
-            <Image src={tool.logo_url} alt="" fill className="object-cover" />
-          ) : null}
-        </div>
-        <div className="min-w-0">
-          <h1 className="text-2xl font-bold text-foreground">{tool.name}</h1>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
+      <ToolDetailView
+        tool={tool}
+        logoHref={submissionLogoHref}
+        badges={
+          <>
             <Badge variant={status.variant}>
               <StatusIcon className={`mr-1 h-3 w-3 ${status.className}`} />
               {status.label}
@@ -81,50 +99,34 @@ export default async function AccountSubmissionDetailPage({ params }: PageProps)
                 {tool.category.name}
               </span>
             ) : null}
-          </div>
-          <p className="mt-3 text-sm text-muted-foreground">
-            阅读量 {tool.view_count ?? 0} · 收藏 {tool.favorite_count ?? 0}
-          </p>
-        </div>
-      </div>
-
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="text-base">官网</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <a
-            href={tool.website_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
-          >
-            <ExternalLink className="h-4 w-4" />
-            {tool.website_url}
-          </a>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">简介</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4 text-sm text-muted-foreground">
-          <p className="whitespace-pre-wrap text-foreground">{tool.description}</p>
-          {tool.status === 'rejected' && tool.rejection_reason?.trim() ? (
-            <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-destructive">
-              <p className="font-medium">拒绝原因</p>
-              <p className="mt-1 whitespace-pre-wrap">{tool.rejection_reason}</p>
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
-
-      {tool.status === 'approved' ? (
-        <Button asChild className="mt-6">
-          <Link href={`/tool/${tool.slug}`}>查看站点公开页</Link>
-        </Button>
-      ) : null}
+            <span className="text-sm text-muted-foreground">
+              阅读量 {tool.view_count ?? 0} · 收藏{' '}
+              {(tool.favorite_count ?? 0).toLocaleString()}
+            </span>
+          </>
+        }
+        headerActions={
+          <Button asChild>
+            <a
+              href={tool.website_url}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <ExternalLink className="mr-2 h-4 w-4" />
+              访问网站
+            </a>
+          </Button>
+        }
+        panelFooter={panelFooter}
+        commentsInitialUser={user}
+        commentsInitialNickname={profile?.display_name ?? null}
+      >
+        {tool.status === 'approved' ? (
+          <Button asChild className="mt-6">
+            <Link href={`/tool/${tool.slug}`}>查看站点公开页</Link>
+          </Button>
+        ) : null}
+      </ToolDetailView>
     </div>
   )
 }

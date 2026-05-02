@@ -12,6 +12,7 @@ import {
   History,
   User,
   LayoutGrid,
+  Users,
 } from 'lucide-react'
 
 type Variant = 'default' | 'admin'
@@ -50,8 +51,11 @@ export function CompactAppSidebar({ variant = 'default' }: CompactAppSidebarProp
   ] as const
 
   const navigationAdminActive = pathname.startsWith('/admin/navigation')
+  const usersAdminActive = pathname.startsWith('/admin/users')
   const reviewsAdminActive =
-    pathname.startsWith('/admin') && !navigationAdminActive
+    pathname.startsWith('/admin') &&
+    !navigationAdminActive &&
+    !usersAdminActive
 
   return (
     <aside
@@ -142,6 +146,18 @@ export function CompactAppSidebar({ variant = 'default' }: CompactAppSidebarProp
               >
                 <LayoutGrid className="h-4 w-4 shrink-0" />
                 菜单管理
+              </Link>
+              <Link
+                href="/admin/users"
+                className={cn(
+                  'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+                  usersAdminActive
+                    ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                    : 'text-sidebar-foreground hover:bg-sidebar-accent/70',
+                )}
+              >
+                <Users className="h-4 w-4 shrink-0" />
+                用户管理
               </Link>
             </>
           )}

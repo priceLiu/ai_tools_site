@@ -16,6 +16,13 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
+function safeRedirectTarget(raw: string | null): string {
+  if (!raw || !raw.startsWith('/') || raw.startsWith('//')) {
+    return '/'
+  }
+  return raw
+}
+
 export default function Page() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -35,7 +42,13 @@ export default function Page() {
         password,
       })
       if (error) throw error
-      router.push('/')
+      const next =
+        typeof window !== 'undefined'
+          ? safeRedirectTarget(
+              new URLSearchParams(window.location.search).get('redirect'),
+            )
+          : '/'
+      router.push(next)
       router.refresh()
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : '登录失败')
