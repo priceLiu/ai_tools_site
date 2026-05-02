@@ -14,6 +14,7 @@ import {
   PaginationItem,
   PaginationLink,
 } from '@/components/ui/pagination'
+import { AdminListPreviewButton } from '@/components/admin-list-preview-button'
 import { Shield, Clock, CheckCircle, XCircle, ExternalLink, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ReactNode } from 'react'
@@ -63,10 +64,10 @@ function TabLink({
     <Link
       href={href}
       className={cn(
-        'inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-transparent px-2.5 py-1 text-sm font-medium whitespace-nowrap transition-colors',
+        'inline-flex min-h-9 min-w-0 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors',
         active
-          ? 'bg-background text-foreground shadow-sm'
-          : 'text-muted-foreground hover:text-foreground',
+          ? 'border-2 border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary/90'
+          : 'border border-border bg-card text-muted-foreground hover:border-primary/40 hover:bg-muted/80 hover:text-foreground',
       )}
     >
       {children}
@@ -206,10 +207,13 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
               <span className="text-xs text-muted-foreground">
                 提交于 {new Date(tool.created_at).toLocaleDateString('zh-CN')}
               </span>
-              {showApproveActions ? <AdminToolActions toolId={tool.id} /> : null}
-              {showApprovedListActions ? (
-                <AdminApprovedListActions tool={tool} editHref={href} />
-              ) : null}
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <AdminListPreviewButton tool={tool} />
+                {showApproveActions ? <AdminToolActions toolId={tool.id} /> : null}
+                {showApprovedListActions ? (
+                  <AdminApprovedListActions tool={tool} editHref={href} />
+                ) : null}
+              </div>
             </div>
           </div>
         }
@@ -262,7 +266,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
       tabList.length > 0 ? (
         <>
           <p className="mb-1.5 text-xs text-muted-foreground">
-            点标题进入编辑；点头像在新标签打开（已通过工具将打开站点公开页）。
+            预览为新标签打开：已通过 → 公开详情（带 admin_preview，不展示评论）；其余 → 后台预览；点标题进编辑。
           </p>
           <div className="space-y-1.5">
             {tabList.map((t) =>
@@ -388,7 +392,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           </div>
         ) : null}
 
-        <div className="bg-muted inline-flex h-auto w-full max-w-full flex-wrap items-center gap-0.5 rounded-lg p-1 md:w-fit">
+        <div className="inline-flex w-full max-w-full flex-wrap items-center gap-2 rounded-xl border border-border bg-muted/30 p-2 md:w-fit">
           <TabLink
             href={buildAdminHref({ tab: 'pending', page: 1, q: qOpt })}
             active={tab === 'pending'}

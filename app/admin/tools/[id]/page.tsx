@@ -28,18 +28,6 @@ export default async function AdminToolPreviewPage({ params }: PageProps) {
   const { id } = await params
   const supabase = await createClient()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  const { data: profile } = user
-    ? await supabase
-        .from('profiles')
-        .select('display_name')
-        .eq('id', user.id)
-        .maybeSingle()
-    : { data: null }
-
   const { data: row } = await supabase
     .from('tools')
     .select('*, category:categories(*)')
@@ -80,6 +68,7 @@ export default async function AdminToolPreviewPage({ params }: PageProps) {
         <ToolDetailView
         tool={tool}
         logoHref={adminPreviewLogoHref}
+        showComments={false}
         badges={
           <>
             <Badge variant={status.variant}>
@@ -115,8 +104,6 @@ export default async function AdminToolPreviewPage({ params }: PageProps) {
           </Button>
         }
         panelFooter={panelFooter}
-        commentsInitialUser={user}
-        commentsInitialNickname={profile?.display_name ?? null}
       >
         {tool.status === 'approved' ? (
           <div className="mt-6">

@@ -2,7 +2,7 @@
 
 import { createClient } from '@/lib/supabase/client'
 import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Sidebar } from '@/components/sidebar'
 import { Header } from '@/components/header'
@@ -25,7 +25,10 @@ import type { User } from '@supabase/supabase-js'
 
 export default function ToolPage() {
   const params = useParams()
+  const searchParams = useSearchParams()
   const slug = decodeURIComponent(String(params.slug ?? '')).trim()
+  const hideCommentsForAdminPreview =
+    searchParams.get('admin_preview') === '1'
 
   const [tool, setTool] = useState<Tool | null>(null)
   const [navigation, setNavigation] = useState<NavigationMenuTreeNode[]>([])
@@ -170,6 +173,7 @@ export default function ToolPage() {
             <ToolDetailView
               tool={tool}
               logoHref={`/tool/${tool.slug}`}
+              showComments={!hideCommentsForAdminPreview}
               badges={
                 <>
                   {tool.category ? (

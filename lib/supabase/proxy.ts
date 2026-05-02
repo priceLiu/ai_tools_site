@@ -45,20 +45,30 @@ export async function updateSession(request: NextRequest) {
     user &&
     !request.nextUrl.pathname.startsWith('/auth/account-disabled')
   ) {
-    const { data: row } = await supabase
-      .from('profiles')
-      .select('is_disabled')
-      .eq('id', user.id)
-      .maybeSingle()
+    try {
+      const { data: row, error: profileError } = await supabase
+        .from('profiles')
+        .select('is_disabled')
+        .eq('id', user.id)
+        .maybeSingle()
 
-    if (row?.is_disabled === true) {
-      await supabase.auth.signOut()
-      const url = request.nextUrl.clone()
-      url.pathname = '/auth/account-disabled'
-      url.search = ''
-      const redirectResponse = NextResponse.redirect(url)
-      redirectResponse.cookies.setAll(supabaseResponse.cookies.getAll())
-      return redirectResponse
+      if (profileError) {
+        console.warn(
+          '[supabase-proxy] profiles is_disabled check:',
+          profileError.message,
+        )
+      } else if (row?.is_disabled === true) {
+        await supabase.auth.signOut()
+        const url = request.nextUrl.clone()
+        url.pathname = '/auth/account-disabled'
+        url.search = ''
+        const redirectResponse = NextResponse.redirect(url)
+        redirectResponse.cookies.setAll(supabaseResponse.cookies.getAll())
+        return redirectResponse
+      }
+    } catch (e) {
+      console.warn('[supabase-proxy] is_disabled check failed:', e)
+      // 数据库不可达时放行本次请求，避免整站不可用；依赖各业务 layout 再次校验
     }
   }
 
