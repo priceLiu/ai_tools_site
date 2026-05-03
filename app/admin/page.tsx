@@ -210,7 +210,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
   return (
     <main className="p-3 md:p-5">
       <div className="mx-auto max-w-4xl">
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
               <Shield className="h-5 w-5 text-primary" />
@@ -222,9 +222,9 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
               </p>
             </div>
           </div>
-          <div className="flex flex-col items-stretch gap-2 sm:items-end">
-            <AdminBulkExtractTagsButton />
+          <div className="flex flex-shrink-0 flex-row flex-wrap items-center justify-end gap-2">
             <AdminRefreshHomeBundleButton />
+            <AdminBulkExtractTagsButton />
           </div>
         </div>
 

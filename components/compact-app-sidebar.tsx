@@ -15,6 +15,8 @@ import {
   Users,
   Upload,
 } from 'lucide-react'
+import { AdminRefreshHomeBundleButton } from '@/components/admin-refresh-home-bundle-button'
+import { AdminBulkExtractTagsButton } from '@/components/admin-bulk-extract-tags-button'
 
 type Variant = 'default' | 'admin'
 
@@ -126,6 +128,8 @@ export function CompactAppSidebar({ variant = 'default' }: CompactAppSidebarProp
 
           {isAdmin && (
             <>
+              <div className="my-3 h-px w-full bg-border" role="presentation" />
+
               <Link
                 href="/admin"
                 className={cn(
@@ -150,6 +154,9 @@ export function CompactAppSidebar({ variant = 'default' }: CompactAppSidebarProp
                 <Upload className="h-4 w-4 shrink-0" />
                 批量导入
               </Link>
+
+              <div className="my-3 h-px w-full bg-border" role="presentation" />
+
               <Link
                 href="/admin/navigation"
                 className={cn(
@@ -174,6 +181,10 @@ export function CompactAppSidebar({ variant = 'default' }: CompactAppSidebarProp
                 <Users className="h-4 w-4 shrink-0" />
                 用户管理
               </Link>
+              <div className="mt-2 flex flex-col gap-1.5">
+                <AdminRefreshHomeBundleButton className="w-full justify-start" />
+                <AdminBulkExtractTagsButton className="w-full justify-start" />
+              </div>
             </>
           )}
         </nav>
