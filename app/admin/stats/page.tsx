@@ -15,6 +15,23 @@ function hasParentId(c: Pick<Category, 'parent_id'>): boolean {
   return p != null && String(p).trim() !== ''
 }
 
+/** 与首页/分类页列表一致：仅已通过且未禁用 */
+function isPublicListedTool(t: {
+  status?: string | null
+  is_disabled?: boolean | null
+}): boolean {
+  return t.status === 'approved' && t.is_disabled !== true
+}
+
+/** 首页「热门工具」区块：已通过 + 未禁用 + 标记热门（见 lib/cached-home-data） */
+function isHomeHotListedTool(t: {
+  status?: string | null
+  is_disabled?: boolean | null
+  is_featured?: boolean | null
+}): boolean {
+  return isPublicListedTool(t) && t.is_featured === true
+}
+
 export default async function AdminStatsPage() {
   const supabase = await createClient()
 
@@ -23,7 +40,9 @@ export default async function AdminStatsPage() {
       .from('categories')
       .select('id, name, parent_id, slug, sort_order')
       .order('sort_order', { ascending: true }),
-    supabase.from('tools').select('id, category_id, is_featured'),
+    supabase
+      .from('tools')
+      .select('id, category_id, is_featured, status, is_disabled'),
   ])
 
   const cats = (categories ?? []) as Category[]
@@ -37,26 +56,43 @@ export default async function AdminStatsPage() {
     return p ? `${p.name} · ${c.name}` : c.name
   }
 
-  const countByCategoryId = new Map<string, number>()
+  /** 按 category_id 汇总：前台可见工具数（普通分类页 /category/{slug} 用；不含 hot 的特殊逻辑） */
+  const publicCountByCategoryId = new Map<string, number>()
   for (const t of toolRows) {
+    if (!isPublicListedTool(t)) continue
     const cid = t.category_id
     if (cid == null || String(cid).trim() === '') continue
     const k = String(cid).trim()
-    countByCategoryId.set(k, (countByCategoryId.get(k) ?? 0) + 1)
+    publicCountByCategoryId.set(k, (publicCountByCategoryId.get(k) ?? 0) + 1)
   }
 
-  const categoryBars: AdminCategoryBarDatum[] = cats.map((c) => ({
-    id: c.id,
-    label: categoryBarLabel(c),
-    count: countByCategoryId.get(String(c.id).trim()) ?? 0,
-  }))
+  /** 柱状图：普通分类 = 该 category_id 下前台可见工具数；slug 为 hot 与 /category/hot 一致 = 全站标记热门（非按分类归属） */
+  const featuredToolsCount = toolRows.filter((t) => isHomeHotListedTool(t))
+    .length
+
+  const categoryBars: AdminCategoryBarDatum[] = cats.map((c) => {
+    const isHotNavCategory = c.slug === 'hot'
+    const count = isHotNavCategory
+      ? featuredToolsCount
+      : publicCountByCategoryId.get(String(c.id).trim()) ?? 0
+    return {
+      id: c.id,
+      label: categoryBarLabel(c),
+      count,
+    }
+  })
 
   const parentCategoryCount = cats.filter((c) => !hasParentId(c)).length
   const totalTools = toolRows.length
-  const featuredToolsCount = toolRows.filter((t) => t.is_featured === true)
+  const publicListedCount = toolRows.filter((t) => isPublicListedTool(t))
     .length
   const uncategorizedCount = toolRows.filter(
     (t) => t.category_id == null || String(t.category_id).trim() === '',
+  ).length
+  const uncategorizedPublicCount = toolRows.filter(
+    (t) =>
+      isPublicListedTool(t) &&
+      (t.category_id == null || String(t.category_id).trim() === ''),
   ).length
 
   return (
@@ -79,8 +115,10 @@ export default async function AdminStatsPage() {
       <AdminStatsPanel
         parentCategoryCount={parentCategoryCount}
         totalTools={totalTools}
+        publicListedCount={publicListedCount}
         featuredToolsCount={featuredToolsCount}
         uncategorizedCount={uncategorizedCount}
+        uncategorizedPublicCount={uncategorizedPublicCount}
         categoryBars={categoryBars}
       />
     </div>

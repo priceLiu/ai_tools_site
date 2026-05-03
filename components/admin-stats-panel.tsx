@@ -13,16 +13,22 @@ export type AdminCategoryBarDatum = {
 export type AdminStatsPanelProps = {
   parentCategoryCount: number
   totalTools: number
+  /** 已通过且未禁用，与前台列表一致 */
+  publicListedCount: number
   featuredToolsCount: number
   uncategorizedCount: number
+  /** 未填分类中，仍已通过且未禁用的条数 */
+  uncategorizedPublicCount: number
   categoryBars: AdminCategoryBarDatum[]
 }
 
 export function AdminStatsPanel({
   parentCategoryCount,
   totalTools,
+  publicListedCount,
   featuredToolsCount,
   uncategorizedCount,
+  uncategorizedPublicCount,
   categoryBars,
 }: AdminStatsPanelProps) {
   const chartRef = useRef<HTMLDivElement>(null)
@@ -52,7 +58,7 @@ export function AdminStatsPanel({
         left: '2%',
         right: '2%',
         bottom: labels.some((l) => l.length > 8) ? '18%' : '12%',
-        top: '8%',
+        top: '14%',
         containLabel: true,
       },
       xAxis: {
@@ -75,6 +81,14 @@ export function AdminStatsPanel({
           type: 'bar',
           data: counts,
           barMaxWidth: 48,
+          label: {
+            show: true,
+            position: 'top',
+            formatter: '{c}',
+            fontSize: 11,
+            color: '#64748b',
+            distance: 6,
+          },
           itemStyle: {
             color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
               { offset: 0, color: '#a78bfa' },
@@ -113,22 +127,30 @@ export function AdminStatsPanel({
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>全部工具数</CardDescription>
+            <CardDescription>库内工具记录数</CardDescription>
             <CardTitle className="text-3xl tabular-nums">{totalTools}</CardTitle>
           </CardHeader>
           <CardContent className="text-xs text-muted-foreground">
-            含各审核状态与禁用标记，与列表一致
+            含待审核、已拒绝、已禁用等。前台可见（
+            <code className="rounded bg-muted px-1">已通过</code>
+            且未
+            <code className="rounded bg-muted px-1">禁用</code>
+            ）：<strong className="text-foreground">{publicListedCount}</strong>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>热门工具数</CardDescription>
+            <CardDescription>首页「热门工具」数</CardDescription>
             <CardTitle className="text-3xl tabular-nums">
               {featuredToolsCount}
             </CardTitle>
           </CardHeader>
           <CardContent className="text-xs text-muted-foreground">
-            <code className="rounded bg-muted px-1">is_featured = true</code>
+            与首页热门区块一致：须
+            <code className="rounded bg-muted px-1">approved</code>、
+            未禁用且
+            <code className="rounded bg-muted px-1">is_featured</code>
+            （未通过/禁用即使勾选热门也不展示）
           </CardContent>
         </Card>
         <Card>
@@ -139,7 +161,9 @@ export function AdminStatsPanel({
             </CardTitle>
           </CardHeader>
           <CardContent className="text-xs text-muted-foreground">
-            <code className="rounded bg-muted px-1">category_id</code> 为空
+            <code className="rounded bg-muted px-1">category_id</code> 为空；
+            其中前台可见：
+            <strong className="text-foreground">{uncategorizedPublicCount}</strong>
           </CardContent>
         </Card>
       </div>
@@ -148,9 +172,19 @@ export function AdminStatsPanel({
         <CardHeader>
           <CardTitle>各分类工具数量</CardTitle>
           <CardDescription>
-            按分类表中顺序展示；子类标签为「父类名 · 子类名」。柱高为归属该
-            <code className="mx-1 rounded bg-muted px-1">category_id</code>
-            的工具条数。
+            除
+            <strong className="text-foreground"> slug 为 hot（热门工具） </strong>
+            外，各柱为归入该分类、
+            <strong className="text-foreground"> 已通过且未禁用 </strong>
+            的工具数。
+            <span className="mt-1 block text-muted-foreground">
+              「热门工具」柱与首页
+              <code className="rounded bg-muted px-1">#home-hot</code>、
+              <code className="rounded bg-muted px-1">/category/hot</code>{' '}
+              一致：统计全站
+              <code className="rounded bg-muted px-1">is_featured</code>
+              ，而非仅归属该分类 ID 的记录。
+            </span>
           </CardDescription>
         </CardHeader>
         <CardContent>
