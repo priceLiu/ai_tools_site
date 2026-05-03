@@ -8,13 +8,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardFooter } from '@/components/ui/card'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
 import {
@@ -27,7 +20,15 @@ import {
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Upload, X, ExternalLink } from 'lucide-react'
 import { idsEqual } from '@/lib/category-tree'
-import { buildSubmitNavigationTier1List } from '@/lib/submit-category-choices'
+import {
+  buildSubmitNavigationTier1List,
+  initialSubmitTier1Pick,
+  resolvedCategoryIdFromTierPick,
+} from '@/lib/submit-category-choices'
+import {
+  ToolCategoryMenuFields,
+  TOOL_CATEGORY_MENU_NONE,
+} from '@/components/tool-category-menu-fields'
 import {
   excerptForListing,
   INTRO_LIMIT_PLAIN,
@@ -69,8 +70,6 @@ export type EditingToolPayload = Pick<
   initialTagNames?: string[]
 }
 
-const SUBMIT_CAT_NONE = '__submit_cat_none__'
-
 function initialIntroState(
   editing?: EditingToolPayload,
 ): { kind: IntroInputKind; text: string } {
@@ -83,28 +82,6 @@ function initialIntroState(
     return { kind: 'html', text: intro }
   }
   return { kind: 'plain', text: editing.description ?? '' }
-}
-
-function initialTier1Pick(
-  categories: Category[],
-  navigation: NavigationMenuTreeNode[],
-  editing?: EditingToolPayload,
-): { primaryIdx: number; leafId: string } {
-  const tier1 = buildSubmitNavigationTier1List(navigation, categories)
-  if (!editing?.category_id) return { primaryIdx: -1, leafId: '' }
-  for (let i = 0; i < tier1.length; i++) {
-    const row = tier1[i]
-    if (row.kind === 'menu_leaf' && idsEqual(row.categoryId, editing.category_id)) {
-      return { primaryIdx: i, leafId: editing.category_id }
-    }
-    if (
-      row.kind === 'menu_group' &&
-      row.children.some((c) => idsEqual(c.categoryId, editing.category_id))
-    ) {
-      return { primaryIdx: i, leafId: editing.category_id }
-    }
-  }
-  return { primaryIdx: -1, leafId: editing.category_id }
 }
 
 interface SubmitToolFormProps {
@@ -180,8 +157,13 @@ export function SubmitToolForm({
   )
 
   const initPick = useMemo(
-    () => initialTier1Pick(categories, navigation, editingTool),
-    [categories, navigation, editingTool],
+    () =>
+      initialSubmitTier1Pick(
+        navigation,
+        categories,
+        editingTool?.category_id,
+      ),
+    [categories, navigation, editingTool?.category_id],
   )
 
   const [primaryIdx, setPrimaryIdx] = useState(() => initPick.primaryIdx)
@@ -209,38 +191,31 @@ export function SubmitToolForm({
     }
   }
 
-  const currentRow = primaryIdx >= 0 ? tier1[primaryIdx] : undefined
-  const showLeafSelect =
-    currentRow?.kind === 'menu_group' && currentRow.children.length > 1
+  const resolvedSubmitCategoryId = useMemo(
+    () =>
+      resolvedCategoryIdFromTierPick(tier1, primaryIdx, leafId, {
+        orphanLeafId: editingTool?.category_id,
+        orphanCategory: orphanEditingCategory ?? null,
+      }),
+    [
+      primaryIdx,
+      tier1,
+      leafId,
+      editingTool?.category_id,
+      orphanEditingCategory,
+    ],
+  )
 
-  const resolvedSubmitCategoryId = useMemo(() => {
-    if (primaryIdx >= 0 && primaryIdx < tier1.length) {
-      const row = tier1[primaryIdx]
-      if (row.kind === 'menu_leaf') return row.categoryId
-      if (row.children.length === 1) return row.children[0].categoryId
-      if (
-        leafId &&
-        row.children.some((c) => idsEqual(c.categoryId, leafId))
-      ) {
-        return leafId
-      }
-      return ''
+  /** 菜单解析更新后：原 leafId 若仍是父级或已从子列表消失，则落到第一个有效子类 */
+  useEffect(() => {
+    if (primaryIdx < 0 || primaryIdx >= tier1.length) return
+    const row = tier1[primaryIdx]
+    if (row.kind !== 'menu_group' || row.children.length < 1) return
+    const valid = row.children.some((c) => idsEqual(c.categoryId, leafId))
+    if (leafId && !valid) {
+      setLeafId(row.children[0].categoryId)
     }
-    if (
-      editingTool?.category_id &&
-      orphanEditingCategory &&
-      idsEqual(leafId, editingTool.category_id)
-    ) {
-      return leafId
-    }
-    return ''
-  }, [
-    primaryIdx,
-    tier1,
-    leafId,
-    editingTool?.category_id,
-    orphanEditingCategory,
-  ])
+  }, [tier1, primaryIdx, leafId])
 
   const introDbFormat: IntroductionFormat =
     introKind === 'file' || introKind === 'markdown'
@@ -817,105 +792,29 @@ export function SubmitToolForm({
               </p>
             ) : (
               <div className="space-y-3 rounded-lg border border-border bg-card/50 p-4">
-                <div className="space-y-2">
-                  <Label
-                    htmlFor="submit-category-primary"
-                    className="text-xs font-medium text-muted-foreground"
-                  >
-                    分类入口
-                  </Label>
-                  <Select
-                    value={
-                      primaryIdx < 0 ? SUBMIT_CAT_NONE : String(primaryIdx)
-                    }
-                    onValueChange={(v) => {
-                      if (v === SUBMIT_CAT_NONE) onPrimaryChange('')
-                      else onPrimaryChange(v)
-                    }}
-                  >
-                    <SelectTrigger
-                      id="submit-category-primary"
-                      className="h-10 w-full bg-background"
-                    >
-                      <SelectValue placeholder="请选择分类入口" />
-                    </SelectTrigger>
-                    <SelectContent
-                      position="popper"
-                      className="max-h-[min(20rem,var(--radix-select-content-available-height))]"
-                    >
-                      <SelectItem value={SUBMIT_CAT_NONE}>
-                        请选择分类入口
-                      </SelectItem>
-                      {tier1.map((row, i) => (
-                        <SelectItem
-                          key={
-                            row.kind === 'menu_group'
-                              ? `g-${row.navParentId}`
-                              : `l-${row.categoryId}`
-                          }
-                          value={String(i)}
-                        >
-                          {row.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {showLeafSelect && currentRow?.kind === 'menu_group' ? (
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="submit-category-leaf"
-                      className="text-xs font-medium text-muted-foreground"
-                    >
-                      具体分类
-                    </Label>
-                    <Select
-                      value={leafId ? leafId : SUBMIT_CAT_NONE}
-                      onValueChange={(v) =>
-                        setLeafId(v === SUBMIT_CAT_NONE ? '' : v)
-                      }
-                    >
-                      <SelectTrigger
-                        id="submit-category-leaf"
-                        className="h-10 w-full bg-background"
-                      >
-                        <SelectValue placeholder="请选择具体分类" />
-                      </SelectTrigger>
-                      <SelectContent
-                        position="popper"
-                        className="max-h-[min(20rem,var(--radix-select-content-available-height))]"
-                      >
-                        <SelectItem value={SUBMIT_CAT_NONE}>
-                          请选择具体分类
-                        </SelectItem>
-                        {currentRow.children.map((ch) => (
-                          <SelectItem
-                            key={ch.categoryId}
-                            value={ch.categoryId}
-                          >
-                            {ch.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ) : null}
-
-                {currentRow?.kind === 'menu_group' &&
-                currentRow.children.length === 1 ? (
-                  <p className="rounded-md border border-border bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">
-                    将归入「{currentRow.children[0].label}」
-                  </p>
-                ) : null}
+                <ToolCategoryMenuFields
+                  idPrefix="submit-tool"
+                  tier1={tier1}
+                  primaryIdx={primaryIdx}
+                  leafId={leafId}
+                  onPrimaryChange={(v) => {
+                    if (v === TOOL_CATEGORY_MENU_NONE) onPrimaryChange('')
+                    else onPrimaryChange(v)
+                  }}
+                  onLeafChange={(v) =>
+                    setLeafId(v === TOOL_CATEGORY_MENU_NONE ? '' : v)
+                  }
+                />
               </div>
             )}
 
-            {leafId ? (
+            {resolvedSubmitCategoryId ? (
               <div className="rounded-md border border-border bg-muted/30 px-3 py-2.5 text-sm">
                 <span className="text-muted-foreground">当前选择：</span>
                 <span className="ml-1 font-medium text-foreground">
-                  {categories.find((c) => idsEqual(c.id, leafId))?.name ?? '—'}
+                  {categories.find((c) =>
+                    idsEqual(c.id, resolvedSubmitCategoryId),
+                  )?.name ?? '—'}
                 </span>
               </div>
             ) : null}

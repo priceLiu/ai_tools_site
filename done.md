@@ -19,7 +19,7 @@
 | 工具提交与状态 | 用户提交工具；`pending` / `approved` / `rejected`；拒绝原因 `rejection_reason` 可在「我的提交」中展示 |
 | 审核与热门 | 管理后台审核通过/拒绝、热门标记；通过后种子访问量（见 2.3） |
 | 工具禁用 | `tools.is_disabled`：已通过工具可被管理员禁用，前台列表与公开 API 不展示 |
-| 分类与导航 | 多级分类（`categories.parent_id`）；首页侧栏 `navigation_menu_items` 可后台配置 |
+| 分类与导航 | 多级分类（`categories.parent_id`）；首页侧栏 `navigation_menu_items` 可后台配置；与提交页二级分类、表间关系及「同步」说明见 **§2.7** |
 | 工具介绍格式 | `introduction` + `introduction_format`（纯文本 / Markdown / HTML） |
 | 收藏 | `favorites` + `tools.favorite_count` 触发器同步 |
 
@@ -118,6 +118,40 @@
 
 - 须在目标环境 **执行** `20260502300000_tool_capability_tags.sql` 后，前端写标签 RPC 才可用。
 - 全量一键提取会对 **所有工具** 逐条调用写标签；数据量大时耗时与 RPC 次数与工具行数成正比，可在低峰执行。
+
+### 2.7 分类表 `categories` 与导航表 `navigation_menu_items`（二级分类、提交页下拉与同步）
+
+#### 曾出现的问题（为何「看不到二级分类」或选不动）
+
+- **工具的归类**只认 **`public.categories`**：提交页、批量导入里「具体分类」下拉的每一项必须是 **`categories.id`**。若侧栏里已有「AI办公 → AI PPT」**菜单**，但 **`categories` 里没有**名为 AIPPT 的子行（或 `parent_id` 没指向「办公」那一行），则前端无法列出或稳定选中二级分类。
+- **两套 UUID 易混淆**：`navigation_menu_items.id`（例如折叠项「AI办公」的菜单行）与 `categories.id`（「AI办公」**分类**行）**不是同一个 id**；菜单行的 `parent_id` 只指向**上级菜单项**，**不**等于 `categories.parent_id`。
+- **错误子链**：若子菜单的 `href` 误填成与父级相同的 `/category/office`，旧逻辑会把子项解析成「办公」本身，二级列表只剩父级；已通过在解析子行时 **忽略「与父级 slug 重复的 href」**（见 `lib/submit-category-choices.ts`）缓解。
+- **仅导航、未落库**：历史同步脚本只把「子项已是 `/category/xxx` 且库里尚无该 slug」的情况插入 `categories`；子项只有 `#` 或与父级重复的链接时不会自动补行。已扩展为：在能确定父分类的前提下，可按 **子项标题生成 slug** 补全 `categories`，并在插入后把该菜单项 **`href` 写为 `/category/{slug}`**（见 `lib/sync-categories-from-navigation.ts`）。
+
+#### 业务逻辑（工具与分类）
+
+| 环节 | 说明 |
+|------|------|
+| 工具归属 | `tools.category_id` 外键指向 **`categories.id`**（可为空视业务而定）。列表/详情/分类页过滤均基于 **分类表**，不是导航表。 |
+| 分类层级 | `categories.parent_id` 指另一条 **`categories`** 记录：`null` 为一级；二级工具应使用 **子分类行的 id** 作为 `category_id`。 |
+| 导航作用 | `navigation_menu_items` 定义 **侧栏/站点菜单树**（折叠、排序、可见性、`href`）。与分类的对应关系主要靠 **链接** `/category/{slug}` 与 **`categories.slug`** 对齐，以及 **菜单标题** 与 **`categories.name`** 的匹配（提交页建树逻辑见 `buildSubmitNavigationTier1List` / `foldableCategoryItems`）。 |
+
+#### 两表关系（总结）
+
+- **不是一张表的两种视图**：导航树与分类树 **独立建模**；**不存在**「菜单项 id = 分类 id」的约定。
+- **推荐心智模型**：先在**分类表**里维护好父子 slug（或后台「同步」自动生成子行），再在**导航**里为折叠项挂子菜单，并保证子项最终有 **`/category/{子 slug}`**（可由同步写回）。
+- **新增二级分类（从运营角度）**：在「办公」对应的 **category** 下插入子行（名称、slug、`parent_id` = 办公的 `categories.id`），并在导航里为「AI办公」增加一条子菜单，**指向** `/category/{子 slug}`。若子项暂时只有标题、链接为 `#`，可依赖下方 **同步** 补 `categories` 并改写 `href`。
+
+#### 「同步分类」何时执行（是否需要手点）
+
+- **主要会在保存菜单时自动触发**：在管理端 **新增 / 修改 / 删除** 导航项成功后，同一请求内会调用 `syncMissingCategoriesFromNavigation`（见 `app/admin/navigation/actions.ts`）。因此日常 **改完菜单并保存** 后，一般会顺带尝试补全缺失的 `categories` 子行并修正子项 `href`。
+- **「同步分类」按钮**：与上述逻辑相同，用于 **不改动菜单、仅整体再跑一遍** 对比与补全（例如曾手动改过库、或怀疑漏同步时）。**不是**唯一入口；若你已通过保存菜单触发了 server action，通常不必再点一次。
+
+**主要代码路径**
+
+- `lib/submit-category-choices.ts` — 提交/导入用的菜单驱动一级、二级分类列表与 href/名称解析（含忽略重复父链等）。
+- `lib/sync-categories-from-navigation.ts` — 对比导航树与 `categories`，缺省时插入子分类并可选回写菜单 `href`。
+- `app/admin/navigation/actions.ts` — 导航 CRUD 后的自动同步与 `syncCategoriesFromNavigationAction`（手动按钮）。
 
 ---
 

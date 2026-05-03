@@ -259,9 +259,10 @@ export function AdminNavigationMenuEditor({
           <p className="font-medium text-foreground">分类表与菜单</p>
           <p className="text-muted-foreground">
             保存菜单后会<strong className="font-medium text-foreground">自动</strong>
-            把子菜单里的{' '}
-            <code className="rounded bg-muted px-1">/category/xxx</code>{' '}
-            同步到「分类」表（仅缺省时插入）。若同步失败会在此处提示，也可手动再点一次。
+            尝试把折叠项下的一级子菜单补进「分类」表：优先按子项链接{' '}
+            <code className="rounded bg-muted px-1">/category/xxx</code>
+            （缺省插入）；若无有效链接或与父级重复，则根据<strong>子项标题</strong>
+            生成 slug 并挂到父分类下（与「AI办公 → AI PPT」这类结构一致）。
           </p>
           {syncHint ? (
             <p className="text-xs text-foreground whitespace-pre-wrap">{syncHint}</p>

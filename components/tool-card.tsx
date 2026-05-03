@@ -7,6 +7,7 @@ import type { HomeListedTool } from '@/lib/types'
 import { recordToolViewBySlug } from '@/lib/client-record-tool-view'
 import { toolPublicPath } from '@/lib/tool-public-path'
 import { Card, CardContent } from '@/components/ui/card'
+import { cn } from '@/lib/utils'
 import { Sparkles, Bot, Eye, Heart } from 'lucide-react'
 
 const TOOL_TIP_CONTENT_CLASS =
@@ -18,6 +19,10 @@ interface ToolCardProps {
   favoritesCount?: number
   /** 首屏条目传 true：优先解码 logo */
   imagePriority?: boolean
+  /**
+   * 铺满网格单元（首页 5 列等）；默认 false 为固定约 350px 宽（分类页等）
+   */
+  fluid?: boolean
 }
 
 export const TOOL_CARD_WIDTH = 350
@@ -25,10 +30,15 @@ export const TOOL_CARD_HEIGHT = 100
 
 const blankRel = { target: '_blank' as const, rel: 'noopener noreferrer' as const }
 
+function listingDescriptionLine(raw: string | null | undefined): string {
+  return (raw ?? '').replace(/\s+/g, ' ').trim()
+}
+
 export function ToolCard({
   tool,
   favoritesCount,
   imagePriority = false,
+  fluid = false,
 }: ToolCardProps) {
   const views = tool.view_count ?? 0
   const fav = favoritesCount ?? tool.favorite_count ?? 0
@@ -38,20 +48,30 @@ export function ToolCard({
     tool.description ||
     ''
   ).trim()
+  const descLine = listingDescriptionLine(tool.description)
 
   const detailHref = toolPublicPath(tool.slug)
+  const logoBox = fluid ? 'h-[58px] w-[58px]' : 'h-[68px] w-[68px]'
 
   const cardInner = (
     <Card
       className="group flex min-h-0 w-full cursor-pointer flex-1 overflow-hidden transition-all hover:border-primary/30 hover:shadow-md focus-within:ring-2 focus-within:ring-ring"
       style={{ height: TOOL_CARD_HEIGHT }}
     >
-      <CardContent className="flex h-full w-full items-center gap-2.5 px-2.5 py-2">
+      <CardContent
+        className={cn(
+          'flex h-full w-full items-center px-2.5 py-2',
+          fluid ? 'gap-2' : 'gap-2.5',
+        )}
+      >
         <Link
           href={detailHref}
           {...blankRel}
           onClick={() => recordToolViewBySlug(tool.slug)}
-          className="relative block h-[68px] w-[68px] shrink-0 overflow-hidden rounded-lg bg-muted outline-none ring-offset-background transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring"
+          className={cn(
+            'relative block shrink-0 overflow-hidden rounded-lg bg-muted outline-none ring-offset-background transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring',
+            logoBox,
+          )}
           aria-label={`${tool.name}（在新标签打开）`}
         >
           {tool.logo_url ? (
@@ -71,16 +91,36 @@ export function ToolCard({
         <Link
           href={detailHref}
           onClick={() => recordToolViewBySlug(tool.slug)}
-          className="flex min-h-0 min-w-0 flex-1 flex-col justify-center gap-1 outline-none"
+          className={cn(
+            'flex min-h-0 min-w-0 flex-1 flex-col justify-center outline-none',
+            fluid ? 'gap-0.5' : 'gap-1',
+          )}
         >
-          <h3 className="truncate text-sm font-semibold leading-tight text-foreground transition-colors group-hover:text-primary">
+          <h3
+            className={cn(
+              'truncate font-semibold leading-tight text-foreground transition-colors group-hover:text-primary',
+              fluid ? 'text-xs' : 'text-sm',
+            )}
+          >
             {tool.name}
           </h3>
-          <p className="line-clamp-1 text-[11px] leading-snug text-muted-foreground">
-            {tool.description}
+          <p
+            className={cn(
+              'min-h-0 leading-snug text-muted-foreground',
+              fluid
+                ? 'line-clamp-2 text-[10px]'
+                : 'line-clamp-1 text-[11px]',
+            )}
+          >
+            {descLine}
           </p>
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-0 text-[10px] text-muted-foreground">
-            <span className="inline-flex max-w-[7.5rem] items-center gap-0.5 truncate rounded-full bg-muted px-1.5 py-px font-medium text-foreground">
+          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0 text-[10px] text-muted-foreground sm:gap-x-2">
+            <span
+              className={cn(
+                'inline-flex items-center gap-0.5 truncate rounded-full bg-muted px-1.5 py-px font-medium text-foreground',
+                fluid ? 'max-w-[4.5rem]' : 'max-w-[7.5rem]',
+              )}
+            >
               <Bot className="h-2.5 w-2.5 shrink-0 opacity-70" aria-hidden />
               <span className="truncate">{catName}</span>
             </span>
@@ -101,7 +141,17 @@ export function ToolCard({
     </Card>
   )
 
-  const wrapped = (
+  const wrapped = fluid ? (
+    <div
+      className="block w-full min-w-0 outline-none"
+      style={{
+        minHeight: TOOL_CARD_HEIGHT,
+        maxHeight: TOOL_CARD_HEIGHT,
+      }}
+    >
+      {cardInner}
+    </div>
+  ) : (
     <div
       className="inline-flex shrink-0 outline-none"
       style={{
@@ -123,8 +173,16 @@ export function ToolCard({
       <Tooltip.Root delayDuration={280}>
         <Tooltip.Trigger asChild>
           <span
-            className="inline-flex shrink-0"
-            style={{ width: TOOL_CARD_WIDTH, maxWidth: '100%' }}
+            className={cn(
+              fluid
+                ? 'block min-w-0 max-w-full'
+                : 'inline-flex shrink-0',
+            )}
+            style={
+              fluid
+                ? undefined
+                : { width: TOOL_CARD_WIDTH, maxWidth: '100%' }
+            }
           >
             {wrapped}
           </span>

@@ -54,7 +54,7 @@ async function syncMissingCategoriesWithServerClient(
   return { ok, created: res.created, slugs: res.slugs, errors: res.errors }
 }
 
-/** 把侧栏里 /category/slug 子菜单对应的行补进 categories（仅缺省时插入） */
+/** 把侧栏折叠下一层子菜单补进 categories：有效 /category/slug 优先；否则按子项标题生成 slug（仅缺省插入） */
 export async function syncCategoriesFromNavigationAction(): Promise<SyncCategoriesFromNavigationResult> {
   const supabase = await createClient()
   const {

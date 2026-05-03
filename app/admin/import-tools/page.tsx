@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import { getNavigationMenuTree } from '@/lib/navigation-menu'
 import { AdminImportToolsForm } from '@/components/admin-import-tools-form'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft } from 'lucide-react'
@@ -11,10 +12,10 @@ export const metadata = {
 
 export default async function AdminImportToolsPage() {
   const supabase = await createClient()
-  const { data: rows } = await supabase
-    .from('categories')
-    .select('id,name,slug,parent_id,sort_order')
-    .order('sort_order')
+  const [{ data: rows }, navigation] = await Promise.all([
+    supabase.from('categories').select('*').order('sort_order'),
+    getNavigationMenuTree(),
+  ])
 
   const categories = (rows as Category[] | null) ?? []
 
@@ -45,7 +46,10 @@ export default async function AdminImportToolsPage() {
               暂无分类，请先在数据库或菜单同步中配置分类。
             </p>
           ) : (
-            <AdminImportToolsForm categories={categories} />
+            <AdminImportToolsForm
+              categories={categories}
+              navigation={navigation}
+            />
           )}
         </div>
       </div>

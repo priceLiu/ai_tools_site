@@ -19,13 +19,13 @@ export function HomeToolSections({ bundle }: HomeToolSectionsProps) {
     )
 
   return (
-    <div className="mx-auto max-w-[1200px] space-y-10">
+    <div className="mx-auto w-full max-w-[min(100%,94rem)] space-y-10 px-0 sm:px-1">
       <ToolSection
         title="热门工具"
         icon="hot"
         anchorId="home-hot"
         tools={featured}
-        imagePriorityFirstN={6}
+        imagePriorityFirstN={10}
       />
 
       <ToolSection
@@ -33,7 +33,7 @@ export function HomeToolSections({ bundle }: HomeToolSectionsProps) {
         icon="new"
         anchorId="home-latest"
         tools={latest}
-        imagePriorityFirstN={4}
+        imagePriorityFirstN={5}
       />
 
       {homeCategoryBlocks.map(({ root, sections }) => {

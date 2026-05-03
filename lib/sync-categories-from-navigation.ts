@@ -1,3 +1,4 @@
+import { idsEqual } from '@/lib/category-tree'
 import { buildNavigationTree } from '@/lib/navigation-tree'
 import {
   menuTitleMatchesCategoryName,
@@ -6,18 +7,49 @@ import {
 import type { Category, NavigationMenuItemRow } from '@/lib/types'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
+function uniqueSlugFromNavChildLabel(
+  label: string,
+  parentCat: Category,
+  slugToCat: Map<string, Category>,
+  seenSlugs: Set<string>,
+): string | null {
+  const raw = label.normalize('NFKC').trim().toLowerCase()
+  if (!raw) return null
+  let base = raw
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+  if (!base || base.length < 2) {
+    base = `sub-${parentCat.slug}`
+  }
+  const candidates = [base, `${parentCat.slug}-${base}`, `${base}-tools`]
+  for (const c of candidates) {
+    if (!c) continue
+    if (!slugToCat.has(c) && !seenSlugs.has(c)) return c
+  }
+  for (let i = 2; i < 300; i++) {
+    const c = `${parentCat.slug}-${base}-${i}`
+    if (!slugToCat.has(c) && !seenSlugs.has(c)) return c
+  }
+  return null
+}
+
 export type PlannedCategoryInsert = {
   name: string
   slug: string
   parent_id: string
   sort_order: number
   icon: string | null
+  /** 创建分类后把该菜单项 href 写成 `/category/{slug}`（子项原为 # 或与父级重复时尤其需要） */
+  navigationMenuItemId?: string
 }
 
 /**
- * 对比侧栏树与 categories：对「一级折叠项」下的子菜单，若 href 为 /category/{slug} 且
- * categories 尚无该 slug，则计划插入一条（parent_id 为父级分类 id）。
- * 仅处理侧栏的一层子项（与 NavNode 行为一致）。
+ * 对比侧栏树与 categories：「一级折叠项」下的直接子菜单若缺少对应分类行则计划插入：
+ * - 子项含有效且不等于父级 slug 的 `/category/xxx` 时，用该 slug；
+ * - 否则在父分类下按子项标题生成唯一 slug。
+ * 仅处理一层子项（与侧栏 NavNode 一致）。
  */
 export function planMissingCategoriesFromNavigation(
   navRows: NavigationMenuItemRow[],
@@ -52,18 +84,55 @@ export function planMissingCategoriesFromNavigation(
       (a, b) => a.sort_order - b.sort_order,
     )
     for (const ch of sortedChildren) {
-      const chSlug = slugFromCategoryMenuHref(ch.href)
-      if (!chSlug || chSlug === 'hot') continue
-      if (slugToCat.has(chSlug) || seenSlugs.has(chSlug)) continue
+      const rawSlug = slugFromCategoryMenuHref(ch.href)
+      const chSlug =
+        rawSlug && rawSlug !== 'hot' && rawSlug !== parentCat.slug
+          ? rawSlug
+          : null
+      const label = (ch.label || '').trim()
+
+      if (chSlug && !slugToCat.has(chSlug) && !seenSlugs.has(chSlug)) {
+        planned.push({
+          name: label || chSlug,
+          slug: chSlug,
+          parent_id: parentCat.id,
+          sort_order: parentCat.sort_order * 1000 + ch.sort_order,
+          icon: ch.icon_name?.trim() || 'Sparkles',
+          navigationMenuItemId: ch.id,
+        })
+        seenSlugs.add(chSlug)
+        continue
+      }
+
+      if (chSlug && slugToCat.has(chSlug)) continue
+
+      if (!label) continue
+
+      const existingUnderParent = categories.find(
+        (c) =>
+          c.slug !== 'hot' &&
+          idsEqual(c.parent_id, parentCat.id) &&
+          menuTitleMatchesCategoryName(label, c.name),
+      )
+      if (existingUnderParent) continue
+
+      const gen = uniqueSlugFromNavChildLabel(
+        label,
+        parentCat,
+        slugToCat,
+        seenSlugs,
+      )
+      if (!gen) continue
 
       planned.push({
-        name: (ch.label || '').trim() || chSlug,
-        slug: chSlug,
+        name: label,
+        slug: gen,
         parent_id: parentCat.id,
         sort_order: parentCat.sort_order * 1000 + ch.sort_order,
         icon: ch.icon_name?.trim() || 'Sparkles',
+        navigationMenuItemId: ch.id,
       })
-      seenSlugs.add(chSlug)
+      seenSlugs.add(gen)
     }
   }
 
@@ -91,6 +160,20 @@ export async function syncMissingCategoriesFromNavigation(
       errors.push(`${row.slug}: ${error.message}`)
     } else {
       slugs.push(row.slug)
+      if (row.navigationMenuItemId) {
+        const { error: navErr } = await supabase
+          .from('navigation_menu_items')
+          .update({
+            href: `/category/${row.slug}`,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', row.navigationMenuItemId)
+        if (navErr) {
+          errors.push(
+            `分类「${row.slug}」已创建，但菜单链接未更新：${navErr.message}`,
+          )
+        }
+      }
     }
   }
 

@@ -108,6 +108,83 @@ export function navigationTier1ContainsCategoryId(
   return false
 }
 
+/** 提交页初始选中：无编辑目标时为空；有则定位到对应分组与叶子 */
+export function initialSubmitTier1Pick(
+  navigation: NavigationMenuTreeNode[],
+  categories: Category[],
+  editingCategoryId?: string | null,
+): { primaryIdx: number; leafId: string } {
+  const tier1 = buildSubmitNavigationTier1List(navigation, categories)
+  if (!editingCategoryId?.trim()) {
+    return { primaryIdx: -1, leafId: '' }
+  }
+  const eid = editingCategoryId.trim()
+  for (let i = 0; i < tier1.length; i++) {
+    const row = tier1[i]
+    if (row.kind === 'menu_leaf' && idsEqual(row.categoryId, eid)) {
+      return { primaryIdx: i, leafId: eid }
+    }
+    if (
+      row.kind === 'menu_group' &&
+      row.children.some((c) => idsEqual(c.categoryId, eid))
+    ) {
+      return { primaryIdx: i, leafId: eid }
+    }
+  }
+  return { primaryIdx: -1, leafId: eid }
+}
+
+/**
+ * 批量导入等：默认选中菜单第一项及其叶子（与侧栏分组一致，不全凭 parent_id）。
+ */
+export function defaultImportTier1PickFromTier1(
+  tier1: SubmitNavigationCategoryTier1[],
+): { primaryIdx: number; leafId: string } {
+  if (tier1.length === 0) return { primaryIdx: -1, leafId: '' }
+  const row0 = tier1[0]
+  if (row0.kind === 'menu_leaf') {
+    return { primaryIdx: 0, leafId: row0.categoryId }
+  }
+  if (row0.kind === 'menu_group' && row0.children.length >= 1) {
+    return { primaryIdx: 0, leafId: row0.children[0].categoryId }
+  }
+  return { primaryIdx: -1, leafId: '' }
+}
+
+/** 由一级选项 + 叶子选择解析最终分类 id（提交/导入共用） */
+export function resolvedCategoryIdFromTierPick(
+  tier1: SubmitNavigationCategoryTier1[],
+  primaryIdx: number,
+  leafId: string,
+  opts?: {
+    /** 编辑被拒工具时：无法在菜单中定位但保留原 category_id */
+    orphanLeafId?: string | null
+    orphanCategory?: Category | null
+  },
+): string {
+  if (primaryIdx >= 0 && primaryIdx < tier1.length) {
+    const row = tier1[primaryIdx]
+    if (row.kind === 'menu_leaf') return row.categoryId
+    if (row.children.length === 1) return row.children[0].categoryId
+    if (
+      leafId &&
+      row.children.some((c) => idsEqual(c.categoryId, leafId))
+    ) {
+      return leafId
+    }
+    return ''
+  }
+  if (
+    opts?.orphanLeafId &&
+    opts?.orphanCategory &&
+    idsEqual(leafId, opts.orphanLeafId) &&
+    idsEqual(leafId, opts.orphanCategory.id)
+  ) {
+    return leafId
+  }
+  return ''
+}
+
 /** 侧栏一层子菜单与分类对齐（菜单名 / href / 父级偏置 / 全局唯一 slug·name） */
 function sidebarDirectChildCategories(
   foldNode: NavigationMenuTreeNode,
@@ -120,6 +197,14 @@ function sidebarDirectChildCategories(
   const sortedChildren = [...foldNode.children].sort(
     (a, b) => a.sort_order - b.sort_order,
   )
+  const ignoreChildHrefSlugs = [
+    ...new Set(
+      [
+        slugFromCategoryMenuHref(foldNode.href ?? ''),
+        parentCat?.slug,
+      ].filter((s): s is string => Boolean(s && s !== 'hot')),
+    ),
+  ]
   for (const ch of sortedChildren) {
     const menuLabelRaw = `${(ch.label ?? '').trim()}`.trim()
     const cat = resolveCategoryFromMenuChildRow(
@@ -127,6 +212,7 @@ function sidebarDirectChildCategories(
       slugToCat,
       categories,
       parentCat,
+      { ignoreHrefSlugs: ignoreChildHrefSlugs },
     )
     if (!cat || seen.has(cat.id)) continue
     seen.add(cat.id)
@@ -196,11 +282,15 @@ function resolveCategoryFromMenuChildRow(
   slugToCat: Map<string, Category>,
   categories: Category[],
   parentBias?: Category,
+  opts?: { ignoreHrefSlugs?: readonly string[] },
 ): Category | undefined {
   const menuLabelRaw = `${(ch.label ?? '').trim()}`.trim()
   const hrefSlug = slugFromCategoryMenuHref(ch.href)
+  const ignoreSlugs = new Set(
+    (opts?.ignoreHrefSlugs ?? []).filter((s) => s && s !== 'hot'),
+  )
 
-  if (hrefSlug && hrefSlug !== 'hot') {
+  if (hrefSlug && hrefSlug !== 'hot' && !ignoreSlugs.has(hrefSlug)) {
     const c = slugToCat.get(hrefSlug)
     if (c) return c
   }
@@ -250,8 +340,17 @@ function inferFoldParentCategoryFromChildren(
   node: NavigationMenuTreeNode,
   slugToCat: Map<string, Category>,
   categories: Category[],
+  foldParentCategory?: Category,
 ): Category | undefined {
   const parentIds = new Set<string>()
+  const ignoreChildHrefSlugs = [
+    ...new Set(
+      [
+        slugFromCategoryMenuHref(node.href ?? ''),
+        foldParentCategory?.slug,
+      ].filter((s): s is string => Boolean(s && s !== 'hot')),
+    ),
+  ]
   for (const ch of [...node.children].sort(
     (a, b) => a.sort_order - b.sort_order,
   )) {
@@ -260,6 +359,7 @@ function inferFoldParentCategoryFromChildren(
       slugToCat,
       categories,
       undefined,
+      { ignoreHrefSlugs: ignoreChildHrefSlugs },
     )
     const pid = cand?.parent_id
     if (!pid || pid === cand?.id) continue
@@ -308,6 +408,57 @@ function resolveFoldGroupParentCategory(
   return hrefCat
 }
 
+/** 与折叠分组标题同名的分类（任意层级，用于 parent 候选） */
+function anyCategoryMatchingMenuFoldTitle(
+  node: NavigationMenuTreeNode,
+  categories: Category[],
+): Category | undefined {
+  const title = node.label?.trim()
+  if (!title) return undefined
+  const matches = categories.filter(
+    (c) => c.slug !== 'hot' && menuTitleMatchesCategoryName(title, c.name),
+  )
+  if (matches.length === 0) return undefined
+  matches.sort(
+    (a, b) =>
+      a.sort_order - b.sort_order || a.name.localeCompare(b.name),
+  )
+  return matches[0]
+}
+
+/** 给定若干父分类 id，合并其直接子类（去重、排序） */
+function dbChildItemsForParentIds(
+  parentIds: Iterable<string>,
+  categories: Category[],
+  menuLabs: Map<string, string>,
+): { categoryId: string; label: string }[] {
+  const idSet = new Set<string>()
+  for (const raw of parentIds) {
+    const s = String(raw ?? '').trim()
+    if (s) idSet.add(s)
+  }
+  if (idSet.size === 0) return []
+  const byId = new Map<string, { categoryId: string; label: string }>()
+  for (const c of categories) {
+    if (c.slug === 'hot') continue
+    const pid = c.parent_id
+    if (pid == null || String(pid).trim() === '') continue
+    if (![...idSet].some((id) => idsEqual(id, pid))) continue
+    byId.set(c.id, {
+      categoryId: c.id,
+      label: (menuLabs.get(c.slug)?.trim() || c.name).trim() || c.name,
+    })
+  }
+  return [...byId.values()].sort((a, b) => {
+    const ca = categories.find((x) => x.id === a.categoryId)
+    const cb = categories.find((x) => x.id === b.categoryId)
+    return (
+      (ca?.sort_order ?? 0) - (cb?.sort_order ?? 0) ||
+      (ca?.name ?? '').localeCompare(cb?.name ?? '', 'zh-CN')
+    )
+  })
+}
+
 /**
  * 二级候选（严格顺序）。
  * 侧栏只对「根级」折叠下发一层 LeafLink（不递归折叠），此处只用直接子行的 href → 分类；
@@ -332,6 +483,7 @@ function foldableCategoryItems(
     node,
     slugToCat,
     categories,
+    parentCat,
   )
   if (inferredFromChildren?.id) {
     if (!parentCat) parentCat = inferredFromChildren
@@ -343,6 +495,34 @@ function foldableCategoryItems(
     }
   }
 
+  const menuLabs = menuSlugLabelMap(node.children)
+
+  const hrefSlugForParent = slugFromCategoryMenuHref(node.href ?? '')
+  const hrefCatForParent = hrefSlugForParent
+    ? slugToCat.get(hrefSlugForParent)
+    : undefined
+  const titleRootCat = rootCategoryMatchingMenuTitle(node, categories)
+  const anyTitleCat = anyCategoryMatchingMenuFoldTitle(node, categories)
+
+  const effectiveParentForStrip: Category | undefined =
+    parentCat ??
+    inferredFromChildren ??
+    hrefCatForParent ??
+    titleRootCat ??
+    anyTitleCat
+
+  function addToParentIdSet(s: Set<string>, c?: Category | null) {
+    const id = c?.id
+    if (id != null && String(id).trim() !== '') s.add(String(id).trim())
+  }
+
+  const parentIdCandidates = new Set<string>()
+  addToParentIdSet(parentIdCandidates, parentCat)
+  addToParentIdSet(parentIdCandidates, inferredFromChildren)
+  addToParentIdSet(parentIdCandidates, hrefCatForParent)
+  addToParentIdSet(parentIdCandidates, titleRootCat)
+  addToParentIdSet(parentIdCandidates, anyTitleCat)
+
   const direct = stripParentDuplicates(
     sidebarDirectChildCategories(
       node,
@@ -353,44 +533,43 @@ function foldableCategoryItems(
     parentCat,
   )
 
-  const menuLabs = menuSlugLabelMap(node.children)
-  const fromDb: { categoryId: string; label: string }[] = []
-  if (parentCat?.id) {
-    for (const c of categories
-      .filter(
-        (x) =>
-          x.slug !== 'hot' && idsEqual(x.parent_id, parentCat!.id),
-      )
-      .sort(
-        (a, b) =>
-          a.sort_order - b.sort_order || a.name.localeCompare(b.name),
-      )) {
-      fromDb.push({
-        categoryId: c.id,
-        label: (menuLabs.get(c.slug)?.trim() || c.name).trim() || c.name,
-      })
-    }
-  }
-
   const byId = new Map<string, { categoryId: string; label: string }>()
   for (const it of direct) {
     byId.set(it.categoryId, it)
   }
-  for (const it of fromDb) {
-    if (!byId.has(it.categoryId)) byId.set(it.categoryId, it)
-  }
 
-  if (parentCat?.id) {
-    const sortedChildren = [...node.children].sort(
-      (a, b) => a.sort_order - b.sort_order,
-    )
-    for (const ch of sortedChildren) {
-      const lab = (ch.label ?? '').trim()
-      if (!lab) continue
-      const sameNameCount = categories.filter(
-        (x) => x.slug !== 'hot' && menuTitleMatchesCategoryName(lab, x.name),
-      ).length
-      const hit = categories.find((x) => {
+  const stripBias = effectiveParentForStrip ?? parentCat
+  const sortedChildren = [...node.children].sort(
+    (a, b) => a.sort_order - b.sort_order,
+  )
+
+  const ignoreHrefSlugsForChildren = [
+    ...new Set(
+      [
+        slugFromCategoryMenuHref(node.href ?? ''),
+        parentCat?.slug,
+        stripBias?.slug,
+        effectiveParentForStrip?.slug,
+      ].filter((s): s is string => Boolean(s && s !== 'hot')),
+    ),
+  ]
+
+  for (const ch of sortedChildren) {
+    const lab = (ch.label ?? '').trim()
+    if (!lab) continue
+    const sameNameCount = categories.filter(
+      (x) => x.slug !== 'hot' && menuTitleMatchesCategoryName(lab, x.name),
+    ).length
+
+    const hit =
+      resolveCategoryFromMenuChildRow(
+        ch,
+        slugToCat,
+        categories,
+        undefined,
+        { ignoreHrefSlugs: ignoreHrefSlugsForChildren },
+      ) ??
+      categories.find((x) => {
         if (
           x.slug === 'hot' ||
           !menuTitleMatchesCategoryName(lab, x.name) ||
@@ -398,26 +577,69 @@ function foldableCategoryItems(
         ) {
           return false
         }
-        if (idsEqual(x.parent_id, parentCat!.id)) return true
+        if (stripBias && idsEqual(x.parent_id, stripBias.id)) return true
         const looseParent =
           (x.parent_id == null || String(x.parent_id).trim() === '') &&
           sameNameCount === 1
         return looseParent
       })
-      if (hit) {
-        byId.set(hit.id, { categoryId: hit.id, label: lab })
+
+    if (hit?.parent_id != null && String(hit.parent_id).trim() !== '') {
+      parentIdCandidates.add(String(hit.parent_id).trim())
+      for (const c of categories) {
+        if (c.slug === 'hot') continue
+        if (!idsEqual(c.parent_id, hit.parent_id)) continue
+        if (!byId.has(c.id)) {
+          byId.set(c.id, {
+            categoryId: c.id,
+            label: (menuLabs.get(c.slug)?.trim() || c.name).trim() || c.name,
+          })
+        }
       }
+    }
+
+    if (hit && !byId.has(hit.id)) {
+      byId.set(hit.id, { categoryId: hit.id, label: lab })
     }
   }
 
-  let merged = stripParentDuplicates([...byId.values()], parentCat)
+  for (const it of dbChildItemsForParentIds(
+    parentIdCandidates,
+    categories,
+    menuLabs,
+  )) {
+    if (!byId.has(it.categoryId)) byId.set(it.categoryId, it)
+  }
+
+  let merged = stripParentDuplicates(
+    [...byId.values()],
+    effectiveParentForStrip,
+  )
+
+  const dbKidsUnion = dbChildItemsForParentIds(
+    parentIdCandidates,
+    categories,
+    menuLabs,
+  )
+  const stripForOnlyParent = effectiveParentForStrip ?? parentCat
+  const onlyParent =
+    stripForOnlyParent != null &&
+    merged.length === 1 &&
+    idsEqual(merged[0].categoryId, stripForOnlyParent.id)
+  const emptyOrParentOnly = merged.length === 0 || onlyParent
+  if (dbKidsUnion.length > 0 && emptyOrParentOnly) {
+    merged = dbKidsUnion
+  }
+
   if (merged.length > 0) return merged
 
-  if (parentCat) {
+  if (effectiveParentForStrip) {
     return [
       {
-        categoryId: parentCat.id,
-        label: `${parentCat.name}`.trim() || parentCat.name,
+        categoryId: effectiveParentForStrip.id,
+        label:
+          `${effectiveParentForStrip.name}`.trim() ||
+          effectiveParentForStrip.name,
       },
     ]
   }

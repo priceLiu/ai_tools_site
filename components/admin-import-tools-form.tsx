@@ -1,38 +1,93 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useState, useTransition, useRef } from 'react'
+import { useState, useTransition, useRef, useMemo, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { importToolsFromDocsJsonAction } from '@/app/admin/tools/import-actions'
 import { readFileAsTextWithProgress } from '@/lib/image-data-url'
 import { Progress } from '@/components/ui/progress'
-import type { Category } from '@/lib/types'
-
-type CategoryOption = Pick<
-  Category,
-  'id' | 'name' | 'slug' | 'parent_id' | 'sort_order'
->
+import type { Category, NavigationMenuTreeNode } from '@/lib/types'
+import { idsEqual } from '@/lib/category-tree'
+import {
+  buildSubmitNavigationTier1List,
+  defaultImportTier1PickFromTier1,
+  resolvedCategoryIdFromTierPick,
+} from '@/lib/submit-category-choices'
+import {
+  ToolCategoryMenuFields,
+  TOOL_CATEGORY_MENU_NONE,
+} from '@/components/tool-category-menu-fields'
 
 interface AdminImportToolsFormProps {
-  categories: CategoryOption[]
+  categories: Category[]
+  navigation: NavigationMenuTreeNode[]
 }
 
-export function AdminImportToolsForm({ categories }: AdminImportToolsFormProps) {
+export function AdminImportToolsForm({
+  categories,
+  navigation,
+}: AdminImportToolsFormProps) {
   const router = useRouter()
   const [jsonText, setJsonText] = useState('')
-  const [categoryId, setCategoryId] = useState<string>(
-    categories[0]?.id ?? '',
+
+  const tier1 = useMemo(
+    () => buildSubmitNavigationTier1List(navigation, categories),
+    [navigation, categories],
   )
+
+  const defaultPick = useMemo(
+    () => defaultImportTier1PickFromTier1(tier1),
+    [tier1],
+  )
+
+  const [primaryIdx, setPrimaryIdx] = useState(defaultPick.primaryIdx)
+  const [leafId, setLeafId] = useState(defaultPick.leafId)
+
+  useEffect(() => {
+    setPrimaryIdx(defaultPick.primaryIdx)
+    setLeafId(defaultPick.leafId)
+  }, [defaultPick.primaryIdx, defaultPick.leafId])
+
+  const handlePrimaryChange = (raw: string) => {
+    if (!raw) {
+      setPrimaryIdx(-1)
+      setLeafId('')
+      return
+    }
+    const idx = Number(raw)
+    setPrimaryIdx(idx)
+    const row = tier1[idx]
+    if (!row) {
+      setLeafId('')
+      return
+    }
+    if (row.kind === 'menu_leaf') {
+      setLeafId(row.categoryId)
+    } else if (row.children.length === 1) {
+      setLeafId(row.children[0].categoryId)
+    } else {
+      setLeafId('')
+    }
+  }
+
+  const resolvedCategoryId = useMemo(
+    () => resolvedCategoryIdFromTierPick(tier1, primaryIdx, leafId),
+    [tier1, primaryIdx, leafId],
+  )
+
+  useEffect(() => {
+    if (primaryIdx < 0 || primaryIdx >= tier1.length) return
+    const row = tier1[primaryIdx]
+    if (row.kind !== 'menu_group' || row.children.length < 1) return
+    const valid = row.children.some((c) => idsEqual(c.categoryId, leafId))
+    if (leafId && !valid) {
+      setLeafId(row.children[0].categoryId)
+    }
+  }, [tier1, primaryIdx, leafId])
+
   const [initialStatus, setInitialStatus] = useState<'approved' | 'pending'>(
     'approved',
   )
@@ -88,7 +143,7 @@ export function AdminImportToolsForm({ categories }: AdminImportToolsFormProps) 
     startTransition(async () => {
       const res = await importToolsFromDocsJsonAction({
         rawJson: parsed,
-        categoryId,
+        categoryId: resolvedCategoryId,
         initialStatus,
       })
       if (!res.ok) {
@@ -105,11 +160,6 @@ export function AdminImportToolsForm({ categories }: AdminImportToolsFormProps) 
       router.refresh()
     })
   }
-
-  const sortedCats = [...categories].sort(
-    (a, b) =>
-      a.sort_order - b.sort_order || a.name.localeCompare(b.name),
-  )
 
   return (
     <div className="space-y-6">
@@ -177,27 +227,41 @@ export function AdminImportToolsForm({ categories }: AdminImportToolsFormProps) 
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
+        <div className="space-y-3 sm:col-span-2">
           <Label>目标分类</Label>
-          <Select
-            value={categoryId || undefined}
-            onValueChange={setCategoryId}
-          >
-            <SelectTrigger className="w-full max-w-md">
-              <SelectValue placeholder="选择分类" />
-            </SelectTrigger>
-            <SelectContent>
-              {sortedCats.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.name}
-                  {c.slug ? `（${c.slug}）` : ''}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <p className="text-xs text-muted-foreground">
+            与<strong className="font-medium text-foreground">工具提交页</strong>
+            一致：选项来自侧栏「菜单管理」结构；折叠分组下请选择具体收录分类（如 AI 办公 →
+            AIPPT）。
+          </p>
+          {tier1.length === 0 ? (
+            <p className="rounded-md border border-dashed border-border/80 bg-muted/20 px-3 py-2.5 text-sm text-muted-foreground">
+              侧栏中尚未配置可导入分类。请在「菜单管理」中为项填写{' '}
+              <code className="rounded-md bg-muted px-1.5 py-0.5 text-xs">
+                /category/slug
+              </code>{' '}
+              链接，并为子菜单项绑定对应分类页。
+            </p>
+          ) : (
+            <div className="max-w-2xl space-y-3 rounded-lg border border-border bg-card/50 p-4">
+              <ToolCategoryMenuFields
+                idPrefix="admin-import"
+                tier1={tier1}
+                primaryIdx={primaryIdx}
+                leafId={leafId}
+                onPrimaryChange={(v) => {
+                  if (v === TOOL_CATEGORY_MENU_NONE) handlePrimaryChange('')
+                  else handlePrimaryChange(v)
+                }}
+                onLeafChange={(v) =>
+                  setLeafId(v === TOOL_CATEGORY_MENU_NONE ? '' : v)
+                }
+              />
+            </div>
+          )}
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-2 sm:col-span-2 sm:max-w-md">
           <Label>导入后状态</Label>
           <RadioGroup
             value={initialStatus}
@@ -224,8 +288,8 @@ export function AdminImportToolsForm({ categories }: AdminImportToolsFormProps) 
         disabled={
           isPending ||
           !jsonText.trim() ||
-          !categoryId ||
-          sortedCats.length === 0
+          !resolvedCategoryId ||
+          tier1.length === 0
         }
       >
         {isPending ? '导入中…' : '开始导入'}
