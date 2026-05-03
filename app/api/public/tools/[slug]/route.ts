@@ -20,7 +20,9 @@ export async function GET(
   const supabase = createPublicSupabase()
   const { data, error } = await supabase
     .from('tools')
-    .select('*, category:categories(*)')
+    .select(
+      '*, category:categories(*), tool_tags(sort_order, tag:tags(id,name))',
+    )
     .eq('slug', slug)
     .eq('status', 'approved')
     .eq('is_disabled', false)

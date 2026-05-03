@@ -14,6 +14,7 @@ import {
 import type { Category, Tool } from '@/lib/types'
 import { toolPublicPath } from '@/lib/tool-public-path'
 import { normalizeIntroductionFormat } from '@/lib/introduction-format'
+import { toolTagLabelsFromTool } from '@/lib/tool-tags-extract'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -32,7 +33,9 @@ export default async function AdminToolPreviewPage({ params }: PageProps) {
 
   const { data: row } = await supabase
     .from('tools')
-    .select('*, category:categories(*)')
+    .select(
+      '*, category:categories(*), tool_tags(sort_order, tag:tags(id,name))',
+    )
     .eq('id', id)
     .maybeSingle()
 
@@ -133,6 +136,7 @@ export default async function AdminToolPreviewPage({ params }: PageProps) {
             }
             initialDisabled={Boolean(tool.is_disabled)}
             initialFeatured={Boolean(tool.is_featured)}
+            initialTagNames={toolTagLabelsFromTool(tool)}
             categories={categories}
           />
         </div>

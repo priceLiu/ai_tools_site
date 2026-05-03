@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { AdminToolsBulkPanel } from '@/components/admin-tools-bulk-panel'
 import { AdminRefreshHomeBundleButton } from '@/components/admin-refresh-home-bundle-button'
+import { AdminBulkExtractTagsButton } from '@/components/admin-bulk-extract-tags-button'
 import { buildAdminToolsSearchPattern } from '@/lib/admin-tools-search'
 import {
   Pagination,
@@ -221,7 +222,10 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
               </p>
             </div>
           </div>
-          <AdminRefreshHomeBundleButton />
+          <div className="flex flex-col items-stretch gap-2 sm:items-end">
+            <AdminBulkExtractTagsButton />
+            <AdminRefreshHomeBundleButton />
+          </div>
         </div>
 
         <div className="mb-4 grid gap-2 sm:grid-cols-3 sm:gap-3">

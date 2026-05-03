@@ -5,15 +5,11 @@ const nextConfig = {
   },
   images: {
     unoptimized: true,
+    // 工具 logo 可为任意 https 外链（批量导入 favicon / 各站图标）
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: '*.public.blob.vercel-storage.com',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: '*.supabase.co',
+        hostname: '**',
         pathname: '/**',
       },
     ],

@@ -6,6 +6,12 @@ import { revalidateHomeToolBundleAction } from '@/app/actions/revalidate-home-to
 import { generateToolSlug } from '@/lib/tool-slug'
 import { randomToolViewSeed } from '@/lib/tool-view-seed'
 import { fetchImageAsDataUrl } from '@/lib/fetch-image-as-data-url'
+import { createServiceRoleClient } from '@/lib/supabase/service-role'
+import {
+  findDuplicateToolId,
+  toolNameDedupKey,
+  TOOL_DEDUP_REJECT_MESSAGE,
+} from '@/lib/tool-dedup'
 import {
   parseDocsToolsJson,
   type DocsToolJsonItem,
@@ -14,6 +20,7 @@ import {
   excerptForListing,
   INTRO_LIMIT_RICH,
 } from '@/lib/introduction-format'
+import { buildSuggestedToolTagNames } from '@/lib/tool-tags-extract'
 
 export type ImportToolsRowResult = {
   name: string
@@ -49,10 +56,11 @@ export async function importToolsFromDocsJsonAction(input: {
 
   const { data: cat } = await supabase
     .from('categories')
-    .select('id')
+    .select('id, name')
     .eq('id', categoryId)
     .maybeSingle()
   if (!cat) return { ok: false, error: '分类不存在' }
+  const categoryName = (cat as { id: string; name: string }).name ?? null
 
   const parsed = parseDocsToolsJson(input.rawJson)
   if (!parsed.ok) return { ok: false, error: parsed.error }
@@ -68,6 +76,7 @@ export async function importToolsFromDocsJsonAction(input: {
     const rowRes = await importOneTool(supabase, {
       item,
       categoryId,
+      categoryName,
       userId: user.id,
       status: input.initialStatus,
     })
@@ -92,11 +101,12 @@ async function importOneTool(
   opts: {
     item: DocsToolJsonItem
     categoryId: string
+    categoryName: string | null
     userId: string
     status: 'approved' | 'pending'
   },
 ): Promise<ImportToolsRowResult> {
-  const { item, categoryId, userId, status } = opts
+  const { item, categoryId, categoryName, userId, status } = opts
   const name = item.name
 
   if (item.introduction.length > INTRO_LIMIT_RICH) {
@@ -125,6 +135,13 @@ async function importOneTool(
       const fetched = await fetchImageAsDataUrl(rawLogo)
       if ('dataUrl' in fetched) {
         logo_url = fetched.dataUrl
+      } else if (
+        rawLogo.startsWith('https://') ||
+        rawLogo.startsWith('http://')
+      ) {
+        // 部分站点在服务端 fetch 会失败（TLS/反爬）；保留外链供前台 Next/Image 加载
+        logo_url = rawLogo
+        logoNote = `图标未转存为 Base64：${fetched.error}（已保存原始图标 URL）`
       } else {
         logoNote = `图标未写入：${fetched.error}`
       }
@@ -136,10 +153,20 @@ async function importOneTool(
     return { name, ok: false, message: '无法从简介生成概述' }
   }
 
-  const slug = generateToolSlug(item.name)
+  const db = createServiceRoleClient() ?? supabase
+  const dupId = await findDuplicateToolId(db, {
+    name: item.name,
+    introduction: item.introduction,
+    categoryId: categoryId,
+  })
+  if (dupId) {
+    return { name, ok: false, message: TOOL_DEDUP_REJECT_MESSAGE }
+  }
+
+  const slug = generateToolSlug(toolNameDedupKey(item.name))
 
   const insertRow: Record<string, unknown> = {
-    name: item.name.trim(),
+    name: toolNameDedupKey(item.name),
     slug,
     description,
     introduction: item.introduction,
@@ -159,15 +186,30 @@ async function importOneTool(
     insertRow.view_count = randomToolViewSeed()
   }
 
-  const { error } = await supabase.from('tools').insert(insertRow)
+  const { data: inserted, error } = await supabase
+    .from('tools')
+    .insert(insertRow)
+    .select('id')
+    .single()
 
   if (error) {
     return { name, ok: false, message: error.message }
   }
 
+  const tagNames = buildSuggestedToolTagNames({
+    categoryName,
+    introduction: item.introduction,
+    introductionFormat: 'markdown',
+  })
+  const { error: tagErr } = await supabase.rpc('set_tool_tags_for_tool', {
+    p_tool_id: inserted.id,
+    p_names: tagNames,
+  })
+  const tagNote = tagErr ? `标签未写入：${tagErr.message}` : ''
+
   return {
     name,
     ok: true,
-    message: logoNote || undefined,
+    message: [logoNote, tagNote].filter(Boolean).join('；') || undefined,
   }
 }

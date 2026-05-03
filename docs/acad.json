@@ -1,0 +1,8 @@
+[
+    {
+      "name": "Mendeley",
+      "logo_url": "https://www.mendeley.com/favicon.ico",
+      "introduction": "## 产品介绍\nMendeley除了老牌的文献管理功能以外，在AI阅读功能方面有了质的提升，推出了Reading Assistant和Compare Experiments两大功能，直接内建于Mendeley Reference Manager中[reference:67][reference:68]。Reading Assistant的功能像是为你配备了私人导师，快速概述一篇论文的研究目的、主要观点和组织结构。其最实用的亮点是Compare Experiments，从多篇论文里抽丝剥茧找出实验方法、样本量和核心结论进行并列对比，像为Review的撰写者提供了半自动化的证据提取器。\n\n**主要功能**\n\n1. Reading Assistant（AI快速阅读助手）：在PDF阅读器的侧边栏自动生成论文摘要，清晰概括文章的目的、方法和关键结论，辅助快速评估价值和相关性[reference:69]。\n\n2. Compare Experiments（实验对比分析）：利用AI同时从选定的多篇论文中自动提取统一维度的信息（样本、干预、对照组等），输出对比表格，极大简化系统综述的数据录入[reference:70]。\n\n3. 智能文献推荐：基于用户的文献库内容和个人阅读历史，AI自动向用户推荐高度相关的未读论文，文献发现效率更高。\n\n4. 全面全文搜索（Live Full-text Search）：在本地文献库中键入关键词后无需等待索引结果即开始出现，实现毫秒级全文检索[reference:71]。\n\n5. 与CrossRef开源数据互通：自动补全绝大多数具有DOI的英文学术文献的元数据（作者、期刊、摘要），减少手动输入。\n\n6. 团队私人文献库共享：课题组上传所有核心文献进入共享组，AI在团队文献库范围内推荐新文献，加强组内资源复用。\n\n7. Word插件及一键引用：与Microsoft Word及LibreOffice无缝对接，Cite While Writing，在撰写正文时可快速切换、插入、修改引用格式。\n\n**使用场景**\n\n课题组共享文献库的定期追踪：刚刚接手师兄师姐遗留的项目文档，不必重新搜索历史文献，靠Mendeley AI推荐和全文搜索功能即刻掌握前序研究基础。\n\n快速完成综述文章材料与方法部分的撰写：使用Compare Experiments功能将收集到的20篇临床试验论文一键转化为证据表，直接作为论文中“纳入研究特征表”的原型。\n\n阅读与文献归纳的一站式同步：在Mendeley内置阅读器中打开并高亮段落，旁边的Reading Assistant实时自动总结全文，提高阅读效率。\n\n跨设备无缝批注回传：在平板Mendeley App上阅读PDF并画线批注，所有标注自动同步到电脑端，便于二次整理。\n\n团队的年度文献回顾报告写作：课题组长使用Mendeley共享库让AI小组自动分析年度热点文献变化趋势，协助撰写团队年度总结。\n\n**工具的问题**\n\nAI新功能仅向付费机构版全面开放：Reading Assistant和Compare Experiments的免费个人账户使用次数有限，重度使用需升级订阅。\n\nWeb界面响应较慢且不时有Bug：网页版切换文件夹或拖拽文献时可能出现短暂加载卡顿或无响应，网络要求高。\n\n收购后产品迭代缓慢：核心代码和UI界面已经多年没有大的创新，安装文件大，某些高级标记功能落后于Zotero。\n\n与Zotero等生态融合度低：用户习惯导出引用数据时与第三方图谱工具兼容性差，导致迁移成本较高。\n\n本地文献库过大时稳定性下降：当个人文献库积累超过1万篇条目时，桌面客户端启动速度和搜索性能显著下降，易崩溃退出。",
+      "official_url": "https://www.mendeley.com"
+    }
+  ]

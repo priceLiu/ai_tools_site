@@ -6,7 +6,7 @@
 
 ## 1. 阶段目标概览
 
-在现有 **Next.js + Supabase** 的 AI 工具导航站内，完成：内容审核与展示、访问统计、评论与权限、用户与管理员治理、存储与导航等核心链路的闭环；相关表结构、RLS、RPC 与前端行为保持一致。
+在现有 **Next.js + Supabase** 的 AI 工具导航站内，完成：内容审核与展示、访问统计、评论与权限、用户与管理员治理、存储与导航等核心链路的闭环；**并落实工具标签（分类名 + 介绍中的 AI 能力标签、入库、前台与管理端维护）**；相关表结构、RLS、RPC 与前端行为保持一致。
 
 ---
 
@@ -76,6 +76,49 @@
 - **Logo/资源上传**：`supabase/migrations/20260502200000_storage_tool_uploads.sql`（策略说明见文件内注释）
 - **匿名读工具详情**：`app/api/public/tools/[slug]/route.ts` 使用 public Supabase 客户端，避免登录用户 RLS 与 anon 读不一致
 
+### 2.6 工具标签（AI 能力提取与入库）
+
+**产品需求（已实现）**
+
+| 场景 | 说明 |
+|------|------|
+| 用户提交 / 被拒后重提 | 选择分类并填写（或上传）工具介绍后，**自动提取标签**（防抖）；展示在表单中，**用户可手动增删**；新建 `insert` 后、修改 `update` 后调用 RPC **写入 `tool_tags`** |
+| 管理后台 — 全站 | 后台顶部提供 **「一键提取全部标签」**，按当前规则为库内工具批量重写标签（管理员校验） |
+| 管理后台 — 单工具编辑 | 工具编辑区有标签编辑器；支持 **「根据介绍自动生成」** 一键重算；**保存工具信息时**一并 `set_tool_tags_for_tool` |
+
+**规则约定**
+
+| 规则 | 说明 |
+|------|------|
+| 分类即首标 | 工具所属 **分类名称** 作为标签列表的 **第一项**（与介绍解析结果合并、去重） |
+| 仅从介绍提取能力向标签 | 基于关键词规则识别 **AI 能力维度**（如：视频、音频、动画、图像生成、对话等），非泛随意抽词 |
+| 数量上限 | 最多 **6** 个标签 |
+| 持久化与归一 | `tags` 表 + `tool_tags` 关联；`upsert_tag_by_display_name` / `set_tool_tags_for_tool` 尽量与已有标签名匹配（`lower(trim(name))` 唯一） |
+
+**前台展示**
+
+- 工具详情页 **第一块头部卡片下方** 增加横向标签区域（`ToolTagsBar`），风格与现有 UI 一致。
+- 公开详情 API 的 `select` 需包含 `tool_tags` → `tags`，便于前台与比对场景使用。
+
+**主要代码路径**
+
+- `supabase/migrations/20260502300000_tool_capability_tags.sql` — `tags`、`tool_tags`、RLS、`upsert_tag_by_display_name`、`set_tool_tags_for_tool`
+- `lib/tool-tags-extract.ts` — 介绍扫描、`AI_CAPABILITY_TAG_RULES`、`buildSuggestedToolTagNames`、`toolTagLabelsFromTool`
+- `app/actions/tool-tags.ts` — `suggestToolTagNamesAction`、`setToolTagsAction`、`bulkExtractToolTagsAdminAction`
+- `components/tool-tags-bar.tsx`、`components/tool-tags-editor.tsx`
+- `components/submit-tool-form.tsx` — 自动建议、手动编辑、提交后写标签
+- `app/submit/page.tsx` — 编辑被拒工具时拉取 `initialTagNames`
+- `components/admin-approved-tool-editor.tsx`、`app/admin/tools/[id]/page.tsx` — 单工具标签与保存
+- `components/admin-bulk-extract-tags-button.tsx`、`app/admin/page.tsx` — 全站一键提取入口
+- `components/tool-detail-view.tsx` — 详情首屏下标签展示
+- `app/api/public/tools/[slug]/route.ts` — 公开接口嵌入 `tool_tags`（若已有则保持一致）
+- `app/admin/tools/import-actions.ts`（如已接入）— 导入成功后可选写入标签
+
+**上线注意**
+
+- 须在目标环境 **执行** `20260502300000_tool_capability_tags.sql` 后，前端写标签 RPC 才可用。
+- 全量一键提取会对 **所有工具** 逐条调用写标签；数据量大时耗时与 RPC 次数与工具行数成正比，可在低峰执行。
+
 ---
 
 ## 3. 数据库迁移脚本（按文件名排序，建议执行顺序一致）
@@ -95,6 +138,7 @@
 | `20260502220000_tool_view_increment_and_comments_auth.sql` | `increment_tool_view_count`；评论仅 `authenticated` 可写；`view_count` 为 0 的已通过工具随机 3000–5000 |
 | `20260502223000_tools_view_count_baseline_under_3000.sql` | 已通过且 `view_count < 3000` → 随机 3000–5000 |
 | `20260502240000_profiles_is_disabled_admin_rls.sql` | `profiles.is_disabled`；`is_admin_user()`；`profiles` RLS；触发器；`profiles_insert_own` |
+| `20260502300000_tool_capability_tags.sql` | `tags`、`tool_tags`；标签 upsert / 按工具批量设标；RLS；供内容标记与检索比对 |
 
 > **上线注意**：本地/远程 Supabase 须按序执行或合并执行；若项目里原本已有 `profiles` / `tools` 的自定义 RLS，可能与本次 `DROP POLICY … / CREATE POLICY` 重名或语义叠加，需在 Dashboard 核对后合并。
 
@@ -133,4 +177,4 @@
 
 ## 6. 阶段结论
 
-本阶段已将 **工具生命周期、前台展示、访问统计、评论权限、管理员与用户禁用、菜单与分类、收藏与介绍格式、存储策略** 等与代码及迁移脚本对齐，并形成可追溯的迁移列表与风险说明。后续迭代建议在 `done.md` 同目录增加版本号或日期分卷，或迁入 `docs/` 并链到 README。
+本阶段已将 **工具生命周期、前台展示、访问统计、评论权限、管理员与用户禁用、菜单与分类、收藏与介绍格式、存储策略、工具标签（分类 + 介绍能力提取、后台批量与单条维护、详情展示）** 等与代码及迁移脚本对齐，并形成可追溯的迁移列表与风险说明。后续迭代建议在 `done.md` 同目录增加版本号或日期分卷，或迁入 `docs/` 并链到 README。

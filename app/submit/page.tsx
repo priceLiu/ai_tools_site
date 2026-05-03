@@ -7,8 +7,9 @@ import {
 } from '@/components/submit-tool-form'
 import { navigationMenuCategoryIdWhitelist } from '@/lib/submit-category-choices'
 import { getNavigationMenuTree } from '@/lib/navigation-menu'
-import type { Category, Profile } from '@/lib/types'
+import type { Category, Profile, Tool } from '@/lib/types'
 import { normalizeIntroductionFormat } from '@/lib/introduction-format'
+import { toolTagLabelsFromTool } from '@/lib/tool-tags-extract'
 
 type SubmitPageProps = {
   searchParams: Promise<{ edit?: string }>
@@ -60,7 +61,7 @@ export default async function SubmitPage({ searchParams }: SubmitPageProps) {
     const { data: row } = await supabase
       .from('tools')
       .select(
-      'id, slug, name, description, website_url, category_id, logo_url, screenshot_url, user_id, status, introduction, introduction_format',
+        'id, slug, name, description, website_url, category_id, logo_url, screenshot_url, user_id, status, introduction, introduction_format, tool_tags(sort_order, tag:tags(id,name))',
       )
       .eq('id', editId)
       .maybeSingle()
@@ -69,6 +70,7 @@ export default async function SubmitPage({ searchParams }: SubmitPageProps) {
       redirect('/account/history')
     }
 
+    const typed = row as unknown as Pick<Tool, 'tool_tags'>
     editingTool = {
       id: row.id,
       slug: row.slug,
@@ -82,6 +84,7 @@ export default async function SubmitPage({ searchParams }: SubmitPageProps) {
       introduction_format: normalizeIntroductionFormat(
         (row as { introduction_format?: string }).introduction_format,
       ),
+      initialTagNames: toolTagLabelsFromTool(typed),
     }
     const ec = cats.find((c) => c.id === row.category_id)
     if (

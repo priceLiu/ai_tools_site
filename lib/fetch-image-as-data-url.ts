@@ -28,13 +28,23 @@ export async function fetchImageAsDataUrl(
 
   const ac = new AbortController()
   const timer = setTimeout(() => ac.abort(), TIMEOUT_MS)
+  let referer = ''
+  try {
+    referer = new URL(u).origin + '/'
+  } catch {
+    referer = ''
+  }
   try {
     const res = await fetch(u, {
       signal: ac.signal,
       redirect: 'follow',
       headers: {
-        'User-Agent': 'AI-Toolset-AdminImport/1.0',
-        Accept: 'image/*,*/*;q=0.8',
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        Accept:
+          'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+        ...(referer ? { Referer: referer } : {}),
+        'Accept-Language': 'en-US,en;q=0.9',
       },
     })
     if (!res.ok) {

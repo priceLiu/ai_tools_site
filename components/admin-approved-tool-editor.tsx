@@ -20,12 +20,17 @@ import { AdminFeaturedToggle } from '@/components/admin-featured-toggle'
 import { AdminDisableToggleButton } from '@/components/admin-disable-toggle-button'
 import { updateApprovedToolAdminAction } from '@/app/admin/tools/actions'
 import {
+  setToolTagsAction,
+  suggestToolTagNamesAction,
+} from '@/app/actions/tool-tags'
+import {
   LISTING_DESCRIPTION_MAX,
   excerptForListing,
   type IntroductionFormat,
 } from '@/lib/introduction-format'
 import { fileToImageDataUrl } from '@/lib/image-data-url'
 import { Upload, X } from 'lucide-react'
+import { ToolTagsEditor } from '@/components/tool-tags-editor'
 import type { Category } from '@/lib/types'
 
 const ADMIN_CAT_NONE = '__admin_cat_none__'
@@ -45,6 +50,8 @@ interface AdminApprovedToolEditorProps {
   staleCategoryId?: string | null
   initialDisabled: boolean
   initialFeatured: boolean
+  /** 已有标签展示名（顺序与库一致） */
+  initialTagNames?: string[]
   /** 缺省或异常时按空列表处理，避免 RSC/缓存抖动导致展开报错 */
   categories?: Category[] | null
 }
@@ -63,6 +70,7 @@ export function AdminApprovedToolEditor({
   staleCategoryId,
   initialDisabled,
   initialFeatured,
+  initialTagNames = [],
   categories: categoriesProp,
 }: AdminApprovedToolEditorProps) {
   const categories = categoriesProp ?? []
@@ -82,6 +90,8 @@ export function AdminApprovedToolEditor({
   const [categoryId, setCategoryId] = useState(
     initialCategoryId ?? ADMIN_CAT_NONE,
   )
+  const [tagNames, setTagNames] = useState<string[]>(() => [...initialTagNames])
+  const [tagsSuggestLoading, setTagsSuggestLoading] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
 
   const [uploadingLogo, setUploadingLogo] = useState(false)
@@ -142,6 +152,31 @@ export function AdminApprovedToolEditor({
     setDescription(next)
   }
 
+  const requestTagSuggest = async () => {
+    setMessage(null)
+    const body = introduction.trim()
+    if (!body) {
+      setMessage('请先填写工具介绍')
+      return
+    }
+    setTagsSuggestLoading(true)
+    try {
+      const r = await suggestToolTagNamesAction({
+        introduction: body,
+        introductionFormat: introFormat,
+        categoryId:
+          categoryId === ADMIN_CAT_NONE || !categoryId ? null : categoryId,
+      })
+      if ('error' in r) {
+        setMessage(r.error)
+        return
+      }
+      setTagNames(r.names)
+    } finally {
+      setTagsSuggestLoading(false)
+    }
+  }
+
   const save = async () => {
     setMessage(null)
     const r = await updateApprovedToolAdminAction({
@@ -158,6 +193,11 @@ export function AdminApprovedToolEditor({
     })
     if (r.error) {
       setMessage(r.error)
+      return
+    }
+    const tr = await setToolTagsAction({ toolId, tagNames })
+    if (tr.error) {
+      setMessage(tr.error)
       return
     }
     setMessage('已保存')
@@ -288,6 +328,15 @@ export function AdminApprovedToolEditor({
           className="font-mono text-sm"
         />
       </div>
+
+      <ToolTagsEditor
+        idPrefix={`admin-tool-${toolId}`}
+        value={tagNames}
+        onChange={setTagNames}
+        disabled={isPending}
+        suggestLoading={tagsSuggestLoading}
+        onRequestSuggest={() => void requestTagSuggest()}
+      />
 
       <div className="space-y-2">
         <Label htmlFor={`admin-tool-logo-url-${toolId}`}>Logo（图片地址或上传）</Label>

@@ -6,9 +6,11 @@ import type { ReactNode } from 'react'
 import { ExternalLink, Sparkles, BookOpen } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ToolIntroductionDisplay } from '@/components/tool-introduction-display'
+import { ToolTagsBar } from '@/components/tool-tags-bar'
 import { normalizeIntroductionFormat } from '@/lib/introduction-format'
 import { ToolCommentsSection } from '@/components/tool-comments-section'
 import { cn } from '@/lib/utils'
+import { toolTagLabelsFromTool } from '@/lib/tool-tags-extract'
 import type { Tool } from '@/lib/types'
 import type { User } from '@supabase/supabase-js'
 
@@ -53,6 +55,7 @@ export function ToolDetailView({
   const desc = (tool.description ?? '').trim()
   const intro = tool.introduction?.trim() ?? ''
   const showIntroCard = alwaysShowIntroductionCard || Boolean(intro)
+  const detailTags = toolTagLabelsFromTool(tool)
 
   const logoBox = (
     <>
@@ -151,6 +154,8 @@ export function ToolDetailView({
           {panelFooter ? <div className="mt-4">{panelFooter}</div> : null}
         </CardContent>
       </Card>
+
+      {detailTags.length > 0 ? <ToolTagsBar labels={detailTags} className="mb-6" /> : null}
 
       {/* 第二版面：工具介绍 */}
       {showIntroCard ? (

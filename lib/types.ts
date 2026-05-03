@@ -39,7 +39,15 @@ export interface Tool {
   created_at: string
   updated_at: string
   category?: Category
+  /** 详情接口：tool_tags → tags */
+  tool_tags?: ToolTagLink[]
 }
+
+export interface ToolTagLink {
+  sort_order: number
+  tag: { id: string; name: string }
+}
+
 
 /**
  * 首页 bundle / 列表卡片展示所需字段（不含 introduction、use_cases 等大列），

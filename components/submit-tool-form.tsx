@@ -40,7 +40,14 @@ import { fileToImageDataUrl } from '@/lib/image-data-url'
 import { Progress } from '@/components/ui/progress'
 import { toolPublicPath } from '@/lib/tool-public-path'
 import { generateToolSlug } from '@/lib/tool-slug'
+import { toolNameDedupKey } from '@/lib/tool-dedup'
+import { assertNoDuplicateToolForSubmitAction } from '@/app/actions/tool-dedup'
+import {
+  setToolTagsAction,
+  suggestToolTagNamesAction,
+} from '@/app/actions/tool-tags'
 import { ToolDetailView } from '@/components/tool-detail-view'
+import { ToolTagsEditor } from '@/components/tool-tags-editor'
 import { Badge } from '@/components/ui/badge'
 import type { Category, NavigationMenuTreeNode, Tool } from '@/lib/types'
 
@@ -58,7 +65,9 @@ export type EditingToolPayload = Pick<
   | 'screenshot_url'
   | 'introduction'
   | 'introduction_format'
->
+> & {
+  initialTagNames?: string[]
+}
 
 const SUBMIT_CAT_NONE = '__submit_cat_none__'
 
@@ -148,6 +157,23 @@ export function SubmitToolForm({
     () => Boolean(editingTool?.description?.trim()),
   )
 
+  const [tagNames, setTagNames] = useState<string[]>(
+    () => editingTool?.initialTagNames ?? [],
+  )
+  const [tagsUserTouched, setTagsUserTouched] = useState(
+    () => Boolean(editingTool),
+  )
+  const [tagsSuggestLoading, setTagsSuggestLoading] = useState(false)
+
+  const [uploadingLogo, setUploadingLogo] = useState(false)
+  const [uploadingScreenshot, setUploadingScreenshot] = useState(false)
+  const [logoReadProgress, setLogoReadProgress] = useState<
+    number | 'indeterminate' | null
+  >(null)
+  const [screenshotReadProgress, setScreenshotReadProgress] = useState<
+    number | 'indeterminate' | null
+  >(null)
+
   const tier1 = useMemo(
     () => buildSubmitNavigationTier1List(navigation, categories),
     [categories, navigation],
@@ -187,14 +213,97 @@ export function SubmitToolForm({
   const showLeafSelect =
     currentRow?.kind === 'menu_group' && currentRow.children.length > 1
 
-  const [uploadingLogo, setUploadingLogo] = useState(false)
-  const [uploadingScreenshot, setUploadingScreenshot] = useState(false)
-  const [logoReadProgress, setLogoReadProgress] = useState<
-    number | 'indeterminate' | null
-  >(null)
-  const [screenshotReadProgress, setScreenshotReadProgress] = useState<
-    number | 'indeterminate' | null
-  >(null)
+  const resolvedSubmitCategoryId = useMemo(() => {
+    if (primaryIdx >= 0 && primaryIdx < tier1.length) {
+      const row = tier1[primaryIdx]
+      if (row.kind === 'menu_leaf') return row.categoryId
+      if (row.children.length === 1) return row.children[0].categoryId
+      if (
+        leafId &&
+        row.children.some((c) => idsEqual(c.categoryId, leafId))
+      ) {
+        return leafId
+      }
+      return ''
+    }
+    if (
+      editingTool?.category_id &&
+      orphanEditingCategory &&
+      idsEqual(leafId, editingTool.category_id)
+    ) {
+      return leafId
+    }
+    return ''
+  }, [
+    primaryIdx,
+    tier1,
+    leafId,
+    editingTool?.category_id,
+    orphanEditingCategory,
+  ])
+
+  const introDbFormat: IntroductionFormat =
+    introKind === 'file' || introKind === 'markdown'
+      ? 'markdown'
+      : introKind === 'html'
+        ? 'html'
+        : 'plain'
+
+  useEffect(() => {
+    if (tagsUserTouched) return
+    const cat = resolvedSubmitCategoryId
+    if (!cat) return
+
+    let cancelled = false
+    const handle = window.setTimeout(async () => {
+      const r = await suggestToolTagNamesAction({
+        introduction: introText.trim(),
+        introductionFormat: introDbFormat,
+        categoryId: cat,
+      })
+      if (cancelled) return
+      if ('names' in r) setTagNames(r.names)
+    }, 520)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(handle)
+    }
+  }, [
+    introText,
+    introDbFormat,
+    resolvedSubmitCategoryId,
+    tagsUserTouched,
+  ])
+
+  const requestTagSuggest = useCallback(async () => {
+    if (!resolvedSubmitCategoryId) {
+      setError('请先选择工具分类')
+      return
+    }
+    const body = introText.trim()
+    if (!body) {
+      setError('请先填写工具介绍')
+      return
+    }
+    setError('')
+    setTagsSuggestLoading(true)
+    try {
+      const r = await suggestToolTagNamesAction({
+        introduction: body,
+        introductionFormat: introDbFormat,
+        categoryId: resolvedSubmitCategoryId,
+      })
+      if ('error' in r) {
+        setError(r.error)
+        return
+      }
+      setTagNames(r.names)
+      setTagsUserTouched(false)
+    } finally {
+      setTagsSuggestLoading(false)
+    }
+  }, [introText, introDbFormat, resolvedSubmitCategoryId])
 
   useEffect(() => {
     if (summaryUserEdited) return
@@ -306,26 +415,7 @@ export function SubmitToolForm({
   }, [editingTool?.slug, websiteUrl])
 
   const previewTool = useMemo((): Tool => {
-    let resolvedCategoryId = ''
-    if (primaryIdx >= 0 && primaryIdx < tier1.length) {
-      const row = tier1[primaryIdx]
-      if (row.kind === 'menu_leaf') {
-        resolvedCategoryId = row.categoryId
-      } else if (row.children.length === 1) {
-        resolvedCategoryId = row.children[0].categoryId
-      } else if (
-        leafId &&
-        row.children.some((c) => idsEqual(c.categoryId, leafId))
-      ) {
-        resolvedCategoryId = leafId
-      }
-    } else if (
-      editingTool?.category_id &&
-      orphanEditingCategory &&
-      idsEqual(leafId, editingTool.category_id)
-    ) {
-      resolvedCategoryId = leafId
-    }
+    const resolvedCategoryId = resolvedSubmitCategoryId
 
     const cat = resolvedCategoryId
       ? categories.find((c) => idsEqual(c.id, resolvedCategoryId))
@@ -348,7 +438,7 @@ export function SubmitToolForm({
     const now = new Date().toISOString()
     return {
       id: editingTool?.id ?? 'preview',
-      name: name.trim() || '工具名称',
+      name: toolNameDedupKey(name) || '工具名称',
       slug: editingTool?.slug ?? 'preview',
       description: summary,
       website_url: ws,
@@ -368,14 +458,15 @@ export function SubmitToolForm({
       created_at: now,
       updated_at: now,
       category: cat,
+      tool_tags: tagNames.map((label, i) => ({
+        sort_order: i,
+        tag: { id: `preview-tag-${i}`, name: label },
+      })),
     }
   }, [
-    primaryIdx,
-    tier1,
-    leafId,
+    resolvedSubmitCategoryId,
     categories,
     editingTool,
-    orphanEditingCategory,
     introText,
     summaryDescription,
     previewFormat,
@@ -384,6 +475,7 @@ export function SubmitToolForm({
     screenshotUrl,
     userId,
     name,
+    tagNames,
   ])
 
   const buildPayload = useCallback(() => {
@@ -422,26 +514,7 @@ export function SubmitToolForm({
     setIsSubmitting(true)
     setError('')
 
-    let resolvedCategoryId = ''
-    if (primaryIdx >= 0 && primaryIdx < tier1.length) {
-      const row = tier1[primaryIdx]
-      if (row.kind === 'menu_leaf') {
-        resolvedCategoryId = row.categoryId
-      } else if (row.children.length === 1) {
-        resolvedCategoryId = row.children[0].categoryId
-      } else if (
-        leafId &&
-        row.children.some((c) => idsEqual(c.categoryId, leafId))
-      ) {
-        resolvedCategoryId = leafId
-      }
-    } else if (
-      editingTool?.category_id &&
-      orphanEditingCategory &&
-      idsEqual(leafId, editingTool.category_id)
-    ) {
-      resolvedCategoryId = leafId
-    }
+    const resolvedCategoryId = resolvedSubmitCategoryId
 
     try {
       if (!name.trim()) throw new Error('请输入工具名称')
@@ -462,13 +535,22 @@ export function SubmitToolForm({
 
       const { body, dbFormat, description } = buildPayload()
 
+      const displayName = toolNameDedupKey(name)
+      const dedup = await assertNoDuplicateToolForSubmitAction({
+        name,
+        introduction: body,
+        categoryId: resolvedCategoryId,
+        ...(editingTool ? { excludeToolId: editingTool.id } : {}),
+      })
+      if (!dedup.ok) throw new Error(dedup.message)
+
       const supabase = createClient()
 
       if (editingTool) {
         const { error: updateError } = await supabase
           .from('tools')
           .update({
-            name: name.trim(),
+            name: displayName,
             slug: editingTool.slug,
             description,
             introduction: body,
@@ -488,28 +570,45 @@ export function SubmitToolForm({
           throw new Error(updateError.message)
         }
 
+        const tagRes = await setToolTagsAction({
+          toolId: editingTool.id,
+          tagNames,
+        })
+        if (tagRes.error) throw new Error(tagRes.error)
+
         router.push('/account/history?resubmitted=true')
         return
       }
 
-      const { error: insertError } = await supabase.from('tools').insert({
-        name: name.trim(),
-        slug: generateToolSlug(name),
-        description,
-        introduction: body,
-        introduction_format: dbFormat,
-        website_url: websiteUrl.trim(),
-        category_id: resolvedCategoryId,
-        logo_url: logoUrl || null,
-        screenshot_url: screenshotUrl || null,
-        user_id: userId,
-        status: 'pending',
-        is_disabled: false,
-      })
+      const { data: inserted, error: insertError } = await supabase
+        .from('tools')
+        .insert({
+          name: displayName,
+          slug: generateToolSlug(displayName),
+          description,
+          introduction: body,
+          introduction_format: dbFormat,
+          website_url: websiteUrl.trim(),
+          category_id: resolvedCategoryId,
+          logo_url: logoUrl || null,
+          screenshot_url: screenshotUrl || null,
+          user_id: userId,
+          status: 'pending',
+          is_disabled: false,
+        })
+        .select('id')
+        .maybeSingle()
 
       if (insertError) {
         throw new Error(insertError.message)
       }
+      if (!inserted?.id) throw new Error('创建工具失败')
+
+      const tagRes = await setToolTagsAction({
+        toolId: inserted.id,
+        tagNames,
+      })
+      if (tagRes.error) throw new Error(tagRes.error)
 
       router.push('/account/history?success=true')
     } catch (err) {
@@ -828,6 +927,18 @@ export function SubmitToolForm({
               </p>
             ) : null}
           </div>
+
+          <ToolTagsEditor
+            idPrefix="submit-tool"
+            value={tagNames}
+            onChange={(next) => {
+              setTagsUserTouched(true)
+              setTagNames(next)
+            }}
+            disabled={isSubmitting}
+            suggestLoading={tagsSuggestLoading}
+            onRequestSuggest={() => void requestTagSuggest()}
+          />
 
           <div className="space-y-2">
             <Label className="text-sm font-medium">工具Logo</Label>
