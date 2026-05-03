@@ -14,6 +14,7 @@ import {
   LayoutGrid,
   Users,
   Upload,
+  BarChart3,
 } from 'lucide-react'
 import { AdminRefreshHomeBundleButton } from '@/components/admin-refresh-home-bundle-button'
 import { AdminBulkExtractTagsButton } from '@/components/admin-bulk-extract-tags-button'
@@ -56,11 +57,13 @@ export function CompactAppSidebar({ variant = 'default' }: CompactAppSidebarProp
   const navigationAdminActive = pathname.startsWith('/admin/navigation')
   const usersAdminActive = pathname.startsWith('/admin/users')
   const importAdminActive = pathname.startsWith('/admin/import-tools')
+  const statsAdminActive = pathname.startsWith('/admin/stats')
   const reviewsAdminActive =
     pathname.startsWith('/admin') &&
     !navigationAdminActive &&
     !usersAdminActive &&
-    !importAdminActive
+    !importAdminActive &&
+    !statsAdminActive
 
   return (
     <aside
@@ -141,6 +144,18 @@ export function CompactAppSidebar({ variant = 'default' }: CompactAppSidebarProp
               >
                 <ClipboardList className="h-4 w-4 shrink-0" />
                 审核列表
+              </Link>
+              <Link
+                href="/admin/stats"
+                className={cn(
+                  'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+                  statsAdminActive
+                    ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                    : 'text-sidebar-foreground hover:bg-sidebar-accent/70',
+                )}
+              >
+                <BarChart3 className="h-4 w-4 shrink-0" />
+                统计模块
               </Link>
               <Link
                 href="/admin/import-tools"
