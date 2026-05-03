@@ -1,12 +1,9 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { AdminToolActions } from '@/components/admin-tool-actions'
-import { AdminApprovedListActions } from '@/components/admin-approved-list-actions'
-import { ToolListRowCard } from '@/components/tool-list-row-card'
-import { submissionStatusConfig } from '@/components/user-submissions-list'
+import { AdminToolsBulkPanel } from '@/components/admin-tools-bulk-panel'
+import { AdminRefreshHomeBundleButton } from '@/components/admin-refresh-home-bundle-button'
 import { buildAdminToolsSearchPattern } from '@/lib/admin-tools-search'
 import {
   Pagination,
@@ -14,8 +11,7 @@ import {
   PaginationItem,
   PaginationLink,
 } from '@/components/ui/pagination'
-import { AdminListPreviewButton } from '@/components/admin-list-preview-button'
-import { Shield, Clock, CheckCircle, XCircle, ExternalLink, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Shield, Clock, CheckCircle, XCircle, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ReactNode } from 'react'
 import type { Tool } from '@/lib/types'
@@ -23,6 +19,8 @@ import type { Tool } from '@/lib/types'
 export const metadata = {
   title: '管理后台 - AI工具集',
 }
+
+export const dynamic = 'force-dynamic'
 
 const PAGE_SIZE = 10
 const ADMIN_SEARCH_LIMIT = 120
@@ -41,10 +39,6 @@ function buildAdminHref(opts: { tab: AdminTab; page?: number; q?: string }) {
   if (opts.page && opts.page > 1) p.set('page', String(opts.page))
   const s = p.toString()
   return s ? `/admin?${s}` : '/admin'
-}
-
-function adminDetailHref(tool: Tool) {
-  return `/admin/tools/${tool.id}`
 }
 
 interface AdminPageProps {
@@ -156,78 +150,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
     searchTools = (data as Tool[]) || []
   }
 
-  function toolStatusBadge(tool: Tool): ReactNode {
-    const status = submissionStatusConfig[tool.status]
-    const StatusIcon = status.icon
-    return (
-      <Badge variant={status.variant} className="shrink-0">
-        <StatusIcon className={`mr-1 h-3 w-3 ${status.className}`} />
-        {status.label}
-      </Badge>
-    )
-  }
-
   const qOpt = searchTrim.length > 0 ? searchTrim : undefined
-
-  const renderCard = (
-    tool: Tool,
-    opts: {
-      showApproveActions?: boolean
-      showApprovedListActions?: boolean
-      statusBadge?: ReactNode
-    } = {},
-  ) => {
-    const {
-      showApproveActions = false,
-      showApprovedListActions = false,
-      statusBadge,
-    } = opts
-    const href = adminDetailHref(tool)
-    return (
-      <ToolListRowCard
-        key={tool.id}
-        tool={tool}
-        logoHref={href}
-        titleHref={href}
-        openLogoInNewTab
-        statusBadge={statusBadge}
-        density="compact"
-        footer={
-          <div className="space-y-1">
-            <a
-              href={tool.website_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex max-w-full items-center gap-1 truncate text-xs text-muted-foreground hover:text-primary"
-            >
-              <ExternalLink className="h-3 w-3 shrink-0" />
-              {tool.website_url}
-            </a>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-xs text-muted-foreground">
-                提交于 {new Date(tool.created_at).toLocaleDateString('zh-CN')}
-              </span>
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                <AdminListPreviewButton tool={tool} />
-                {showApproveActions ? <AdminToolActions toolId={tool.id} /> : null}
-                {showApprovedListActions ? (
-                  <AdminApprovedListActions tool={tool} editHref={href} />
-                ) : null}
-              </div>
-            </div>
-          </div>
-        }
-      />
-    )
-  }
-
-  function renderSearchResultCard(tool: Tool) {
-    return renderCard(tool, {
-      statusBadge: toolStatusBadge(tool),
-      showApproveActions: tool.status === 'pending',
-      showApprovedListActions: tool.status === 'approved',
-    })
-  }
 
   const prevHref =
     safePage > 1
@@ -238,84 +161,55 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
       ? buildAdminHref({ tab, page: safePage + 1, q: qOpt })
       : null
 
+  const tabPagination =
+    totalPages > 1 ? (
+      <AdminPagination
+        safePage={safePage}
+        totalPages={totalPages}
+        prevHref={prevHref}
+        nextHref={nextHref}
+      />
+    ) : null
+
+  const approvedListHint =
+    '预览为新标签打开：已通过 → 公开详情（带 admin_preview，不展示评论）；其余 → 后台预览；点标题进编辑。'
+
   let tabPanel: ReactNode = null
 
   if (tab === 'pending') {
-    tabPanel =
-      tabList.length > 0 ? (
-        <>
-          <div className="space-y-1.5">
-            {tabList.map((t) => renderCard(t, { showApproveActions: true }))}
-          </div>
-          {totalPages > 1 ? (
-            <AdminPagination
-              safePage={safePage}
-              totalPages={totalPages}
-              prevHref={prevHref}
-              nextHref={nextHref}
-            />
-          ) : null}
-        </>
-      ) : (
-        <div className="py-8 text-center text-sm text-muted-foreground">
-          暂无审核中的工具
-        </div>
-      )
+    tabPanel = (
+      <AdminToolsBulkPanel
+        tools={tabList}
+        variant="pending"
+        emptyMessage="暂无审核中的工具"
+        pagination={tabPagination}
+      />
+    )
   } else if (tab === 'approved') {
-    tabPanel =
-      tabList.length > 0 ? (
-        <>
-          <p className="mb-1.5 text-xs text-muted-foreground">
-            预览为新标签打开：已通过 → 公开详情（带 admin_preview，不展示评论）；其余 → 后台预览；点标题进编辑。
-          </p>
-          <div className="space-y-1.5">
-            {tabList.map((t) =>
-              renderCard(t, {
-                showApprovedListActions: true,
-              }),
-            )}
-          </div>
-          {totalPages > 1 ? (
-            <AdminPagination
-              safePage={safePage}
-              totalPages={totalPages}
-              prevHref={prevHref}
-              nextHref={nextHref}
-            />
-          ) : null}
-        </>
-      ) : (
-        <div className="py-8 text-center text-sm text-muted-foreground">
-          暂无已通过的工具
-        </div>
-      )
+    tabPanel = (
+      <AdminToolsBulkPanel
+        tools={tabList}
+        variant="approved"
+        emptyMessage="暂无已通过的工具"
+        approvedHint={approvedListHint}
+        pagination={tabPagination}
+      />
+    )
   } else {
-    tabPanel =
-      tabList.length > 0 ? (
-        <>
-          <div className="space-y-1.5">
-            {tabList.map((t) => renderCard(t))}
-          </div>
-          {totalPages > 1 ? (
-            <AdminPagination
-              safePage={safePage}
-              totalPages={totalPages}
-              prevHref={prevHref}
-              nextHref={nextHref}
-            />
-          ) : null}
-        </>
-      ) : (
-        <div className="py-8 text-center text-sm text-muted-foreground">
-          暂无未通过的工具
-        </div>
-      )
+    tabPanel = (
+      <AdminToolsBulkPanel
+        tools={tabList}
+        variant="rejected"
+        emptyMessage="暂无未通过的工具"
+        pagination={tabPagination}
+      />
+    )
   }
 
   return (
     <main className="p-3 md:p-5">
       <div className="mx-auto max-w-4xl">
-        <div className="mb-4">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
               <Shield className="h-5 w-5 text-primary" />
@@ -327,6 +221,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
               </p>
             </div>
           </div>
+          <AdminRefreshHomeBundleButton />
         </div>
 
         <div className="mb-4 grid gap-2 sm:grid-cols-3 sm:gap-3">
@@ -381,9 +276,11 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
               </Button>
             </div>
             {searchTools.length > 0 ? (
-              <div className="space-y-1.5">
-                {searchTools.map((t) => renderSearchResultCard(t))}
-              </div>
+              <AdminToolsBulkPanel
+                tools={searchTools}
+                variant="search"
+                emptyMessage="没有匹配的工具"
+              />
             ) : (
               <div className="py-6 text-center text-xs text-muted-foreground md:text-sm">
                 没有匹配的工具；仍可在下方 Tab 浏览分页列表。

@@ -37,7 +37,9 @@ import {
   type IntroductionFormat,
 } from '@/lib/introduction-format'
 import { fileToImageDataUrl } from '@/lib/image-data-url'
+import { Progress } from '@/components/ui/progress'
 import { toolPublicPath } from '@/lib/tool-public-path'
+import { generateToolSlug } from '@/lib/tool-slug'
 import { ToolDetailView } from '@/components/tool-detail-view'
 import { Badge } from '@/components/ui/badge'
 import type { Category, NavigationMenuTreeNode, Tool } from '@/lib/types'
@@ -187,6 +189,12 @@ export function SubmitToolForm({
 
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [uploadingScreenshot, setUploadingScreenshot] = useState(false)
+  const [logoReadProgress, setLogoReadProgress] = useState<
+    number | 'indeterminate' | null
+  >(null)
+  const [screenshotReadProgress, setScreenshotReadProgress] = useState<
+    number | 'indeterminate' | null
+  >(null)
 
   useEffect(() => {
     if (summaryUserEdited) return
@@ -208,15 +216,24 @@ export function SubmitToolForm({
     const setUrl = kind === 'logo' ? setLogoUrl : setScreenshotUrl
     const setUploading =
       kind === 'logo' ? setUploadingLogo : setUploadingScreenshot
+    const setReadProgress =
+      kind === 'logo' ? setLogoReadProgress : setScreenshotReadProgress
     setUploading(true)
+    setReadProgress(0)
     setError('')
     try {
-      const dataUrl = await fileToImageDataUrl(file)
+      const dataUrl = await fileToImageDataUrl(file, {
+        onProgress: (p) => {
+          if (p === null) setReadProgress('indeterminate')
+          else setReadProgress(p)
+        },
+      })
       setUrl(dataUrl)
     } catch (err) {
       setError(err instanceof Error ? err.message : '图片处理失败')
     } finally {
       setUploading(false)
+      setReadProgress(null)
     }
   }
 
@@ -400,18 +417,6 @@ export function SubmitToolForm({
     return { body, dbFormat, description }
   }, [introText, introKind, summaryDescription])
 
-  const generateSlug = (toolName: string) => {
-    return (
-      toolName
-        .toLowerCase()
-        .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '-')
-        .replace(/^-|-$/g, '')
-        .substring(0, 50) +
-      '-' +
-      Date.now().toString(36)
-    )
-  }
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
@@ -489,7 +494,7 @@ export function SubmitToolForm({
 
       const { error: insertError } = await supabase.from('tools').insert({
         name: name.trim(),
-        slug: generateSlug(name),
+        slug: generateToolSlug(name),
         description,
         introduction: body,
         introduction_format: dbFormat,
@@ -880,6 +885,25 @@ export function SubmitToolForm({
                 上传Logo
               </Button>
             )}
+            {uploadingLogo && logoReadProgress !== null ? (
+              <div className="space-y-1">
+                <Progress
+                  value={
+                    logoReadProgress === 'indeterminate'
+                      ? undefined
+                      : logoReadProgress
+                  }
+                  className={
+                    logoReadProgress === 'indeterminate' ? 'animate-pulse' : ''
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  {logoReadProgress === 'indeterminate'
+                    ? '读取中…'
+                    : `读取 ${logoReadProgress}%`}
+                </p>
+              </div>
+            ) : null}
             <p className="text-xs text-muted-foreground">
               建议正方形，不超过2MB；将转为 Base64 保存在数据库中。
             </p>
@@ -934,6 +958,27 @@ export function SubmitToolForm({
                 上传截图
               </Button>
             )}
+            {uploadingScreenshot && screenshotReadProgress !== null ? (
+              <div className="space-y-1">
+                <Progress
+                  value={
+                    screenshotReadProgress === 'indeterminate'
+                      ? undefined
+                      : screenshotReadProgress
+                  }
+                  className={
+                    screenshotReadProgress === 'indeterminate'
+                      ? 'animate-pulse'
+                      : ''
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  {screenshotReadProgress === 'indeterminate'
+                    ? '读取中…'
+                    : `读取 ${screenshotReadProgress}%`}
+                </p>
+              </div>
+            ) : null}
             <p className="text-xs text-muted-foreground">
               建议16:9，不超过2MB；将转为 Base64 保存在数据库中。
             </p>

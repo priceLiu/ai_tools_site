@@ -11,6 +11,8 @@ import { recordToolViewBySlug } from '@/lib/client-record-tool-view'
 
 interface ToolListRowCardProps {
   tool: Tool
+  /** 左侧控件（如管理端多选框），置于 Logo 之前 */
+  leadingControl?: ReactNode
   /** Opens when user clicks the logo */
   logoHref: string
   /** Title link; defaults to logoHref */
@@ -42,6 +44,7 @@ export function ToolListRowCard({
   className,
   density = 'default',
   recordViewSlug = null,
+  leadingControl,
 }: ToolListRowCardProps) {
   const nameHref = titleHref ?? logoHref
   const bumpView = () => {
@@ -66,6 +69,14 @@ export function ToolListRowCard({
           compact ? 'gap-2.5 px-3 py-2' : 'gap-4 p-4',
         )}
       >
+        {leadingControl ? (
+          <div
+            className="shrink-0 pt-0.5"
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            {leadingControl}
+          </div>
+        ) : null}
         <Link
           href={logoHref}
           {...logoTabProps}

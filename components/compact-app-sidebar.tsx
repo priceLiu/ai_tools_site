@@ -13,6 +13,7 @@ import {
   User,
   LayoutGrid,
   Users,
+  Upload,
 } from 'lucide-react'
 
 type Variant = 'default' | 'admin'
@@ -52,10 +53,12 @@ export function CompactAppSidebar({ variant = 'default' }: CompactAppSidebarProp
 
   const navigationAdminActive = pathname.startsWith('/admin/navigation')
   const usersAdminActive = pathname.startsWith('/admin/users')
+  const importAdminActive = pathname.startsWith('/admin/import-tools')
   const reviewsAdminActive =
     pathname.startsWith('/admin') &&
     !navigationAdminActive &&
-    !usersAdminActive
+    !usersAdminActive &&
+    !importAdminActive
 
   return (
     <aside
@@ -134,6 +137,18 @@ export function CompactAppSidebar({ variant = 'default' }: CompactAppSidebarProp
               >
                 <ClipboardList className="h-4 w-4 shrink-0" />
                 审核列表
+              </Link>
+              <Link
+                href="/admin/import-tools"
+                className={cn(
+                  'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+                  importAdminActive
+                    ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                    : 'text-sidebar-foreground hover:bg-sidebar-accent/70',
+                )}
+              >
+                <Upload className="h-4 w-4 shrink-0" />
+                批量导入
               </Link>
               <Link
                 href="/admin/navigation"

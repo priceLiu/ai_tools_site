@@ -2,6 +2,7 @@
 
 import { revalidatePath, revalidateTag } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { revalidateHomeToolBundleAction } from '@/app/actions/revalidate-home-tool-bundle'
 import { NAVIGATION_MENU_CACHE_TAG } from '@/lib/navigation-menu-cache-config'
 import { syncMissingCategoriesFromNavigation } from '@/lib/sync-categories-from-navigation'
 import type { Category, NavigationMenuItemRow } from '@/lib/types'
@@ -10,6 +11,10 @@ import {
   validateNavigationMenuItem,
   validateNavSortOrder,
 } from '@/lib/nav-menu-validation'
+import {
+  collectMenuSubtreeHrefsBeforeDelete,
+  tryDeleteOrphanCategoryFromNavHref,
+} from '@/lib/orphan-category-cleanup'
 
 export async function revalidateNavigationMenuCache() {
   revalidateTag(NAVIGATION_MENU_CACHE_TAG, { expire: 0 })
@@ -23,11 +28,12 @@ export type SyncCategoriesFromNavigationResult = {
   message?: string
 }
 
-function revalidateAfterNavOrCategoriesChange() {
+async function revalidateAfterNavOrCategoriesChange() {
   revalidateTag(NAVIGATION_MENU_CACHE_TAG, { expire: 0 })
   revalidatePath('/')
   revalidatePath('/submit')
   revalidatePath('/admin/navigation')
+  await revalidateHomeToolBundleAction()
 }
 
 async function syncMissingCategoriesWithServerClient(
@@ -43,7 +49,7 @@ async function syncMissingCategoriesWithServerClient(
     (navRows ?? []) as NavigationMenuItemRow[],
     (catRows ?? []) as Category[],
   )
-  revalidateAfterNavOrCategoriesChange()
+  await revalidateAfterNavOrCategoriesChange()
   const ok = res.created > 0 || res.errors.length === 0
   return { ok, created: res.created, slugs: res.slugs, errors: res.errors }
 }
@@ -200,6 +206,15 @@ export async function updateNavigationMenuItemAction(
     .update(patch)
     .eq('id', id)
   if (error) return { dbError: error.message }
+
+  if (
+    patch.href !== undefined &&
+    typeof current.href === 'string' &&
+    merged.href !== current.href
+  ) {
+    await tryDeleteOrphanCategoryFromNavHref(supabase, current.href)
+  }
+
   return { sync: await syncMissingCategoriesWithServerClient(supabase) }
 }
 
@@ -209,10 +224,17 @@ export async function deleteNavigationMenuItemAction(
   const { supabase, user, admin } = await requireAdminClient()
   if (!user) return { authMessage: '未登录' }
   if (!admin) return { authMessage: '无权限' }
+
+  const hrefsToCheck = await collectMenuSubtreeHrefsBeforeDelete(supabase, id)
+
   const { error } = await supabase
     .from('navigation_menu_items')
     .delete()
     .eq('id', id)
   if (error) return { dbError: error.message }
+
+  for (const h of hrefsToCheck) {
+    await tryDeleteOrphanCategoryFromNavHref(supabase, h)
+  }
   return { sync: await syncMissingCategoriesWithServerClient(supabase) }
 }

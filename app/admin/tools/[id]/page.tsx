@@ -11,8 +11,9 @@ import {
   toolDetailPageGutterClass,
   toolDetailMaxWidthClass,
 } from '@/lib/tool-detail-layout'
-import type { Tool } from '@/lib/types'
+import type { Category, Tool } from '@/lib/types'
 import { toolPublicPath } from '@/lib/tool-public-path'
+import { normalizeIntroductionFormat } from '@/lib/introduction-format'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -38,6 +39,12 @@ export default async function AdminToolPreviewPage({ params }: PageProps) {
   if (!row) notFound()
 
   const tool = row as Tool
+
+  const { data: categoriesRows } = await supabase
+    .from('categories')
+    .select('*')
+    .order('sort_order')
+  const categories = (categoriesRows || []) as Category[]
   const status = submissionStatusConfig[tool.status]
   const StatusIcon = status.icon
 
@@ -106,19 +113,29 @@ export default async function AdminToolPreviewPage({ params }: PageProps) {
         }
         panelFooter={panelFooter}
       >
-        {tool.status === 'approved' ? (
-          <div className="mt-6">
-            <AdminApprovedToolEditor
-              key={`${tool.id}-${tool.updated_at}`}
-              toolId={tool.id}
-              initialName={tool.name}
-              initialDescription={tool.description}
-              initialWebsiteUrl={tool.website_url}
-              initialDisabled={Boolean(tool.is_disabled)}
-              initialFeatured={Boolean(tool.is_featured)}
-            />
-          </div>
-        ) : null}
+        <div className="mt-6">
+          <AdminApprovedToolEditor
+            key={`${tool.id}-${tool.updated_at}`}
+            toolId={tool.id}
+            toolStatus={tool.status}
+            initialName={tool.name}
+            initialDescription={tool.description}
+            initialWebsiteUrl={tool.website_url}
+            initialLogoUrl={tool.logo_url}
+            initialScreenshotUrl={tool.screenshot_url}
+            initialIntroduction={tool.introduction ?? ''}
+            initialIntroductionFormat={normalizeIntroductionFormat(
+              tool.introduction_format,
+            )}
+            initialCategoryId={tool.category_id}
+            staleCategoryId={
+              tool.category_id && !tool.category ? tool.category_id : null
+            }
+            initialDisabled={Boolean(tool.is_disabled)}
+            initialFeatured={Boolean(tool.is_featured)}
+            categories={categories}
+          />
+        </div>
       </ToolDetailView>
       </div>
     </div>

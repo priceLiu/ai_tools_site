@@ -37,9 +37,12 @@ export function HomeToolSections({ bundle }: HomeToolSectionsProps) {
       />
 
       {homeCategoryBlocks.map(({ root, sections }) => {
+        const visibleSections = sections.filter((s) => s.tools.length > 0)
+        if (visibleSections.length === 0) return null
+
         const showPrimaryBand =
-          sections.length > 1 ||
-          sections.some((s) => !idsEqual(s.category.id, root.id))
+          visibleSections.length > 1 ||
+          visibleSections.some((s) => !idsEqual(s.category.id, root.id))
         return (
           <div key={root.id} className="space-y-4">
             {showPrimaryBand ? (
@@ -54,7 +57,7 @@ export function HomeToolSections({ bundle }: HomeToolSectionsProps) {
                   'border-l-2 border-border/80 py-1 pl-4 md:pl-5',
               )}
             >
-              {sections.map(({ category, tools }) => (
+              {visibleSections.map(({ category, tools }) => (
                 <ToolSection
                   key={category.id}
                   title={category.name}

@@ -36,6 +36,18 @@ function homeSectionAnchorId(href: string): string | null {
   return slug ? `home-cat-${slug}` : null
 }
 
+/** 父级无直接锚点时，按 sort_order 取第一个可解析为首页区块的子项锚点 */
+function firstChildHomeSectionAnchorId(
+  children: NavigationMenuTreeNode[],
+): string | null {
+  const sorted = [...children].sort((a, b) => a.sort_order - b.sort_order)
+  for (const ch of sorted) {
+    const id = homeSectionAnchorId(ch.href)
+    if (id) return id
+  }
+  return null
+}
+
 interface SidebarProps {
   navigation: NavigationMenuTreeNode[]
   enableHomeAnchors?: boolean
@@ -167,6 +179,12 @@ function NavNode({
     )
   }
 
+  const parentSectionId =
+    enableHomeAnchors && pathname === '/'
+      ? homeSectionAnchorId(node.href) ??
+        firstChildHomeSectionAnchorId(children)
+      : null
+
   return (
     <Collapsible className="space-y-0.5">
       <CollapsibleTrigger
@@ -174,6 +192,9 @@ function NavNode({
           itemRowClass(false),
           'w-full text-left [&[data-state=open]>svg:last-child]:rotate-180',
         )}
+        onClick={() => {
+          if (parentSectionId) onHomeSectionNavigate(parentSectionId)
+        }}
       >
         <Icon className="h-5 w-5 shrink-0 text-primary" />
         <span className="hidden flex-1 md:block">{node.label}</span>
