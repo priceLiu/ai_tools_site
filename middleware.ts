@@ -8,13 +8,11 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Match all request paths except:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - images - .svg, .png, .jpg, .jpeg, .gif, .webp
-     * Feel free to modify this pattern to include more paths.
+     * 默认除 _next/static / _next/image / favicon / 图片直链 外都走中间件；
+     * 额外豁免：
+     *  - `about`           ：纯静态介绍页，无任何鉴权诉求；
+     *  - `api/img/`        ：工具 logo 图片代理，移动端一屏几十张图，没必要逐一过 JWT。
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|about(?:/|$)|api/img/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
