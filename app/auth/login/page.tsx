@@ -14,6 +14,7 @@ import { Sparkles } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
+import { invalidateAuthMeCache } from '@/lib/client-auth-me-cache'
 
 function safeRedirectTarget(raw: string | null): string {
   if (!raw || !raw.startsWith('/') || raw.startsWith('//')) {
@@ -42,6 +43,8 @@ export default function Page() {
       })
       const data = (await res.json()) as { error?: string }
       if (!res.ok) throw new Error(data.error || '登录失败')
+      // 清掉登录前可能存在的「未登录态」缓存，避免新页加载时短暂显示登录/注册按钮。
+      invalidateAuthMeCache()
       const next =
         typeof window !== 'undefined'
           ? safeRedirectTarget(

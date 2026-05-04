@@ -48,8 +48,9 @@ function isPersonalAreaActive(pathname: string, href: string) {
 }
 
 /**
- * 个人中心 / 管理后台 共用顶部：头像 + "个人中心" + 邮箱。
- * 管理后台多一行 "管理后台" 徽章；其它部分两个变体一致。
+ * 个人中心 / 管理后台 共用顶部：左侧标识 + 邮箱。
+ * - default 变体：头像 + "个人中心"，链接到 /account/profile；
+ * - admin   变体：Shield 徽标 + "管理后台"，链接到 /admin（不再额外加底下的徽章）。
  */
 function SidebarHeader({
   email,
@@ -62,23 +63,32 @@ function SidebarHeader({
   isAdmin: boolean
   onItemSelect?: () => void
 }) {
+  const title = isAdmin ? '管理后台' : '个人中心'
+  const href = isAdmin ? '/admin' : '/account/profile'
+
   return (
     <div className="mb-4 border-b border-sidebar-border/60 pb-3">
       <Link
-        href="/account/profile"
+        href={href}
         onClick={onItemSelect}
         className="flex items-center gap-2.5 rounded-lg px-1 py-1 transition-colors hover:bg-sidebar-accent/60"
       >
-        <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full border border-sidebar-border bg-muted">
-          {avatarUrl ? (
-            <Image src={avatarUrl} alt="" fill className="object-cover" />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center text-muted-foreground">
-              <User className="h-4 w-4" />
-            </div>
-          )}
-        </div>
-        <span className="font-semibold text-sidebar-foreground">个人中心</span>
+        {isAdmin ? (
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10">
+            <Shield className="h-5 w-5 text-primary" />
+          </div>
+        ) : (
+          <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full border border-sidebar-border bg-muted">
+            {avatarUrl ? (
+              <Image src={avatarUrl} alt="" fill className="object-cover" />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+                <User className="h-4 w-4" />
+              </div>
+            )}
+          </div>
+        )}
+        <span className="font-semibold text-sidebar-foreground">{title}</span>
       </Link>
       <p
         className="mt-2 truncate px-1 text-xs text-muted-foreground"
@@ -86,12 +96,6 @@ function SidebarHeader({
       >
         {email || '—'}
       </p>
-      {isAdmin && (
-        <div className="mt-3 flex items-center gap-2 rounded-lg border border-border bg-card/60 px-3 py-2">
-          <Shield className="h-4 w-4 shrink-0 text-primary" />
-          <span className="text-sm font-semibold text-foreground">管理后台</span>
-        </div>
-      )}
     </div>
   )
 }

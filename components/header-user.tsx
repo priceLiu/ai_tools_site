@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react'
 import { Header } from '@/components/header'
 import { FrontendLoadingHint } from '@/components/frontend-loading-hint'
 import { MobileNavSheet } from '@/components/mobile-nav-sheet'
-import type { AuthUser } from '@/lib/auth/session'
-import type { NavigationMenuTreeNode, Profile } from '@/lib/types'
+import { loadAuthMe, type AuthMe } from '@/lib/client-auth-me-cache'
+import type { NavigationMenuTreeNode } from '@/lib/types'
 
 interface HeaderUserProps {
   /** 桌面侧栏的同一份 navigation；移动端 header 用它做汉堡抽屉 */
@@ -15,46 +15,26 @@ interface HeaderUserProps {
 }
 
 /**
- * 静态/ISR 页面专用：在客户端拉取 session + profile 注入 `<Header>`，
- * 让页面 HTML 不依赖 cookie，可被 Full Route Cache / CDN 复用。
+ * 静态/ISR 页面专用：在客户端通过合并端点 `/api/auth/me` 一次性拿 session + profile。
+ *
+ * 优化点：
+ * - 同 tab 内导航 / 刷新都从内存 + sessionStorage 缓存读取，第二次访问 0ms；
+ * - 首屏拿到缓存就直接渲染真实 header，跳过加载占位；
+ * - 失败降级为未登录态，避免阻塞页面交互。
  */
 export function HeaderUser({
   navigation = [],
   enableHomeAnchors = false,
 }: HeaderUserProps) {
-  const [user, setUser] = useState<AuthUser | null>(null)
-  const [profile, setProfile] = useState<Profile | null>(null)
-  const [loaded, setLoaded] = useState(false)
+  // 初始 null 与 SSR 一致，避免 hydration mismatch；mount 后再读缓存 / 拉取。
+  const [me, setMe] = useState<AuthMe | null>(null)
 
   useEffect(() => {
     let cancelled = false
-
-    void (async () => {
-      try {
-        const r = await fetch('/api/auth/session', { cache: 'no-store' })
-        if (!r.ok) {
-          if (!cancelled) setLoaded(true)
-          return
-        }
-        const j = (await r.json()) as { user: AuthUser | null }
-        if (cancelled) return
-        const u = j.user ?? null
-        setUser(u)
-        if (!u) return
-        const pr = await fetch('/api/account/profile', { cache: 'no-store' })
-        if (!pr.ok) {
-          if (!cancelled) setLoaded(true)
-          return
-        }
-        const p = (await pr.json()) as Profile | null
-        if (!cancelled) setProfile(p)
-      } catch {
-        /* 静默失败：未登录态正常渲染登录/注册按钮 */
-      } finally {
-        if (!cancelled) setLoaded(true)
-      }
-    })()
-
+    // loadAuthMe 内部命中缓存时立即 resolve，UI 在下一个 microtask 就能拿到结果。
+    void loadAuthMe().then((v) => {
+      if (!cancelled) setMe(v)
+    })
     return () => {
       cancelled = true
     }
@@ -68,7 +48,7 @@ export function HeaderUser({
       />
     ) : null
 
-  if (!loaded) {
+  if (!me) {
     return (
       <header className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
         <div className="flex h-14 items-center justify-between gap-3 px-3 md:h-16 md:gap-4 md:px-6">
@@ -81,5 +61,5 @@ export function HeaderUser({
     )
   }
 
-  return <Header user={user} profile={profile} mobileNav={mobileNav} />
+  return <Header user={me.user} profile={me.profile} mobileNav={mobileNav} />
 }

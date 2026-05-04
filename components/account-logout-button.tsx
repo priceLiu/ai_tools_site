@@ -2,10 +2,13 @@
 
 import { LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { invalidateAuthMeCache } from '@/lib/client-auth-me-cache'
+
 export function AccountLogoutButton() {
   const handleLogout = () => {
     void (async () => {
       await fetch('/api/auth/logout', { method: 'POST' })
+      invalidateAuthMeCache()
       window.location.assign('/')
     })()
   }

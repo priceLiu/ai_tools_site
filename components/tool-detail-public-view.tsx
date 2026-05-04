@@ -10,6 +10,7 @@ import { ToolDetailView } from '@/components/tool-detail-view'
 import { trimOrNull } from '@/lib/trim-or-null'
 import { recordToolViewBySlug } from '@/lib/client-record-tool-view'
 import { toolPublicPath } from '@/lib/tool-public-path'
+import { loadAuthMe } from '@/lib/client-auth-me-cache'
 import type { AuthUser } from '@/lib/auth/session'
 import type { Profile, Tool } from '@/lib/types'
 
@@ -73,28 +74,21 @@ export function ToolDetailPublicView({
     let cancelled = false
     void (async () => {
       try {
-        const r = await fetch('/api/auth/session', { cache: 'no-store' })
-        if (!r.ok) return
-        const j = (await r.json()) as { user: AuthUser | null }
+        // 复用 header 已经发的 `/api/auth/me`，命中缓存即同步返回，省掉 2 次 fetch。
+        const me = await loadAuthMe()
         if (cancelled) return
-        setUser(j.user ?? null)
-        if (!j.user) return
+        setUser(me.user)
+        setProfile(me.profile)
+        if (!me.user) return
 
-        const [favRes, profRes] = await Promise.all([
-          fetch(
-            `/api/account/favorite-status?toolId=${encodeURIComponent(tool.id)}`,
-            { cache: 'no-store' },
-          ),
-          fetch('/api/account/profile', { cache: 'no-store' }),
-        ])
+        const favRes = await fetch(
+          `/api/account/favorite-status?toolId=${encodeURIComponent(tool.id)}`,
+          { cache: 'no-store' },
+        )
         if (cancelled) return
         if (favRes.ok) {
           const favJson = (await favRes.json()) as { favorited?: boolean }
           setIsFavorited(Boolean(favJson.favorited))
-        }
-        if (profRes.ok) {
-          const p = (await profRes.json()) as Profile | null
-          setProfile(p)
         }
       } catch {
         /* 静默：游客视图仍可用 */

@@ -14,6 +14,7 @@ import {
 import { Plus, User, LogOut, Settings, Heart, MoreVertical, History } from 'lucide-react'
 import type { AuthUser } from '@/lib/auth/session'
 import type { Profile } from '@/lib/types'
+import { invalidateAuthMeCache } from '@/lib/client-auth-me-cache'
 
 interface HeaderProps {
   user: AuthUser | null
@@ -26,6 +27,7 @@ export function Header({ user, profile, mobileNav }: HeaderProps) {
   const handleLogout = () => {
     void (async () => {
       await fetch('/api/auth/logout', { method: 'POST' })
+      invalidateAuthMeCache()
       window.location.assign('/')
     })()
   }
