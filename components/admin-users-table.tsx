@@ -23,22 +23,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import {
   adminSetProfileAdminAction,
   adminSetProfileDisabledAction,
-  adminDeleteUserAction,
 } from '@/app/admin/users/actions'
 
 interface AdminUsersTableProps {
@@ -60,7 +49,6 @@ export function AdminUsersTable({
   const [pending, setPending] = useState<string | null>(null)
   const [disableTarget, setDisableTarget] = useState<Profile | null>(null)
   const [disableReason, setDisableReason] = useState('')
-  const [deleteTarget, setDeleteTarget] = useState<Profile | null>(null)
 
   if (!profiles.length) {
     return (
@@ -245,27 +233,6 @@ export function AdminUsersTable({
                           解除禁用
                         </Button>
                       )}
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="text-destructive hover:bg-destructive/10"
-                        disabled={
-                          isSelf ||
-                          soleAdminLocked ||
-                          pending === `${p.id}-del`
-                        }
-                        title={
-                          soleAdminLocked && p.is_admin
-                            ? '需先新增其他管理员'
-                            : isSelf
-                              ? '不能删除当前账号'
-                              : undefined
-                        }
-                        onClick={() => setDeleteTarget(p)}
-                      >
-                        删除
-                      </Button>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -329,68 +296,6 @@ export function AdminUsersTable({
         </DialogContent>
       </Dialog>
 
-      <AlertDialog
-        open={deleteTarget != null}
-        onOpenChange={(o) => {
-          if (!o) setDeleteTarget(null)
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>确定删除该用户？</AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="space-y-2 text-sm text-muted-foreground">
-                <p>此操作不可恢复。将删除该用户的资料、登录凭证、收藏，以及其提交的全部工具（含评论、标签关联）。</p>
-                {deleteTarget ? (
-                  <ul className="list-inside list-disc text-foreground">
-                    <li>
-                      邮箱：
-                      <span className="font-mono">
-                        {deleteTarget.registration_email ?? '—'}
-                      </span>
-                    </li>
-                    <li>
-                      昵称：
-                      {deleteTarget.display_name?.trim() || '未设置'}
-                    </li>
-                  </ul>
-                ) : null}
-              </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              disabled={pending === `${deleteTarget?.id}-del`}
-              onClick={(e) => {
-                e.preventDefault()
-                const t = deleteTarget
-                if (!t) return
-                setPending(`${t.id}-del`)
-                startTransition(() => {
-                  void (async () => {
-                    try {
-                      await adminDeleteUserAction(t.id)
-                      toast.success('已删除用户')
-                      setDeleteTarget(null)
-                      router.refresh()
-                    } catch (err) {
-                      toast.error(
-                        err instanceof Error ? err.message : '删除失败',
-                      )
-                    } finally {
-                      setPending(null)
-                    }
-                  })()
-                })
-              }}
-            >
-              确认删除
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </>
   )
 }

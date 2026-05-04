@@ -56,21 +56,5 @@ export async function adminSetProfileDisabledAction(
   revalidatePath('/admin/users')
 }
 
-export async function adminDeleteUserAction(profileUserId: string) {
-  const { user } = await requireAdmin()
-  if (profileUserId === user.id) {
-    throw new Error('不能删除当前登录账号')
-  }
-  const target = await neon.neonGetProfileById(profileUserId)
-  if (!target) throw new Error('用户不存在')
-
-  if (target.is_admin) {
-    const n = await neon.neonCountProfilesAdmins()
-    if (n <= 1) {
-      throw new Error('至少需要保留一名管理员，无法删除该账号')
-    }
-  }
-
-  await neon.neonAdminDeleteUser(profileUserId)
-  revalidatePath('/admin/users')
-}
+// 删除用户的功能已移除（曾经的级联删除导致历史数据丢失）：
+// 管理员只能「禁用」用户。如有极端情况需要彻底清理，请走数据库 SQL Editor + 备份。

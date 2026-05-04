@@ -22,12 +22,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { deleteToolsAdminAction } from '@/app/admin/tools/actions'
+import { setToolsHiddenAdminAction } from '@/app/admin/tools/actions'
 
 export type AdminToolsBulkVariant =
   | 'pending'
   | 'approved'
   | 'rejected'
+  | 'hidden'
   | 'search'
 
 function adminDetailHref(tool: Tool) {
@@ -66,7 +67,15 @@ export function AdminToolsBulkPanel({
   const [selected, setSelected] = useState<string[]>([])
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [deletePending, setDeletePending] = useState(false)
+  const [bulkPending, setBulkPending] = useState(false)
+
+  /** 仅 approved / hidden 这两个 Tab 提供批量操作；search/pending/rejected 不提供 */
+  const bulkAction =
+    variant === 'approved'
+      ? ('hide' as const)
+      : variant === 'hidden'
+        ? ('unhide' as const)
+        : null
 
   const pageIds = tools.map((t) => t.id)
   const pageIdsKey = pageIds.join(',')
@@ -103,13 +112,16 @@ export function AdminToolsBulkPanel({
     }
   }
 
-  const handleConfirmDelete = async () => {
-    if (selected.length === 0) return
+  const handleConfirmBulk = async () => {
+    if (selected.length === 0 || !bulkAction) return
 
     setError(null)
-    setDeletePending(true)
+    setBulkPending(true)
     try {
-      const res = await deleteToolsAdminAction({ toolIds: selected })
+      const res = await setToolsHiddenAdminAction({
+        toolIds: selected,
+        hidden: bulkAction === 'hide',
+      })
       if (res.error) {
         setError(res.error)
         setConfirmOpen(false)
@@ -119,14 +131,15 @@ export function AdminToolsBulkPanel({
       setSelected([])
       router.refresh()
     } finally {
-      setDeletePending(false)
+      setBulkPending(false)
     }
   }
 
   const renderCard = (tool: Tool) => {
     const href = adminDetailHref(tool)
     const showApproveActions = variant === 'pending'
-    const showApprovedListActions = variant === 'approved'
+    const showApprovedListActions =
+      variant === 'approved' || variant === 'hidden'
     const showSearchApprove = variant === 'search' && tool.status === 'pending'
     const showSearchApproved =
       variant === 'search' && tool.status === 'approved'
@@ -144,12 +157,14 @@ export function AdminToolsBulkPanel({
         statusBadge={statusBadge}
         density="compact"
         leadingControl={
-          <Checkbox
-            checked={selected.includes(tool.id)}
-            onCheckedChange={(v) => setRowSelected(tool.id, v === true)}
-            aria-label={`选择 ${tool.name}`}
-            onClick={(e) => e.stopPropagation()}
-          />
+          bulkAction != null ? (
+            <Checkbox
+              checked={selected.includes(tool.id)}
+              onCheckedChange={(v) => setRowSelected(tool.id, v === true)}
+              aria-label={`选择 ${tool.name}`}
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : null
         }
         footer={
           <div className="space-y-1">
@@ -196,37 +211,39 @@ export function AdminToolsBulkPanel({
         <p className="mb-1.5 text-xs text-muted-foreground">{approvedHint}</p>
       ) : null}
 
-      <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2">
-        <label className="flex cursor-pointer items-center gap-2 text-sm">
-          <Checkbox
-            checked={
-              pageIds.length === 0
-                ? false
-                : allOnPageSelected
-                  ? true
-                  : someOnPageSelected
-                    ? 'indeterminate'
-                    : false
-            }
-            onCheckedChange={(v) => toggleSelectAllPage(v === true)}
-            aria-label="全选本页"
-          />
-          <span className="text-muted-foreground">全选本页</span>
-        </label>
-        <Button
-          type="button"
-          variant="destructive"
-          size="sm"
-          disabled={selected.length === 0 || deletePending}
-          onClick={() => setConfirmOpen(true)}
-        >
-          删除选中
-          {selected.length > 0 ? ` (${selected.length})` : null}
-        </Button>
-        {error ? (
-          <span className="text-xs text-red-600">{error}</span>
-        ) : null}
-      </div>
+      {bulkAction != null ? (
+        <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2">
+          <label className="flex cursor-pointer items-center gap-2 text-sm">
+            <Checkbox
+              checked={
+                pageIds.length === 0
+                  ? false
+                  : allOnPageSelected
+                    ? true
+                    : someOnPageSelected
+                      ? 'indeterminate'
+                      : false
+              }
+              onCheckedChange={(v) => toggleSelectAllPage(v === true)}
+              aria-label="全选本页"
+            />
+            <span className="text-muted-foreground">全选本页</span>
+          </label>
+          <Button
+            type="button"
+            variant={bulkAction === 'hide' ? 'destructive' : 'default'}
+            size="sm"
+            disabled={selected.length === 0 || bulkPending}
+            onClick={() => setConfirmOpen(true)}
+          >
+            {bulkAction === 'hide' ? '隐藏选中' : '还原选中'}
+            {selected.length > 0 ? ` (${selected.length})` : null}
+          </Button>
+          {error ? (
+            <span className="text-xs text-red-600">{error}</span>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="space-y-1.5">
         {tools.map((t) => renderCard(t))}
@@ -237,20 +254,34 @@ export function AdminToolsBulkPanel({
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>确认删除所选工具？</AlertDialogTitle>
+            <AlertDialogTitle>
+              {bulkAction === 'hide'
+                ? '确认隐藏所选工具？'
+                : '确认还原所选工具？'}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              将永久删除 {selected.length} 条记录；关联的评论、收藏等会一并级联删除，且无法恢复。
+              {bulkAction === 'hide'
+                ? `将把 ${selected.length} 条工具的 is_disabled 置为 true，前台立即不再展示；数据完整保留，可在「已隐藏」Tab 一键还原。`
+                : `将把 ${selected.length} 条工具的 is_disabled 置为 false，前台恢复展示。`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deletePending}>取消</AlertDialogCancel>
+            <AlertDialogCancel disabled={bulkPending}>取消</AlertDialogCancel>
             <Button
               type="button"
-              disabled={deletePending}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => void handleConfirmDelete()}
+              disabled={bulkPending}
+              className={
+                bulkAction === 'hide'
+                  ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90'
+                  : ''
+              }
+              onClick={() => void handleConfirmBulk()}
             >
-              {deletePending ? '删除中…' : '确认删除'}
+              {bulkPending
+                ? '处理中…'
+                : bulkAction === 'hide'
+                  ? '确认隐藏'
+                  : '确认还原'}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -34,7 +34,13 @@ export default async function AdminUsersPage() {
         <h1 className="mb-2 text-2xl font-bold text-foreground">用户管理</h1>
         <p className="mb-6 text-sm text-muted-foreground">
           设置管理员（<code className="rounded bg-muted px-1">is_admin</code>
-          ）、禁用账号（须填写原因）或删除用户。禁用后用户将被退出且无法登录；删除会一并删除其提交的工具与收藏。
+          ）或禁用账号（须填写原因）。禁用后用户立即被踢出登录态、无法再登录；其提交的工具仍由系统保留，需单独到{' '}
+          <code className="rounded bg-muted px-1">/admin?tab=hidden</code>{' '}
+          管理。
+          <br />
+          <span className="text-xs">
+            出于安全考虑，本页不提供「删除用户」功能；如确需彻底清理，请联系数据库管理员通过 SQL 操作。
+          </span>
         </p>
 
         {loadError ? (

@@ -76,6 +76,10 @@ export default async function AdminStatsPage() {
   const totalTools = toolRows.length
   const publicListedCount = toolRows.filter((t) => isPublicListedTool(t))
     .length
+  /** 已通过但被管理员隐藏（前台不展示）：与 /admin?tab=hidden 一致 */
+  const hiddenApprovedCount = toolRows.filter(
+    (t) => t.status === 'approved' && t.is_disabled === true,
+  ).length
   const uncategorizedCount = toolRows.filter(
     (t) => t.category_id == null || String(t.category_id).trim() === '',
   ).length
@@ -106,6 +110,7 @@ export default async function AdminStatsPage() {
         parentCategoryCount={parentCategoryCount}
         totalTools={totalTools}
         publicListedCount={publicListedCount}
+        hiddenApprovedCount={hiddenApprovedCount}
         featuredToolsCount={featuredToolsCount}
         uncategorizedCount={uncategorizedCount}
         uncategorizedPublicCount={uncategorizedPublicCount}

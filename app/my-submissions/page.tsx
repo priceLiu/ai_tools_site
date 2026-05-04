@@ -5,7 +5,8 @@ interface MySubmissionsPageProps {
 }
 
 export const metadata = {
-  title: '我的提交 - AI工具集',
+  title: '我的提交',
+  robots: { index: false, follow: false },
 }
 
 /** Prefer /account/history — this route keeps old links working */

@@ -1,0 +1,80 @@
+---
+description: SEO conventions for Next.js app/ pages and layouts (metadata / canonical / robots / JSON-LD)
+globs: app/**/page.tsx,app/**/layout.tsx
+alwaysApply: false
+---
+
+# SEO 约定（app/**/page.tsx, app/**/layout.tsx）
+
+详见 `docs/seo.md`。本规则锁住三件事，避免新增页面退步。
+
+## 1. 公开页：必须有 metadata + canonical
+
+任何在 `app/` 下被搜索引擎可访问的 `page.tsx`（首页 / about / category / tool / 未来的 blog 等）必须导出 `metadata` 或 `generateMetadata`，且至少包含 `title`、`description`、`alternates.canonical`。
+
+```tsx
+// ❌ BAD：靠 layout 默认 metadata，没有 canonical
+export default async function ToolPage(...) { /* ... */ }
+
+// ✅ GOOD
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const tool = await getToolBySlugCached(slug)
+  if (!tool) return { title: '工具未找到', robots: { index: false } }
+  const path = toolPublicPath(slug)
+  return {
+    title: tool.name,
+    description: tool.description,
+    alternates: { canonical: path },
+    openGraph: { type: 'article', url: path, images: tool.logo_url ? [tool.logo_url] : undefined },
+    twitter: { card: 'summary_large_image' },
+  }
+}
+```
+
+- canonical 永远写**站点相对路径**（如 `/tool/abc`），由 root layout 的 `metadataBase` 自动转绝对。
+- 不要硬编码 `https://...` 域名 —— 用 `lib/site-url.ts` 的 `getSiteUrl()` / `getSiteUrlObject()`。
+
+## 2. 后台 / 鉴权 / 工具型页：显式 noindex
+
+下列页面必须显式 `robots: { index: false, follow: false }`，不能依赖 `app/robots.ts` 单边阻挡：
+
+- `app/admin/**`、`app/account/**`、`app/auth/**`
+- `app/submit/**`、`app/favorites/**`、`app/my-submissions/**`、`app/search/**`
+- `app/diag/**`、`app/echo/**`
+
+最简洁做法：在该段 `layout.tsx` 顶部一次性挂：
+
+```tsx
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+}
+```
+
+## 3. 结构化数据（JSON-LD）：可结构化的内容必加
+
+- 工具详情页：`SoftwareApplication` + `BreadcrumbList`（参见 `app/tool/[slug]/page.tsx`）。
+- 分类列表页：`ItemList` + `BreadcrumbList`（参见 `app/category/[slug]/page.tsx`）。
+- 首页：`WebSite`（含 `SearchAction`） + `Organization`（参见 `app/page.tsx`）。
+
+写法：
+
+```tsx
+<script
+  type="application/ld+json"
+  dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+/>
+```
+
+URL 字段一律用 `getSiteUrl()` 拼接，不要硬编码。
+
+## 自检清单
+
+新增 / 修改一个 `app/**/page.tsx` 时检查：
+
+- [ ] 公开页：`title` + `description` + `alternates.canonical` 都有
+- [ ] 公开页：openGraph / twitter 至少有 type + url + title + description
+- [ ] 后台/鉴权/工具页：`robots: { index: false, follow: false }`
+- [ ] 内容可结构化：补一段 `application/ld+json`
+- [ ] `app/sitemap.ts` 是否需要把新公开 URL 纳入

@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import { getAuthUser } from '@/lib/auth/session'
 import { redirect } from 'next/navigation'
 import { AccountChrome } from '@/components/account-chrome'
@@ -7,6 +8,11 @@ import {
   toolDetailPageGutterClass,
 } from '@/lib/tool-detail-layout'
 import { getSessionProfile } from '@/lib/server-profile'
+
+/** 个人中心不进搜索引擎索引（与 robots.ts 双重保险）。 */
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+}
 
 export default async function AccountLayout({
   children,

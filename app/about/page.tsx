@@ -19,15 +19,22 @@ export const dynamic = 'force-static'
 export const revalidate = false
 
 export const metadata: Metadata = {
-  title: 'AI 工具集 · 项目简介',
+  title: '项目简介',
   description:
     '汇集全网热门 AI 工具，按场景分类，支持用户提交新工具、社区共建。注册登录后可提交工具，经管理员审核后免费上架。',
   keywords:
-    'AI 工具,人工智能,AI 工具集,AI 导航,AI 写作,AI 绘画,AI 编程,AI 学术,工具提交,Sparkles',
+    'AI 工具, 人工智能, AI 工具集, AI 导航, AI 写作, AI 绘画, AI 编程, AI 学术, 工具提交',
+  alternates: { canonical: '/about' },
   openGraph: {
+    type: 'website',
+    url: '/about',
     title: 'AI 工具集 · 项目简介',
     description: '汇集全网热门 AI 工具，按场景分类，社区共建。',
-    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'AI 工具集 · 项目简介',
+    description: '汇集全网热门 AI 工具，按场景分类，社区共建。',
   },
 }
 

@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import { getAuthUser } from '@/lib/auth/session'
 import { redirect } from 'next/navigation'
 import { Header } from '@/components/header'
@@ -7,6 +8,11 @@ import { Toaster } from '@/components/ui/toaster'
 import { Toaster as SonnerToaster } from 'sonner'
 import type { Profile } from '@/lib/types'
 import { getSessionProfile } from '@/lib/server-profile'
+
+/** 管理后台不进搜索引擎索引（与 robots.ts 双重保险）。 */
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+}
 
 export default async function AdminLayout({
   children,

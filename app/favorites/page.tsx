@@ -8,7 +8,8 @@ import { getSessionProfile } from '@/lib/server-profile'
 import * as neon from '@/lib/neon/data'
 
 export const metadata = {
-  title: '我的收藏 - AI工具集',
+  title: '我的收藏',
+  robots: { index: false, follow: false },
 }
 
 export default async function FavoritesPage() {

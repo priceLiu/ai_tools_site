@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import { Sidebar } from '@/components/sidebar'
 import { HeaderUser } from '@/components/header-user'
 import { HomeToolSections } from '@/components/home-tool-sections'
@@ -5,15 +6,46 @@ import { HomeScrollToHash } from '@/components/home-scroll-to-hash'
 import { Sparkles } from 'lucide-react'
 import { getHomeToolBundle } from '@/lib/cached-home-data'
 import { getNavigationMenuTreeStatic } from '@/lib/navigation-menu'
+import { getSiteUrl } from '@/lib/site-url'
 
 /** ISR：60s TTL；后台变更通过 `revalidateTag` / `revalidatePath('/')` 立即推送 */
 export const revalidate = 60
+
+/** 首页 metadata：显式 canonical，title 走 layout 默认（不重复挂模板）。 */
+export const metadata: Metadata = {
+  alternates: { canonical: '/' },
+  openGraph: { url: '/', type: 'website' },
+}
 
 export default async function HomePage() {
   const [bundle, navigation] = await Promise.all([
     getHomeToolBundle(),
     getNavigationMenuTreeStatic(),
   ])
+
+  const siteUrl = getSiteUrl()
+  /**
+   * `WebSite` + `SearchAction`：Google 可能在搜索结果展示站内搜索框；
+   * `Organization` 给品牌主体一个稳定标识。
+   */
+  const websiteLd = {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: 'AI 工具集',
+    url: `${siteUrl}/`,
+    potentialAction: {
+      '@type': 'SearchAction',
+      target: `${siteUrl}/search?q={search_term_string}`,
+      'query-input': 'required name=search_term_string',
+    },
+  }
+  const orgLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Organization',
+    name: 'AI 工具集',
+    url: `${siteUrl}/`,
+    logo: `${siteUrl}/icon.svg`,
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -39,6 +71,15 @@ export default async function HomePage() {
           <HomeToolSections bundle={bundle} />
         </main>
       </div>
+
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(orgLd) }}
+      />
     </div>
   )
 }

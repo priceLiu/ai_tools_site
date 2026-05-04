@@ -15,7 +15,8 @@ interface SearchPageProps {
 export async function generateMetadata({ searchParams }: SearchPageProps) {
   const { q } = await searchParams
   return {
-    title: q ? `搜索: ${q} - AI工具集` : '搜索 - AI工具集',
+    title: q ? `搜索: ${q}` : '搜索',
+    robots: { index: false, follow: false },
   }
 }
 

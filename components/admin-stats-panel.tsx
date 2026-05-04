@@ -15,6 +15,8 @@ export type AdminStatsPanelProps = {
   totalTools: number
   /** 已通过且未禁用，与前台列表一致 */
   publicListedCount: number
+  /** 已通过但被管理员隐藏（is_disabled=true），前台不展示 */
+  hiddenApprovedCount: number
   featuredToolsCount: number
   uncategorizedCount: number
   /** 未填分类中，仍已通过且未禁用的条数 */
@@ -26,6 +28,7 @@ export function AdminStatsPanel({
   parentCategoryCount,
   totalTools,
   publicListedCount,
+  hiddenApprovedCount,
   featuredToolsCount,
   uncategorizedCount,
   uncategorizedPublicCount,
@@ -112,7 +115,7 @@ export function AdminStatsPanel({
 
   return (
     <div className="space-y-8">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>一级分类（父分类）数</CardDescription>
@@ -131,11 +134,26 @@ export function AdminStatsPanel({
             <CardTitle className="text-3xl tabular-nums">{totalTools}</CardTitle>
           </CardHeader>
           <CardContent className="text-xs text-muted-foreground">
-            含待审核、已拒绝、已禁用等。前台可见（
+            含待审核、已拒绝、已隐藏等。前台可见（
             <code className="rounded bg-muted px-1">已通过</code>
             且未
-            <code className="rounded bg-muted px-1">禁用</code>
+            <code className="rounded bg-muted px-1">隐藏</code>
             ）：<strong className="text-foreground">{publicListedCount}</strong>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>已隐藏（不展示）</CardDescription>
+            <CardTitle className="text-3xl tabular-nums">
+              {hiddenApprovedCount}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-xs text-muted-foreground">
+            <code className="rounded bg-muted px-1">approved</code> 且{' '}
+            <code className="rounded bg-muted px-1">is_disabled=true</code>
+            。前台不展示，可在
+            <code className="rounded bg-muted px-1">/admin?tab=hidden</code>
+            一键还原。
           </CardContent>
         </Card>
         <Card>
@@ -148,9 +166,9 @@ export function AdminStatsPanel({
           <CardContent className="text-xs text-muted-foreground">
             与首页热门区块一致：须
             <code className="rounded bg-muted px-1">approved</code>、
-            未禁用且
+            未隐藏且
             <code className="rounded bg-muted px-1">is_featured</code>
-            （未通过/禁用即使勾选热门也不展示）
+            （未通过/隐藏即使勾选热门也不展示）
           </CardContent>
         </Card>
         <Card>

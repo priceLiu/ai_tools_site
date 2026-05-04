@@ -1,5 +1,6 @@
 import { cache } from 'react'
 import { notFound } from 'next/navigation'
+import type { Metadata } from 'next'
 import { Sidebar } from '@/components/sidebar'
 import { HeaderUser } from '@/components/header-user'
 import { ToolCard } from '@/components/tool-card'
@@ -7,6 +8,7 @@ import type { Tool } from '@/lib/types'
 import { getNavigationMenuTreeStatic } from '@/lib/navigation-menu'
 import { collectSubtreeCategoryIds } from '@/lib/category-tree'
 import * as neon from '@/lib/neon/data'
+import { getSiteUrl } from '@/lib/site-url'
 import {
   Flame,
   MessageCircle,
@@ -66,23 +68,54 @@ export async function generateStaticParams() {
   }
 }
 
-export async function generateMetadata({ params }: CategoryPageProps) {
+export async function generateMetadata({
+  params,
+}: CategoryPageProps): Promise<Metadata> {
   const { slug } = await params
 
   if (slug === 'hot') {
+    const desc = '汇总站内最受欢迎的 AI 工具：按访问量、收藏数综合排序，覆盖全场景。'
     return {
-      title: '热门工具 - AI工具集',
-      description: '发现最受欢迎的AI工具',
+      title: '热门 AI 工具推荐',
+      description: desc,
+      keywords: '热门 AI 工具, AI 工具排行, AI 工具推荐',
+      alternates: { canonical: '/category/hot' },
+      openGraph: {
+        type: 'website',
+        url: '/category/hot',
+        title: '热门 AI 工具推荐',
+        description: desc,
+      },
+      twitter: {
+        card: 'summary_large_image',
+        title: '热门 AI 工具推荐',
+        description: desc,
+      },
     }
   }
 
   const cat = await getCategoryBySlugCached(slug)
   if (!cat) {
-    return { title: '分类未找到 - AI工具集' }
+    return { title: '分类未找到', robots: { index: false } }
   }
+  const path = `/category/${encodeURIComponent(slug)}`
+  const desc = `${cat.name}相关 AI 工具精选：按热度与最新收录综合排序，覆盖该领域常用工具与新兴产品。`
   return {
-    title: `${cat.name} - AI工具集`,
-    description: `发现最好用的${cat.name}AI工具`,
+    title: `${cat.name} · AI 工具推荐`,
+    description: desc,
+    keywords: `${cat.name}, ${cat.name} AI 工具, AI 工具推荐`,
+    alternates: { canonical: path },
+    openGraph: {
+      type: 'website',
+      url: path,
+      title: `${cat.name} · AI 工具推荐`,
+      description: desc,
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: `${cat.name} · AI 工具推荐`,
+      description: desc,
+    },
   }
 }
 
@@ -112,6 +145,43 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
   }
 
   const Icon = iconMap[categoryIcon] || Sparkles
+
+  const siteUrl = getSiteUrl()
+  const path =
+    slug === 'hot' ? '/category/hot' : `/category/${encodeURIComponent(slug)}`
+
+  /** ItemList + BreadcrumbList，让 Google 把分类页识别为「商品/工具列表」并能展示子条目。 */
+  const itemListLd = {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    name: `${categoryName} · AI 工具推荐`,
+    numberOfItems: tools.length,
+    itemListElement: tools.slice(0, 30).map((t, i) => ({
+      '@type': 'ListItem',
+      position: i + 1,
+      url: `${siteUrl}/tool/${encodeURIComponent(t.slug)}`,
+      name: t.name,
+    })),
+  }
+
+  const breadcrumbLd = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      {
+        '@type': 'ListItem',
+        position: 1,
+        name: '首页',
+        item: `${siteUrl}/`,
+      },
+      {
+        '@type': 'ListItem',
+        position: 2,
+        name: categoryName,
+        item: `${siteUrl}${path}`,
+      },
+    ],
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -158,6 +228,15 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
           </div>
         </main>
       </div>
+
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }}
+      />
     </div>
   )
 }

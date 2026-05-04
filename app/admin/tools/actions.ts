@@ -124,11 +124,19 @@ export async function updateApprovedToolAdminAction(input: {
   return {}
 }
 
-const BULK_DELETE_MAX = 100
+const BULK_HIDE_MAX = 100
 
-export async function deleteToolsAdminAction(input: {
+/**
+ * 批量隐藏 / 还原工具（替代以前的「批量删除工具」）。
+ *
+ * 工具一律不删除，避免误操作造成不可恢复的数据丢失：
+ *  - hidden=true  → `is_disabled=true`，前台不再展示
+ *  - hidden=false → `is_disabled=false`，前台恢复展示
+ */
+export async function setToolsHiddenAdminAction(input: {
   toolIds: string[]
-}): Promise<{ error?: string; deleted?: number }> {
+  hidden: boolean
+}): Promise<{ error?: string; affected?: number }> {
   const user = await getAuthUser()
   if (!user) return { error: '未登录' }
 
@@ -137,21 +145,21 @@ export async function deleteToolsAdminAction(input: {
 
   const ids = [...new Set(input.toolIds.map((id) => id.trim()).filter(Boolean))]
   if (ids.length === 0) return { error: '未选择工具' }
-  if (ids.length > BULK_DELETE_MAX) {
-    return { error: `单次最多删除 ${BULK_DELETE_MAX} 条` }
+  if (ids.length > BULK_HIDE_MAX) {
+    return { error: `单次最多操作 ${BULK_HIDE_MAX} 条` }
   }
 
   const rows = await neon.neonListToolsByIdsMeta(ids)
-  if (!rows?.length) return { error: '未找到可删除的工具' }
+  if (!rows?.length) return { error: '未找到可操作的工具' }
 
   const rowIds = rows.map((r) => r.id)
-  const n = await neon.neonAdminDeleteToolsByIds(rowIds)
+  const n = await neon.neonAdminBulkSetToolsDisabled(rowIds, input.hidden)
   if (n !== rowIds.length) {
     return {
       error:
         n === 0
-          ? '删除未生效（0 条）。请检查 Neon 连接与 tools 表。'
-          : `删除不完整（${n}/${rowIds.length}）。请重试或检查数据库。`,
+          ? '更新未生效（0 条）。请检查 Neon 连接与 tools 表。'
+          : `更新不完整（${n}/${rowIds.length}）。请重试或检查数据库。`,
     }
   }
 
@@ -168,5 +176,5 @@ export async function deleteToolsAdminAction(input: {
     revalidatePath(`/admin/tools/${row.id}`)
   }
 
-  return { deleted: rows.length }
+  return { affected: rows.length }
 }

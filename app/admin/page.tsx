@@ -12,10 +12,19 @@ import {
   PaginationItem,
   PaginationLink,
 } from '@/components/ui/pagination'
-import { Shield, Clock, CheckCircle, XCircle, ChevronLeft, ChevronRight } from 'lucide-react'
+import {
+  Shield,
+  Clock,
+  CheckCircle,
+  XCircle,
+  EyeOff,
+  ChevronLeft,
+  ChevronRight,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ReactNode } from 'react'
 import type { Tool } from '@/lib/types'
+import type { AdminToolTab } from '@/lib/neon/data'
 
 export const metadata = {
   title: '管理后台 - AI工具集',
@@ -26,10 +35,10 @@ export const dynamic = 'force-dynamic'
 const PAGE_SIZE = 10
 const ADMIN_SEARCH_LIMIT = 120
 
-type AdminTab = 'pending' | 'approved' | 'rejected'
+type AdminTab = AdminToolTab
 
 function parseTab(raw: string | undefined): AdminTab {
-  if (raw === 'approved' || raw === 'rejected') return raw
+  if (raw === 'approved' || raw === 'rejected' || raw === 'hidden') return raw
   return 'pending'
 }
 
@@ -87,10 +96,12 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
     pendingTotal,
     approvedTotal,
     rejectedTotal,
+    hiddenTotal,
   ] = await Promise.all([
-    neon.neonCountToolsByStatus('pending'),
-    neon.neonCountToolsByStatus('approved'),
-    neon.neonCountToolsByStatus('rejected'),
+    neon.neonCountAdminToolTab('pending'),
+    neon.neonCountAdminToolTab('approved'),
+    neon.neonCountAdminToolTab('rejected'),
+    neon.neonCountAdminToolTab('hidden'),
   ])
 
   const totalForTab =
@@ -98,25 +109,16 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
       ? pendingTotal
       : tab === 'approved'
         ? approvedTotal
-        : rejectedTotal
+        : tab === 'hidden'
+          ? hiddenTotal
+          : rejectedTotal
 
   const totalPages = Math.max(1, Math.ceil(totalForTab / PAGE_SIZE))
   const safePage = Math.min(pageNum, totalPages)
   const from = (safePage - 1) * PAGE_SIZE
   const to = from + PAGE_SIZE - 1
 
-  const fetchTabSlice = async (status: 'pending' | 'approved' | 'rejected') => {
-    return neon.neonListToolsAdminTab(status, from, to)
-  }
-
-  let tabList: Tool[] = []
-  if (tab === 'pending') {
-    tabList = await fetchTabSlice('pending')
-  } else if (tab === 'approved') {
-    tabList = await fetchTabSlice('approved')
-  } else {
-    tabList = await fetchTabSlice('rejected')
-  }
+  const tabList: Tool[] = await neon.neonListToolsAdminTab(tab, from, to)
 
   let searchTools: Tool[] = []
   if (hasSearch && pattern) {
@@ -145,7 +147,9 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
     ) : null
 
   const approvedListHint =
-    '预览为新标签打开：已通过 → 公开详情（带 admin_preview，不展示评论）；其余 → 后台预览；点标题进编辑。'
+    '预览为新标签打开：已通过 → 公开详情（带 admin_preview，不展示评论）；其余 → 后台预览；点标题进编辑。勾选可批量「隐藏」（不删除）。'
+  const hiddenListHint =
+    '已隐藏 = 已通过但 is_disabled=true，前台不展示。勾选可批量「还原」回前台。'
 
   let tabPanel: ReactNode = null
 
@@ -165,6 +169,16 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
         variant="approved"
         emptyMessage="暂无已通过的工具"
         approvedHint={approvedListHint}
+        pagination={tabPagination}
+      />
+    )
+  } else if (tab === 'hidden') {
+    tabPanel = (
+      <AdminToolsBulkPanel
+        tools={tabList}
+        variant="hidden"
+        emptyMessage="暂无已隐藏的工具"
+        approvedHint={hiddenListHint}
         pagination={tabPagination}
       />
     )
@@ -200,7 +214,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           </div>
         </div>
 
-        <div className="mb-4 grid gap-2 sm:grid-cols-3 sm:gap-3">
+        <div className="mb-4 grid gap-2 grid-cols-2 sm:grid-cols-4 sm:gap-3">
           <Card>
             <CardContent className="flex items-center gap-3 p-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-yellow-100">
@@ -219,7 +233,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
               </div>
               <div>
                 <p className="text-xl font-bold text-foreground">{approvedTotal}</p>
-                <p className="text-xs text-muted-foreground">已通过</p>
+                <p className="text-xs text-muted-foreground">已通过（可见）</p>
               </div>
             </CardContent>
           </Card>
@@ -231,6 +245,17 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
               <div>
                 <p className="text-xl font-bold text-foreground">{rejectedTotal}</p>
                 <p className="text-xs text-muted-foreground">未通过</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="flex items-center gap-3 p-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-200">
+                <EyeOff className="h-4 w-4 text-slate-600" />
+              </div>
+              <div>
+                <p className="text-xl font-bold text-foreground">{hiddenTotal}</p>
+                <p className="text-xs text-muted-foreground">已隐藏</p>
               </div>
             </CardContent>
           </Card>
@@ -286,6 +311,13 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           >
             <XCircle className="h-4 w-4 shrink-0" />
             未通过 ({rejectedTotal})
+          </TabLink>
+          <TabLink
+            href={buildAdminHref({ tab: 'hidden', page: 1, q: qOpt })}
+            active={tab === 'hidden'}
+          >
+            <EyeOff className="h-4 w-4 shrink-0" />
+            已隐藏 ({hiddenTotal})
           </TabLink>
         </div>
 

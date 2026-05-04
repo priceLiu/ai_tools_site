@@ -20,8 +20,9 @@ type SubmitPageProps = {
 export async function generateMetadata({ searchParams }: SubmitPageProps) {
   const { edit } = await searchParams
   return {
-    title: edit ? '修改并重新提交 - AI工具集' : 'AI 工具提交 - AI工具集',
-    description: '提交你发现的优质AI工具',
+    title: edit ? '修改并重新提交' : 'AI 工具提交',
+    description: '提交你发现的优质 AI 工具',
+    robots: { index: false, follow: false },
   }
 }
 

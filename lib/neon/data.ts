@@ -378,22 +378,110 @@ export async function neonCountToolsByStatus(
   return Number((rows[0] as { n: number }).n ?? 0)
 }
 
+/**
+ * 管理后台 Tab 语义（与 `app/admin/page.tsx` 一一对应）：
+ *  - pending  : status='pending'
+ *  - approved : status='approved' AND COALESCE(is_disabled,false)=false  ←公网真正可见
+ *  - rejected : status='rejected'
+ *  - hidden   : status='approved' AND is_disabled=true                    ←已通过但被隐藏
+ *
+ * 注意：approved 不再混入隐藏的工具（与历史行为相比是 narrow），
+ * 隐藏的工具只能在 hidden Tab 里看到 / 还原。
+ */
+export type AdminToolTab = 'pending' | 'approved' | 'rejected' | 'hidden'
+
+export async function neonCountAdminToolTab(
+  tab: AdminToolTab,
+): Promise<number> {
+  const sql = getNeonSql()
+  if (tab === 'pending') {
+    const r = await sql`
+      SELECT count(*)::int AS n FROM tools WHERE status = 'pending'
+    `
+    return Number((r[0] as { n: number }).n ?? 0)
+  }
+  if (tab === 'rejected') {
+    const r = await sql`
+      SELECT count(*)::int AS n FROM tools WHERE status = 'rejected'
+    `
+    return Number((r[0] as { n: number }).n ?? 0)
+  }
+  if (tab === 'hidden') {
+    const r = await sql`
+      SELECT count(*)::int AS n
+      FROM tools
+      WHERE status = 'approved' AND is_disabled = true
+    `
+    return Number((r[0] as { n: number }).n ?? 0)
+  }
+  const r = await sql`
+    SELECT count(*)::int AS n
+    FROM tools
+    WHERE status = 'approved' AND COALESCE(is_disabled, false) = false
+  `
+  return Number((r[0] as { n: number }).n ?? 0)
+}
+
 export async function neonListToolsAdminTab(
-  status: 'pending' | 'approved' | 'rejected',
+  tab: AdminToolTab,
   from: number,
   to: number,
 ): Promise<Tool[]> {
   const sql = getNeonSql()
   const limit = to - from + 1
+
+  if (tab === 'hidden') {
+    const rows = await sql`
+      SELECT t.*, row_to_json(c.*) AS category
+      FROM tools t
+      LEFT JOIN categories c ON c.id = t.category_id
+      WHERE t.status = 'approved' AND t.is_disabled = true
+      ORDER BY t.updated_at DESC NULLS LAST, t.created_at DESC
+      OFFSET ${from} LIMIT ${limit}
+    `
+    return (rows as Record<string, unknown>[]).map(rowToTool)
+  }
+
+  if (tab === 'approved') {
+    const rows = await sql`
+      SELECT t.*, row_to_json(c.*) AS category
+      FROM tools t
+      LEFT JOIN categories c ON c.id = t.category_id
+      WHERE t.status = 'approved' AND COALESCE(t.is_disabled, false) = false
+      ORDER BY t.created_at DESC
+      OFFSET ${from} LIMIT ${limit}
+    `
+    return (rows as Record<string, unknown>[]).map(rowToTool)
+  }
+
   const rows = await sql`
     SELECT t.*, row_to_json(c.*) AS category
     FROM tools t
     LEFT JOIN categories c ON c.id = t.category_id
-    WHERE t.status = ${status}
+    WHERE t.status = ${tab}
     ORDER BY t.created_at DESC
     OFFSET ${from} LIMIT ${limit}
   `
   return (rows as Record<string, unknown>[]).map(rowToTool)
+}
+
+/**
+ * 批量更新 tools.is_disabled —— 用于「批量隐藏」「批量还原」。
+ * 返回实际被更新的行数。
+ */
+export async function neonAdminBulkSetToolsDisabled(
+  ids: string[],
+  disabled: boolean,
+): Promise<number> {
+  if (!ids.length) return 0
+  const sql = getNeonSql()
+  const rows = await sql`
+    UPDATE tools
+    SET is_disabled = ${disabled}, updated_at = now()
+    WHERE id = ANY(${ids}::uuid[])
+    RETURNING id
+  `
+  return rows.length
 }
 
 export async function neonListToolsAdminSearch(
@@ -1253,21 +1341,9 @@ export async function neonUpdateProfileAdminFlags(input: {
   }
 }
 
-/**
- * 删除用户及其提交的工具、收藏；auth_credentials 随 profiles ON DELETE CASCADE 一并删除。
- */
-export async function neonAdminDeleteUser(userId: string): Promise<void> {
-  const sql = getNeonSql()
-  const toolRows = await sql`
-    SELECT id FROM tools WHERE user_id = ${userId}
-  `
-  const ids = (toolRows as { id: string }[]).map((r) => String(r.id))
-  if (ids.length > 0) {
-    await neonAdminDeleteToolsByIds(ids)
-  }
-  await sql`DELETE FROM favorites WHERE user_id = ${userId}`
-  await sql`DELETE FROM profiles WHERE id = ${userId}`
-}
+// `neonAdminDeleteUser` / `neonAdminCountToolsByUser` 已移除：
+// 管理员后台不再允许删除用户，避免历史教训：原实现会级联删除该用户提交的全部工具。
+// 仅保留「禁用」（`profiles.is_disabled = true` + `disabled_reason`）。
 
 export async function neonGetFavoritePair(
   userId: string,
