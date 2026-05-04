@@ -10,7 +10,7 @@ export function HomeScrollToHash() {
   useEffect(() => {
     if (pathname !== '/') return
 
-    let timeoutId: ReturnType<typeof setTimeout> | undefined
+    let timeoutId: number | undefined
 
     const scrollToHash = (hash: string) => {
       const el = document.getElementById(hash)

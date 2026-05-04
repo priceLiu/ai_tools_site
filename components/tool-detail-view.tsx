@@ -2,7 +2,7 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import type { ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { ExternalLink, Sparkles, BookOpen } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ToolIntroductionDisplay } from '@/components/tool-introduction-display'
@@ -12,7 +12,8 @@ import { ToolCommentsSection } from '@/components/tool-comments-section'
 import { cn } from '@/lib/utils'
 import { toolTagLabelsFromTool } from '@/lib/tool-tags-extract'
 import type { Tool } from '@/lib/types'
-import type { User } from '@supabase/supabase-js'
+import { trimOrNull, trimOrNullImageSrc } from '@/lib/trim-or-null'
+import type { AuthUser } from '@/lib/auth/session'
 
 export {
   toolDetailPageGutterClass,
@@ -32,7 +33,7 @@ interface ToolDetailViewProps {
   /** 第二版面：无正文时是否仍展示卡片 */
   alwaysShowIntroductionCard?: boolean
   showComments?: boolean
-  commentsInitialUser?: User | null
+  commentsInitialUser?: AuthUser | null
   commentsInitialNickname?: string | null
   /** 主内容后（如管理端编辑表单） */
   children?: ReactNode
@@ -56,15 +57,26 @@ export function ToolDetailView({
   const intro = tool.introduction?.trim() ?? ''
   const showIntroCard = alwaysShowIntroductionCard || Boolean(intro)
   const detailTags = toolTagLabelsFromTool(tool)
+  const websiteUrl = trimOrNull(tool.website_url)
+  const screenshotSrc = trimOrNullImageSrc(tool.screenshot_url)
+
+  const logoSrc = trimOrNullImageSrc(tool.logo_url)
+  const [logoFailed, setLogoFailed] = useState(false)
+  const [screenshotFailed, setScreenshotFailed] = useState(false)
+  useEffect(() => {
+    setLogoFailed(false)
+    setScreenshotFailed(false)
+  }, [tool.id, logoSrc, screenshotSrc])
 
   const logoBox = (
     <>
-      {tool.logo_url ? (
+      {logoSrc && !logoFailed ? (
         <Image
-          src={tool.logo_url}
+          src={logoSrc}
           alt={tool.name}
           fill
           className="object-cover"
+          onError={() => setLogoFailed(true)}
         />
       ) : (
         <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary/20 to-primary/40">
@@ -78,7 +90,7 @@ export function ToolDetailView({
     'relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-muted outline-none ring-offset-background'
 
   const logoEl =
-    logoHref && logoHref !== false ? (
+    typeof logoHref === 'string' && logoHref.length > 0 ? (
       <Link
         href={logoHref}
         target="_blank"
@@ -128,28 +140,41 @@ export function ToolDetailView({
             <p className="mt-6 text-sm text-muted-foreground">暂无概述</p>
           )}
 
-          {tool.screenshot_url ? (
+          {screenshotSrc && !screenshotFailed ? (
             <div className="relative mt-4 aspect-video w-full overflow-hidden rounded-xl border bg-muted">
-              <Image
-                src={tool.screenshot_url}
-                alt={`${tool.name} 截图`}
-                fill
-                className="object-cover"
-              />
+              {screenshotSrc.startsWith('data:') ? (
+                // next/image 对超大 data URL 偶发异常，截图多为 base64，直接用 img 更稳
+                <img
+                  src={screenshotSrc}
+                  alt={`${tool.name} 截图`}
+                  className="absolute inset-0 h-full w-full object-cover"
+                  onError={() => setScreenshotFailed(true)}
+                />
+              ) : (
+                <Image
+                  src={screenshotSrc}
+                  alt={`${tool.name} 截图`}
+                  fill
+                  className="object-cover"
+                  onError={() => setScreenshotFailed(true)}
+                />
+              )}
             </div>
           ) : null}
 
-          <div className="mt-4">
-            <a
-              href={tool.website_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex max-w-full items-center gap-2 text-sm text-primary hover:underline"
-            >
-              <ExternalLink className="h-4 w-4 shrink-0" />
-              <span className="truncate">{tool.website_url}</span>
-            </a>
-          </div>
+          {websiteUrl ? (
+            <div className="mt-4">
+              <a
+                href={websiteUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex max-w-full items-center gap-2 text-sm text-primary hover:underline"
+              >
+                <ExternalLink className="h-4 w-4 shrink-0" />
+                <span className="truncate">{websiteUrl}</span>
+              </a>
+            </div>
+          ) : null}
 
           {panelFooter ? <div className="mt-4">{panelFooter}</div> : null}
         </CardContent>

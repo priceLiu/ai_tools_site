@@ -1,6 +1,5 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ArrowLeft, ExternalLink } from 'lucide-react'
@@ -10,6 +9,9 @@ import { toolDetailMaxWidthClass } from '@/lib/tool-detail-layout'
 import { cn } from '@/lib/utils'
 import type { Tool } from '@/lib/types'
 import { toolPublicPath } from '@/lib/tool-public-path'
+import * as neon from '@/lib/neon/data'
+import { getSessionProfile } from '@/lib/server-profile'
+import { getAuthUser } from '@/lib/auth/session'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -17,44 +19,24 @@ interface PageProps {
 
 export async function generateMetadata({ params }: PageProps) {
   const { id } = await params
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) return { title: '工具详情' }
-  const { data: tool } = await supabase
-    .from('tools')
-    .select('name')
-    .eq('id', id)
-    .eq('user_id', user.id)
-    .maybeSingle()
+  const tool = await neon.neonGetToolByIdForOwner(id, user.id)
   return { title: tool?.name ? `${tool.name} - 详情` : '工具详情' }
 }
 
 export default async function AccountSubmissionDetailPage({ params }: PageProps) {
   const { id } = await params
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) {
     redirect(
       `/auth/login?redirect=${encodeURIComponent(`/account/submissions/${id}`)}`,
     )
   }
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('display_name')
-    .eq('id', user.id)
-    .maybeSingle()
+  const profile = await getSessionProfile(user.id)
 
-  const { data: row } = await supabase
-    .from('tools')
-    .select('*, category:categories(*)')
-    .eq('id', id)
-    .eq('user_id', user.id)
-    .maybeSingle()
+  const row = await neon.neonGetToolByIdForOwner(id, user.id)
 
   if (!row) notFound()
 

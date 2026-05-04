@@ -1,4 +1,5 @@
 import type { NavigationMenuItemRow, NavigationMenuTreeNode } from '@/lib/types'
+import { normalizeNavMenuHref } from '@/lib/trim-or-null'
 
 /** 纯函数：无 next/server 依赖，可供 Client Components 使用。 */
 export function buildNavigationTree(
@@ -6,6 +7,7 @@ export function buildNavigationTree(
 ): NavigationMenuTreeNode[] {
   const mapped = rows.map((r) => ({
     ...r,
+    href: normalizeNavMenuHref(r.href),
     children: [] as NavigationMenuTreeNode[],
   }))
   const byId = new Map(mapped.map((n) => [n.id, n]))

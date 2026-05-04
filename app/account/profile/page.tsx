@@ -1,24 +1,18 @@
-import { createClient } from '@/lib/supabase/server'
+import { getAuthUser } from '@/lib/auth/session'
 import { AccountProfileForm } from '@/components/account-profile-form'
 import { AccountAvatarEditor } from '@/components/account-avatar-editor'
 import type { Profile } from '@/lib/types'
+import { getSessionProfile } from '@/lib/server-profile'
 
 export const metadata = {
   title: '个人信息 - 个人中心',
 }
 
 export default async function AccountProfilePage() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) return null
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single()
+  const profile = await getSessionProfile(user.id)
 
   const p = profile as Profile | null
 

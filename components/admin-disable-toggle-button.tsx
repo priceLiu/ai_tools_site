@@ -5,8 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { CheckCircle, XCircle } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
-import { revalidateHomeToolBundleAction } from '@/app/actions/revalidate-home-tool-bundle'
+import { adminSetToolDisabledAction } from '@/app/actions/database-mutations'
 
 interface AdminDisableToggleButtonProps {
   toolId: string
@@ -27,21 +26,12 @@ export function AdminDisableToggleButton({
   const toggle = async () => {
     const next = !disabled
     setDisabled(next)
-    const supabase = createClient()
-    const { error } = await supabase
-      .from('tools')
-      .update({
-        is_disabled: next,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', toolId)
+    const { error } = await adminSetToolDisabledAction(toolId, next)
 
     if (error) {
       setDisabled(!next)
       return
     }
-
-    await revalidateHomeToolBundleAction()
 
     startTransition(() => {
       router.refresh()

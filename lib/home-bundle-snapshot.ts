@@ -1,15 +1,9 @@
-import { createServiceRoleClient } from '@/lib/supabase/service-role'
 import type { HomeToolBundle } from '@/lib/home-tool-bundle-types'
+import type { HomeListedTool } from '@/lib/types'
+import { getNeonSql } from '@/lib/neon/sql'
+import { publicizeToolImages } from '@/lib/public-tool-image-url'
 
-export const HOME_BUNDLE_SNAPSHOT_BUCKET = 'site_public_cache' as const
-export const HOME_BUNDLE_SNAPSHOT_PATH = 'home-tool-bundle-v1.json' as const
-
-/** 匿名可读的 Storage 公开 URL（与 Dashboard「公开 bucket」一致） */
-export function getHomeBundleSnapshotPublicUrl(): string | null {
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, '')
-  if (!base) return null
-  return `${base}/storage/v1/object/public/${HOME_BUNDLE_SNAPSHOT_BUCKET}/${HOME_BUNDLE_SNAPSHOT_PATH}`
-}
+export const HOME_BUNDLE_SNAPSHOT_KEY = 'home_tool_bundle_v1' as const
 
 function isHomeToolBundleLike(v: unknown): v is HomeToolBundle {
   if (!v || typeof v !== 'object') return false
@@ -22,50 +16,67 @@ function isHomeToolBundleLike(v: unknown): v is HomeToolBundle {
   )
 }
 
-/** 从 Supabase Storage 拉取 JSON；404 / 失败返回 null */
+/**
+ * 防御性兜底：旧快照里 logo/截图字段可能还保留 base64 `data:` URL（升级前写入），
+ * 读出时再走一次 publicize → 内联图改走 `/api/img/...`，HTML / Data Cache 不再爆 2MB。
+ */
+function publicizeBundleImages(b: HomeToolBundle): HomeToolBundle {
+  const fixList = (xs: HomeListedTool[]): HomeListedTool[] =>
+    xs.map((t) => publicizeToolImages(t))
+  return {
+    categories: b.categories,
+    featured: fixList(b.featured),
+    latest: fixList(b.latest),
+    homeCategoryBlocks: b.homeCategoryBlocks.map((block) => ({
+      root: block.root,
+      sections: block.sections.map((s) => ({
+        category: s.category,
+        tools: fixList(s.tools),
+      })),
+    })),
+  }
+}
+
+/** 从 Neon app_kv 读首页 bundle 快照；无记录或解析失败返回 null */
 export async function fetchHomeToolBundleFromSnapshot(): Promise<HomeToolBundle | null> {
   if (process.env.HOME_BUNDLE_SNAPSHOT_DISABLE === '1') return null
 
-  const url = getHomeBundleSnapshotPublicUrl()
-  if (!url) return null
-
   try {
-    const res = await fetch(url, {
-      cache: 'no-store',
-      headers: { Accept: 'application/json' },
-    })
-    if (!res.ok) return null
-    const raw: unknown = await res.json()
-    if (!isHomeToolBundleLike(raw)) return null
-    return raw
+    const sql = getNeonSql()
+    const rows = await sql`
+      SELECT value FROM app_kv WHERE key = ${HOME_BUNDLE_SNAPSHOT_KEY} LIMIT 1
+    `
+    const raw = (rows[0] as { value: unknown } | undefined)?.value
+    if (raw == null) return null
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+    if (!isHomeToolBundleLike(parsed)) return null
+    return publicizeBundleImages(parsed)
   } catch {
     return null
   }
 }
 
 /**
- * 将当前 bundle 写入 Storage（需 SUPABASE_SERVICE_ROLE_KEY）。
- * 在工具/菜单变更后的 revalidate 流程中调用。
+ * 将当前 bundle 写入 Neon app_kv（无需第三方 Storage）。
  */
 export async function uploadHomeToolBundleSnapshot(
   bundle: HomeToolBundle,
 ): Promise<{ ok: boolean; error?: string }> {
-  const admin = createServiceRoleClient()
-  if (!admin) {
-    return { ok: false, error: '缺少 SUPABASE_SERVICE_ROLE_KEY，跳过快照上传' }
+  try {
+    const sql = getNeonSql()
+    const json = JSON.stringify(bundle)
+    await sql`
+      INSERT INTO app_kv (key, value, updated_at)
+      VALUES (${HOME_BUNDLE_SNAPSHOT_KEY}, ${json}::jsonb, now())
+      ON CONFLICT (key) DO UPDATE SET
+        value = EXCLUDED.value,
+        updated_at = now()
+    `
+    return { ok: true }
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : 'snapshot write failed',
+    }
   }
-
-  const body = JSON.stringify(bundle)
-  const blob = new Blob([body], { type: 'application/json' })
-
-  const { error } = await admin.storage
-    .from(HOME_BUNDLE_SNAPSHOT_BUCKET)
-    .upload(HOME_BUNDLE_SNAPSHOT_PATH, blob, {
-      contentType: 'application/json',
-      upsert: true,
-      cacheControl: '120',
-    })
-
-  if (error) return { ok: false, error: error.message }
-  return { ok: true }
 }

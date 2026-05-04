@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { getAuthUser } from '@/lib/auth/session'
 import { redirect } from 'next/navigation'
 import { AccountChrome } from '@/components/account-chrome'
 import {
@@ -10,6 +10,8 @@ import { getNavigationMenuTree } from '@/lib/navigation-menu'
 import type { Category, Profile, Tool } from '@/lib/types'
 import { normalizeIntroductionFormat } from '@/lib/introduction-format'
 import { toolTagLabelsFromTool } from '@/lib/tool-tags-extract'
+import { getSessionProfile } from '@/lib/server-profile'
+import * as neon from '@/lib/neon/data'
 
 type SubmitPageProps = {
   searchParams: Promise<{ edit?: string }>
@@ -25,29 +27,20 @@ export async function generateMetadata({ searchParams }: SubmitPageProps) {
 
 export default async function SubmitPage({ searchParams }: SubmitPageProps) {
   const { edit: editId } = await searchParams
-  const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const user = await getAuthUser()
 
   if (!user) {
     const path = editId ? `/submit?edit=${editId}` : '/submit'
     redirect(`/auth/login?redirect=${encodeURIComponent(path)}`)
   }
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single()
+  const profile = await getSessionProfile(user.id)
 
-  const [categoriesRes, navigation] = await Promise.all([
-    supabase.from('categories').select('*').order('sort_order'),
+  const [categories, navigation] = await Promise.all([
+    neon.neonListCategoriesAll(),
     getNavigationMenuTree(),
   ])
-  const categories = categoriesRes.data || []
-  const cats = categories as Category[]
+  const cats = categories
 
   const whitelistCategoryIds = navigationMenuCategoryIdWhitelist(
     navigation,
@@ -58,19 +51,45 @@ export default async function SubmitPage({ searchParams }: SubmitPageProps) {
   let orphanEditingCategory: Category | null = null
 
   if (editId) {
-    const { data: row } = await supabase
-      .from('tools')
-      .select(
-        'id, slug, name, description, website_url, category_id, logo_url, screenshot_url, user_id, status, introduction, introduction_format, tool_tags(sort_order, tag:tags(id,name))',
-      )
-      .eq('id', editId)
-      .maybeSingle()
+    let row: {
+      id: string
+      slug: string
+      name: string
+      description: string
+      website_url: string
+      category_id: string | null
+      logo_url: string | null
+      screenshot_url: string | null
+      user_id: string | null
+      status: string
+      introduction: string | null
+      introduction_format?: string
+    } | null = null
+    let toolForTags: Pick<Tool, 'tool_tags'> | null = null
+
+    const t = await neon.neonGetToolForSubmitEdit(editId, user.id)
+    if (t && t.user_id === user.id && t.status === 'rejected') {
+      toolForTags = t
+      row = {
+        id: t.id,
+        slug: t.slug,
+        name: t.name,
+        description: t.description,
+        website_url: t.website_url,
+        category_id: t.category_id,
+        logo_url: t.logo_url,
+        screenshot_url: t.screenshot_url,
+        user_id: t.user_id,
+        status: t.status,
+        introduction: t.introduction,
+        introduction_format: t.introduction_format,
+      }
+    }
 
     if (!row || row.user_id !== user.id || row.status !== 'rejected') {
       redirect('/account/history')
     }
 
-    const typed = row as unknown as Pick<Tool, 'tool_tags'>
     editingTool = {
       id: row.id,
       slug: row.slug,
@@ -84,7 +103,7 @@ export default async function SubmitPage({ searchParams }: SubmitPageProps) {
       introduction_format: normalizeIntroductionFormat(
         (row as { introduction_format?: string }).introduction_format,
       ),
-      initialTagNames: toolTagLabelsFromTool(typed),
+      initialTagNames: toolTagLabelsFromTool(toolForTags!),
     }
     const ec = cats.find((c) => c.id === row.category_id)
     if (

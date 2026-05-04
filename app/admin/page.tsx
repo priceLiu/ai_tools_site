@@ -1,9 +1,9 @@
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
+import * as neon from '@/lib/neon/data'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { AdminToolsBulkPanel } from '@/components/admin-tools-bulk-panel'
-import { AdminRefreshHomeBundleButton } from '@/components/admin-refresh-home-bundle-button'
+import { AdminRegenerateStaticButton } from '@/components/admin-regenerate-static-button'
 import { AdminBulkExtractTagsButton } from '@/components/admin-bulk-extract-tags-button'
 import { buildAdminToolsSearchPattern } from '@/lib/admin-tools-search'
 import {
@@ -71,7 +71,6 @@ function TabLink({
 }
 
 export default async function AdminPage({ searchParams }: AdminPageProps) {
-  const supabase = await createClient()
   const params = await searchParams
   const rawQ = params.q ?? ''
   const searchTrim = rawQ.trim()
@@ -85,27 +84,14 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
   const pattern = hasSearch ? buildAdminToolsSearchPattern(searchTrim) : null
 
   const [
-    pendingCountRes,
-    approvedCountRes,
-    rejectedCountRes,
+    pendingTotal,
+    approvedTotal,
+    rejectedTotal,
   ] = await Promise.all([
-    supabase
-      .from('tools')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'pending'),
-    supabase
-      .from('tools')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'approved'),
-    supabase
-      .from('tools')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'rejected'),
+    neon.neonCountToolsByStatus('pending'),
+    neon.neonCountToolsByStatus('approved'),
+    neon.neonCountToolsByStatus('rejected'),
   ])
-
-  const pendingTotal = pendingCountRes.count ?? 0
-  const approvedTotal = approvedCountRes.count ?? 0
-  const rejectedTotal = rejectedCountRes.count ?? 0
 
   const totalForTab =
     tab === 'pending'
@@ -120,13 +106,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
   const to = from + PAGE_SIZE - 1
 
   const fetchTabSlice = async (status: 'pending' | 'approved' | 'rejected') => {
-    const { data } = await supabase
-      .from('tools')
-      .select('*, category:categories(*)')
-      .eq('status', status)
-      .order('created_at', { ascending: false })
-      .range(from, to)
-    return (data as Tool[]) || []
+    return neon.neonListToolsAdminTab(status, from, to)
   }
 
   let tabList: Tool[] = []
@@ -140,15 +120,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
 
   let searchTools: Tool[] = []
   if (hasSearch && pattern) {
-    const { data } = await supabase
-      .from('tools')
-      .select('*, category:categories(*)')
-      .or(
-        `name.ilike.${pattern},description.ilike.${pattern},slug.ilike.${pattern}`,
-      )
-      .order('updated_at', { ascending: false })
-      .limit(ADMIN_SEARCH_LIMIT)
-    searchTools = (data as Tool[]) || []
+    searchTools = await neon.neonListToolsAdminSearch(pattern, ADMIN_SEARCH_LIMIT)
   }
 
   const qOpt = searchTrim.length > 0 ? searchTrim : undefined
@@ -222,8 +194,8 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
               </p>
             </div>
           </div>
-          <div className="flex flex-shrink-0 flex-row flex-wrap items-center justify-end gap-2">
-            <AdminRefreshHomeBundleButton />
+          <div className="flex flex-shrink-0 flex-row flex-wrap items-center justify-end gap-2 rounded-xl border border-border/60 bg-muted/30 p-1.5 shadow-sm">
+            <AdminRegenerateStaticButton />
             <AdminBulkExtractTagsButton />
           </div>
         </div>

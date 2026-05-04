@@ -1,28 +1,22 @@
-import { createClient } from '@/lib/supabase/server'
+import { getAuthUser } from '@/lib/auth/session'
 import { redirect } from 'next/navigation'
 import { Header } from '@/components/header'
 import { CompactAppSidebar } from '@/components/compact-app-sidebar'
 import { Toaster } from '@/components/ui/toaster'
 import { Toaster as SonnerToaster } from 'sonner'
 import type { Profile } from '@/lib/types'
+import { getSessionProfile } from '@/lib/server-profile'
 
 export default async function AdminLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const user = await getAuthUser()
 
   if (!user) {
     redirect(`/auth/login?redirect=${encodeURIComponent('/admin')}`)
   }
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single()
+  const profile = await getSessionProfile(user.id)
 
   if (!profile?.is_admin) {
     redirect('/')

@@ -1,41 +1,33 @@
-import { createClient } from '@/lib/supabase/server'
+import { getAuthUser } from '@/lib/auth/session'
 import { redirect } from 'next/navigation'
 import { AccountChrome } from '@/components/account-chrome'
 import { ToolCard } from '@/components/tool-card'
 import { Heart, Sparkles } from 'lucide-react'
 import type { Tool, Profile } from '@/lib/types'
+import { getSessionProfile } from '@/lib/server-profile'
+import * as neon from '@/lib/neon/data'
 
 export const metadata = {
   title: '我的收藏 - AI工具集',
 }
 
 export default async function FavoritesPage() {
-  const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const user = await getAuthUser()
 
   if (!user) {
     redirect('/auth/login?redirect=/favorites')
   }
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single()
+  const profile = await getSessionProfile(user.id)
 
-  const { data: favorites } = await supabase
-    .from('favorites')
-    .select(`
-      id,
-      tool_id,
-      created_at,
-      tool:tools(*, category:categories(*))
-    `)
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
+  const favRows = await neon.neonListFavoritesWithToolsForUser(user.id)
+
+  const favorites = favRows.map((f) => ({
+    id: f.id,
+    tool_id: f.tool.id,
+    created_at: f.created_at,
+    tool: f.tool,
+  }))
 
   const validFavorites =
     favorites?.filter((f) => {

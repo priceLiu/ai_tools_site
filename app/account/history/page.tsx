@@ -1,10 +1,11 @@
-import { createClient } from '@/lib/supabase/server'
+import { getAuthUser } from '@/lib/auth/session'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Plus } from 'lucide-react'
 import { UserSubmissionsList } from '@/components/user-submissions-list'
 import { filterOwnTools } from '@/lib/filter-own-tools'
 import type { Tool } from '@/lib/types'
+import * as neon from '@/lib/neon/data'
 
 interface AccountHistoryPageProps {
   searchParams: Promise<{ success?: string; resubmitted?: string; q?: string }>
@@ -18,19 +19,12 @@ export default async function AccountHistoryPage({
   searchParams,
 }: AccountHistoryPageProps) {
   const { success, resubmitted, q: queryParam } = await searchParams
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) return null
 
-  const { data: tools } = await supabase
-    .from('tools')
-    .select('*, category:categories(*)')
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
+  const tools = await neon.neonListToolsForUser(user.id)
 
-  const list = (tools as Tool[]) || []
+  const list = tools || []
   const hasQuery = Boolean(queryParam?.trim())
   const filtered = filterOwnTools(list, queryParam)
 

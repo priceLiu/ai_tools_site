@@ -1,33 +1,19 @@
-import { createClient } from '@/lib/supabase/server'
-import { getHomeToolBundle } from '@/lib/cached-home-data'
-import { getNavigationMenuTree } from '@/lib/navigation-menu'
 import { Sidebar } from '@/components/sidebar'
-import { Header } from '@/components/header'
+import { HeaderUser } from '@/components/header-user'
 import { HomeToolSections } from '@/components/home-tool-sections'
 import { HomeScrollToHash } from '@/components/home-scroll-to-hash'
 import { Sparkles } from 'lucide-react'
-import type { Profile } from '@/lib/types'
+import { getHomeToolBundle } from '@/lib/cached-home-data'
+import { getNavigationMenuTreeStatic } from '@/lib/navigation-menu'
+
+/** ISR：60s TTL；后台变更通过 `revalidateTag` / `revalidatePath('/')` 立即推送 */
+export const revalidate = 60
 
 export default async function HomePage() {
-  const supabase = await createClient()
-
-  const [{ data: authData }, bundle, navigation] = await Promise.all([
-    supabase.auth.getUser(),
+  const [bundle, navigation] = await Promise.all([
     getHomeToolBundle(),
-    getNavigationMenuTree(),
+    getNavigationMenuTreeStatic(),
   ])
-
-  const user = authData.user
-
-  let profile: Profile | null = null
-  if (user) {
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .single()
-    profile = data
-  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -35,7 +21,7 @@ export default async function HomePage() {
       <Sidebar navigation={navigation} enableHomeAnchors />
 
       <div className="pl-16 md:pl-64">
-        <Header user={user} profile={profile} />
+        <HeaderUser />
 
         <main className="p-4 md:p-6">
           <div className="mb-8 text-center">

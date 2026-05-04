@@ -11,21 +11,18 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Plus, User, LogOut, Settings, Heart, MoreVertical, History } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
-import type { User as SupabaseUser } from '@supabase/supabase-js'
+import type { AuthUser } from '@/lib/auth/session'
 import type { Profile } from '@/lib/types'
 
 interface HeaderProps {
-  user: SupabaseUser | null
+  user: AuthUser | null
   profile: Profile | null
 }
 
 export function Header({ user, profile }: HeaderProps) {
   const handleLogout = () => {
     void (async () => {
-      const supabase = createClient()
-      await supabase.auth.signOut()
-      // 整页跳转以确保服务端 Cookie 与客户端会话一致（仅 refresh 可能仍显示已登录）
+      await fetch('/api/auth/logout', { method: 'POST' })
       window.location.assign('/')
     })()
   }

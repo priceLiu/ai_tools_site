@@ -1,6 +1,5 @@
 'use client'
 
-import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -26,7 +25,6 @@ export default function Page() {
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
-    const supabase = createClient()
     setIsLoading(true)
     setError(null)
 
@@ -43,16 +41,13 @@ export default function Page() {
     }
 
     try {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo:
-            process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ??
-            `${window.location.origin}/auth/callback`,
-        },
+      const res = await fetch('/api/auth/sign-up', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
       })
-      if (error) throw error
+      const data = (await res.json()) as { error?: string }
+      if (!res.ok) throw new Error(data.error || '注册失败')
       router.push('/auth/sign-up-success')
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : '注册失败')
@@ -78,7 +73,9 @@ export default function Page() {
           <Card>
             <CardHeader>
               <CardTitle className="text-2xl">注册</CardTitle>
-              <CardDescription>创建一个新账户</CardDescription>
+              <CardDescription>
+                创建账户后可直接登录，无需查收邮件验证。
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSignUp}>

@@ -1,7 +1,8 @@
-import { createClient } from '@/lib/supabase/server'
+import { getAuthUser } from '@/lib/auth/session'
 import { UserSubmissionsList } from '@/components/user-submissions-list'
 import { filterOwnTools } from '@/lib/filter-own-tools'
 import type { Tool } from '@/lib/types'
+import * as neon from '@/lib/neon/data'
 
 export const metadata = {
   title: '审核中的工具 - 个人中心',
@@ -15,20 +16,12 @@ export default async function AccountPendingPage({
   searchParams,
 }: AccountPendingPageProps) {
   const { q: queryParam } = await searchParams
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) return null
 
-  const { data: tools } = await supabase
-    .from('tools')
-    .select('*, category:categories(*)')
-    .eq('user_id', user.id)
-    .eq('status', 'pending')
-    .order('created_at', { ascending: false })
+  const tools = await neon.neonListToolsForUser(user.id, { status: 'pending' })
 
-  const list = (tools as Tool[]) || []
+  const list = tools || []
   const hasQuery = Boolean(queryParam?.trim())
   const filtered = filterOwnTools(list, queryParam)
 

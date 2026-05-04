@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import type { ReactNode } from 'react'
@@ -7,6 +8,7 @@ import { Eye, Heart, Sparkles } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import type { Tool } from '@/lib/types'
+import { trimOrNull } from '@/lib/trim-or-null'
 import { recordToolViewBySlug } from '@/lib/client-record-tool-view'
 
 interface ToolListRowCardProps {
@@ -47,6 +49,12 @@ export function ToolListRowCard({
   leadingControl,
 }: ToolListRowCardProps) {
   const nameHref = titleHref ?? logoHref
+  const logoSrc = trimOrNull(tool.logo_url)
+  const [logoFailed, setLogoFailed] = useState(false)
+  useEffect(() => {
+    setLogoFailed(false)
+  }, [tool.id, logoSrc])
+
   const bumpView = () => {
     if (recordViewSlug) recordToolViewBySlug(recordViewSlug)
   }
@@ -86,12 +94,13 @@ export function ToolListRowCard({
             compact ? 'h-12 w-12 rounded-md' : 'h-16 w-16 rounded-xl',
           )}
         >
-          {tool.logo_url ? (
+          {logoSrc && !logoFailed ? (
             <Image
-              src={tool.logo_url}
+              src={logoSrc}
               alt={tool.name}
               fill
               className="object-cover"
+              onError={() => setLogoFailed(true)}
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary/20 to-primary/40">

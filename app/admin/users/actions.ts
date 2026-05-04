@@ -1,39 +1,28 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
+import * as neon from '@/lib/neon/data'
+import { getAuthUser } from '@/lib/auth/session'
 
 async function requireAdmin() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) {
     throw new Error('未登录')
   }
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('is_admin')
-    .eq('id', user.id)
-    .single()
-  if (!profile?.is_admin) {
-    throw new Error('无权限')
-  }
-  return { supabase, user }
+  const ok = await neon.neonGetProfileIsAdmin(user.id)
+  if (!ok) throw new Error('无权限')
+  return { user }
 }
 
 export async function adminSetProfileAdminAction(
   profileUserId: string,
   isAdmin: boolean,
 ) {
-  const { supabase } = await requireAdmin()
-  const { error } = await supabase
-    .from('profiles')
-    .update({ is_admin: isAdmin })
-    .eq('id', profileUserId)
-  if (error) {
-    throw new Error(error.message)
-  }
+  await requireAdmin()
+  await neon.neonUpdateProfileAdminFlags({
+    id: profileUserId,
+    is_admin: isAdmin,
+  })
   revalidatePath('/admin/users')
 }
 
@@ -41,16 +30,13 @@ export async function adminSetProfileDisabledAction(
   profileUserId: string,
   isDisabled: boolean,
 ) {
-  const { supabase, user } = await requireAdmin()
+  const { user } = await requireAdmin()
   if (profileUserId === user.id && isDisabled) {
     throw new Error('不能禁用当前登录账号，请先由其他管理员操作')
   }
-  const { error } = await supabase
-    .from('profiles')
-    .update({ is_disabled: isDisabled })
-    .eq('id', profileUserId)
-  if (error) {
-    throw new Error(error.message)
-  }
+  await neon.neonUpdateProfileAdminFlags({
+    id: profileUserId,
+    is_disabled: isDisabled,
+  })
   revalidatePath('/admin/users')
 }

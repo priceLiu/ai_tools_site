@@ -1,8 +1,8 @@
-import { updateSession } from '@/lib/supabase/proxy'
+import { runAuthMiddleware } from '@/lib/auth/middleware-session'
 import { type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
-  return await updateSession(request)
+  return runAuthMiddleware(request)
 }
 
 export const config = {

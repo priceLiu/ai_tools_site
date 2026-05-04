@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
+import { updateProfileAvatarUrlAction } from '@/app/actions/database-mutations'
 import { Spinner } from '@/components/ui/spinner'
 import { User, Upload, Trash2 } from 'lucide-react'
 import { fileToImageDataUrl } from '@/lib/image-data-url'
@@ -30,12 +30,8 @@ export function AccountAvatarEditor({ profile }: AccountAvatarEditorProps) {
     setBusy(true)
     setError('')
     try {
-      const supabase = createClient()
-      const { error: up } = await supabase
-        .from('profiles')
-        .update({ avatar_url: url })
-        .eq('id', profile.id)
-      if (up) throw new Error(up.message)
+      const { error: up } = await updateProfileAvatarUrlAction(url)
+      if (up) throw new Error(up)
       setAvatarUrl(url ?? '')
       router.refresh()
     } catch (err) {

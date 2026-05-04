@@ -1,10 +1,10 @@
 import { Header } from '@/components/header'
 import { AccountNav } from '@/components/account-nav'
 import type { Profile } from '@/lib/types'
-import type { User } from '@supabase/supabase-js'
+import type { AuthUser } from '@/lib/auth/session'
 
 interface AccountChromeProps {
-  user: User
+  user: AuthUser
   profile: Profile | null
   children: React.ReactNode
 }
@@ -16,7 +16,7 @@ export function AccountChrome({ user, profile, children }: AccountChromeProps) {
       <Header user={user} profile={profile} />
       <div className="flex min-h-[calc(100vh-4rem)]">
         <AccountNav
-          email={user.email ?? ''}
+          email={user.email}
           avatarUrl={profile?.avatar_url ?? null}
         />
         <div className="min-w-0 flex-1">{children}</div>

@@ -16,7 +16,7 @@ import {
   Upload,
   BarChart3,
 } from 'lucide-react'
-import { AdminRefreshHomeBundleButton } from '@/components/admin-refresh-home-bundle-button'
+import { AdminRegenerateStaticButton } from '@/components/admin-regenerate-static-button'
 import { AdminBulkExtractTagsButton } from '@/components/admin-bulk-extract-tags-button'
 
 type Variant = 'default' | 'admin'
@@ -196,9 +196,14 @@ export function CompactAppSidebar({ variant = 'default' }: CompactAppSidebarProp
                 <Users className="h-4 w-4 shrink-0" />
                 用户管理
               </Link>
-              <div className="mt-2 flex flex-col gap-1.5">
-                <AdminRefreshHomeBundleButton className="w-full justify-start" />
-                <AdminBulkExtractTagsButton className="w-full justify-start" />
+              <div className="mt-3 rounded-xl border border-sidebar-border/60 bg-sidebar-accent/30 p-2">
+                <p className="mb-1.5 px-1 text-[11px] font-medium uppercase tracking-wide text-sidebar-foreground/60">
+                  发布与维护
+                </p>
+                <div className="flex flex-col gap-1.5">
+                  <AdminRegenerateStaticButton className="w-full justify-start" />
+                  <AdminBulkExtractTagsButton className="w-full justify-start" />
+                </div>
               </div>
             </>
           )}

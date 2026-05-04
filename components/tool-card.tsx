@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import * as Tooltip from '@radix-ui/react-tooltip'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -8,6 +9,7 @@ import { recordToolViewBySlug } from '@/lib/client-record-tool-view'
 import { toolPublicPath } from '@/lib/tool-public-path'
 import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
+import { trimOrNull } from '@/lib/trim-or-null'
 import { Sparkles, Bot, Eye, Heart } from 'lucide-react'
 
 const TOOL_TIP_CONTENT_CLASS =
@@ -43,6 +45,12 @@ export function ToolCard({
   const views = tool.view_count ?? 0
   const fav = favoritesCount ?? tool.favorite_count ?? 0
   const catName = tool.category?.name ?? 'AI工具'
+  const logoSrc = trimOrNull(tool.logo_url)
+  const [logoFailed, setLogoFailed] = useState(false)
+  useEffect(() => {
+    setLogoFailed(false)
+  }, [tool.id, logoSrc])
+  const showLogoImage = Boolean(logoSrc && !logoFailed)
   const tooltipText = (
     tool.introduction?.trim() ||
     tool.description ||
@@ -74,13 +82,14 @@ export function ToolCard({
           )}
           aria-label={`${tool.name}（在新标签打开）`}
         >
-          {tool.logo_url ? (
+          {showLogoImage ? (
             <Image
-              src={tool.logo_url}
+              src={logoSrc!}
               alt=""
               fill
               className="object-cover"
               priority={imagePriority}
+              onError={() => setLogoFailed(true)}
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary/20 to-primary/40">

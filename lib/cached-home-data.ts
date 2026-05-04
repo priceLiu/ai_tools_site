@@ -1,4 +1,5 @@
-import { createPublicSupabase } from '@/lib/supabase/public'
+import { unstable_cache } from 'next/cache'
+import * as neon from '@/lib/neon/data'
 import {
   ascendCategoryToRoot,
   idsEqual,
@@ -12,6 +13,8 @@ import {
 } from '@/lib/submit-category-choices'
 import { fetchHomeToolBundleFromSnapshot } from '@/lib/home-bundle-snapshot'
 import type { Category, HomeListedTool, Tool } from '@/lib/types'
+import { trimOrNullImageSrc } from '@/lib/trim-or-null'
+import { HOME_TOOL_BUNDLE_CACHE_TAG } from '@/lib/navigation-menu-cache-config'
 import type { HomeCategoryBlock, HomeToolBundle } from '@/lib/home-tool-bundle-types'
 
 export type { HomeCategoryBlock, HomeToolBundle } from '@/lib/home-tool-bundle-types'
@@ -37,7 +40,6 @@ function capHomeLatestBundle(bundle: HomeToolBundle): HomeToolBundle {
 }
 
 /** 与分类页一致的关联查询；再在内存中映射为 {@link HomeListedTool}（省略 introduction 等，但 logo 仍可能为体积较大的 data URL） */
-const TOOLS_QUERY_WITH_CATEGORY = '*, category:categories(*)' as const
 
 function toHomeListedTool(row: Tool): HomeListedTool {
   const cat = row.category
@@ -46,7 +48,7 @@ function toHomeListedTool(row: Tool): HomeListedTool {
     name: row.name,
     slug: row.slug,
     description: row.description,
-    logo_url: row.logo_url,
+    logo_url: trimOrNullImageSrc(row.logo_url),
     category_id: row.category_id,
     view_count: row.view_count,
     favorite_count: row.favorite_count,
@@ -169,14 +171,10 @@ function fallbackSectionPlanFromDb(categories: Category[]) {
 }
 
 export async function loadHomeToolBundle(): Promise<HomeToolBundle> {
-  const supabase = createPublicSupabase()
-
-  const [{ data: categoriesRows }, navigation] = await Promise.all([
-    supabase.from('categories').select('*').order('sort_order'),
+  const [cats, navigation] = await Promise.all([
+    neon.neonListCategoriesAll(),
     loadNavigationMenuTree(),
   ])
-
-  const cats = (categoriesRows as Category[]) ?? []
 
   const navPlan = homeNavigationCategoryGroups(navigation, cats)
   const sectionPlan =
@@ -198,37 +196,15 @@ export async function loadHomeToolBundle(): Promise<HomeToolBundle> {
 
   const idList = [...idsToFetch]
 
-  const toolsQuery =
+  const [featuredTools, latestTools, sectionTools] = await Promise.all([
+    neon.neonListToolsFeaturedHome(),
+    neon.neonListToolsLatestHome(),
     idList.length > 0
-      ? supabase
-          .from('tools')
-          .select(TOOLS_QUERY_WITH_CATEGORY)
-          .eq('status', 'approved')
-          .eq('is_disabled', false)
-          .in('category_id', idList)
-          .order('view_count', { ascending: false })
-      : Promise.resolve({ data: [] as Tool[] | null })
+      ? neon.neonListToolsForCategoryIds(idList)
+      : Promise.resolve([] as Tool[]),
+  ])
 
-  const [{ data: featuredTools }, { data: latestTools }, { data: sectionTools }] =
-    await Promise.all([
-      supabase
-        .from('tools')
-        .select(TOOLS_QUERY_WITH_CATEGORY)
-        .eq('status', 'approved')
-        .eq('is_disabled', false)
-        .eq('is_featured', true)
-        .order('view_count', { ascending: false }),
-      supabase
-        .from('tools')
-        .select(TOOLS_QUERY_WITH_CATEGORY)
-        .eq('status', 'approved')
-        .eq('is_disabled', false)
-        .order('created_at', { ascending: false })
-        .limit(HOME_LATEST_MAX),
-      toolsQuery,
-    ])
-
-  const sectionListed = mapToolsToListed(sectionTools as Tool[] | undefined)
+  const sectionListed = mapToolsToListed(sectionTools)
 
   const toolsByCat = new Map<string, HomeListedTool[]>()
   for (const t of sectionListed) {
@@ -243,8 +219,8 @@ export async function loadHomeToolBundle(): Promise<HomeToolBundle> {
     toolsByCat,
   )
 
-  const featured = mapToolsToListed(featuredTools as Tool[] | undefined)
-  const latest = mapToolsToListed(latestTools as Tool[] | undefined)
+  const featured = mapToolsToListed(featuredTools)
+  const latest = mapToolsToListed(latestTools)
 
   return {
     categories: cats,
@@ -297,33 +273,67 @@ function pruneStaleCategoriesFromHomeBundle(
   }
 }
 
+const EMPTY_HOME_BUNDLE: HomeToolBundle = {
+  categories: [],
+  featured: [],
+  latest: [],
+  homeCategoryBlocks: [],
+}
+
 /**
- * 首页 bundle：优先读 Supabase Storage 中的 JSON 快照（适合 Vercel，不受 Next 2MB Data Cache 限制）。
- * 快照需在变更后由 `revalidateHomeToolBundleAction` 写入；无文件或 `HOME_BUNDLE_SNAPSHOT_DISABLE=1` 时回退 `loadHomeToolBundle()`。
- * 读快照时会拉齐 categories + 侧栏菜单：已删库分类会摘掉；**只要配了菜单，分类版块结构以当前菜单为准**（工具卡片仍来自快照里的列表数据，减少大表查询）。
+ * 内部实现：先尝试 Neon `app_kv` 快照，失败回退 `loadHomeToolBundle()`。
+ * 不直接调用；外部走 `getHomeToolBundle()`，受 `HOME_TOOL_BUNDLE_CACHE_TAG` 控制。
  */
-export async function getHomeToolBundle(): Promise<HomeToolBundle> {
-  const supabase = createPublicSupabase()
-  const snap = await fetchHomeToolBundleFromSnapshot()
+async function loadHomeToolBundleWithSnapshot(): Promise<HomeToolBundle> {
+  try {
+    const snap = await fetchHomeToolBundleFromSnapshot()
 
-  if (snap) {
-    const [{ data: categoriesRows }, navigation] = await Promise.all([
-      supabase.from('categories').select('*').order('sort_order'),
-      loadNavigationMenuTree(),
-    ])
-    const currentCats = (categoriesRows as Category[]) ?? []
-    const pruned = pruneStaleCategoriesFromHomeBundle(snap, currentCats)
-    const navPlan = homeNavigationCategoryGroups(navigation, currentCats)
-    if (navPlan.length > 0) {
-      const toolsByCat = toolsByCategoryMapFromBundle(pruned)
-      const homeCategoryBlocks = buildHomeCategoryBlocksFromNavPlan(
-        navPlan,
-        toolsByCat,
-      )
-      return capHomeLatestBundle({ ...pruned, homeCategoryBlocks })
+    if (snap) {
+      try {
+        const [currentCats, navigation] = await Promise.all([
+          neon.neonListCategoriesAll(),
+          loadNavigationMenuTree(),
+        ])
+        const pruned = pruneStaleCategoriesFromHomeBundle(snap, currentCats)
+        const navPlan = homeNavigationCategoryGroups(navigation, currentCats)
+        if (navPlan.length > 0) {
+          const toolsByCat = toolsByCategoryMapFromBundle(pruned)
+          const homeCategoryBlocks = buildHomeCategoryBlocksFromNavPlan(
+            navPlan,
+            toolsByCat,
+          )
+          return capHomeLatestBundle({ ...pruned, homeCategoryBlocks })
+        }
+        return capHomeLatestBundle(pruned)
+      } catch {
+        return capHomeLatestBundle(snap)
+      }
     }
-    return capHomeLatestBundle(pruned)
-  }
 
-  return capHomeLatestBundle(await loadHomeToolBundle())
+    return capHomeLatestBundle(await loadHomeToolBundle())
+  } catch (e) {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('[getHomeToolBundle] Neon 不可用，使用空首页数据:', e)
+    }
+    return EMPTY_HOME_BUNDLE
+  }
+}
+
+/**
+ * 首页 bundle：优先读 Neon `app_kv` 快照，否则回退重建。
+ *
+ * - logo / 截图字段在 Neon 数据访问层已替换为 `/api/img/tool/<id>/<kind>?v=...` 代理 URL，
+ *   bundle 体积稳定在数十 KB；可安全进入 Next.js Data Cache（单条 2MB 限制）。
+ * - 用 `unstable_cache(tag = HOME_TOOL_BUNDLE_CACHE_TAG)` 跨请求复用解析结果，避免每次请求都
+ *   重新拼装 bundle；管理后台的写操作通过 `revalidateTag(HOME_TOOL_BUNDLE_CACHE_TAG)` 失效。
+ * - 页面层 ISR（`app/page.tsx` 的 `revalidate=60`）继续缓存 HTML，命中时无 DB 访问。
+ */
+const cachedHomeToolBundle = unstable_cache(
+  loadHomeToolBundleWithSnapshot,
+  ['home-tool-bundle:v2'],
+  { tags: [HOME_TOOL_BUNDLE_CACHE_TAG], revalidate: 60 },
+)
+
+export async function getHomeToolBundle(): Promise<HomeToolBundle> {
+  return cachedHomeToolBundle()
 }

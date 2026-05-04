@@ -2,8 +2,8 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
+import { updateProfileDisplayNameAction } from '@/app/actions/database-mutations'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardFooter } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
@@ -28,13 +28,9 @@ export function AccountProfileForm({ profile, email }: AccountProfileFormProps) 
     setError('')
     setSaved(false)
     try {
-      const supabase = createClient()
       const trimmed = displayName.trim() || null
-      const { error: up } = await supabase
-        .from('profiles')
-        .update({ display_name: trimmed })
-        .eq('id', profile.id)
-      if (up) throw new Error(up.message)
+      const { error: up } = await updateProfileDisplayNameAction(trimmed)
+      if (up) throw new Error(up)
       setSaved(true)
       router.refresh()
     } catch (err) {

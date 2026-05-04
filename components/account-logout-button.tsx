@@ -2,13 +2,10 @@
 
 import { LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { createClient } from '@/lib/supabase/client'
-
 export function AccountLogoutButton() {
   const handleLogout = () => {
     void (async () => {
-      const supabase = createClient()
-      await supabase.auth.signOut()
+      await fetch('/api/auth/logout', { method: 'POST' })
       window.location.assign('/')
     })()
   }

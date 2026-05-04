@@ -1,6 +1,6 @@
 import { unstable_cache } from 'next/cache'
 import { headers } from 'next/headers'
-import { createPublicSupabase } from '@/lib/supabase/public'
+import { neonListNavigationMenuVisible } from '@/lib/neon/data'
 import type { NavigationMenuItemRow, NavigationMenuTreeNode } from '@/lib/types'
 import { buildNavigationTree } from '@/lib/navigation-tree'
 import {
@@ -17,14 +17,8 @@ export {
 export async function loadNavigationMenuTree(): Promise<
   NavigationMenuTreeNode[]
 > {
-  const supabase = createPublicSupabase()
-  const { data, error } = await supabase
-    .from('navigation_menu_items')
-    .select('id,parent_id,label,href,icon_name,sort_order,is_visible')
-    .eq('is_visible', true)
-    .order('sort_order', { ascending: true })
-
-  if (error || !data?.length) return []
+  const data = await neonListNavigationMenuVisible()
+  if (!data?.length) return []
   return buildNavigationTree(data as NavigationMenuItemRow[])
 }
 
@@ -49,8 +43,38 @@ export async function getNavigationMenuTree(): Promise<
     cacheControl.includes('no-cache') ||
     cacheControl.includes('max-age=0')
 
-  if (bypassCache) {
-    return loadNavigationMenuTree()
+  try {
+    if (bypassCache) {
+      return await loadNavigationMenuTree()
+    }
+    return await getNavigationMenuCached()
+  } catch (e) {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn(
+        '[getNavigationMenuTree] Neon 不可用，返回空菜单（不影响页面渲染）:',
+        e,
+      )
+    }
+    return []
   }
-  return getNavigationMenuCached()
+}
+
+/**
+ * 静态/ISR 页面专用：不读 `headers()`，不会让路由退回 dynamic。
+ * 失败时返回空数组，与 `getNavigationMenuTree` 行为一致。
+ */
+export async function getNavigationMenuTreeStatic(): Promise<
+  NavigationMenuTreeNode[]
+> {
+  try {
+    return await getNavigationMenuCached()
+  } catch (e) {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn(
+        '[getNavigationMenuTreeStatic] Neon 不可用，返回空菜单:',
+        e,
+      )
+    }
+    return []
+  }
 }

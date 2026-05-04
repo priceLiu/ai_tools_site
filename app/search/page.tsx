@@ -1,10 +1,12 @@
-import { createClient } from '@/lib/supabase/server'
+import { getAuthUser } from '@/lib/auth/session'
 import { Sidebar } from '@/components/sidebar'
 import { Header } from '@/components/header'
 import { ToolCard } from '@/components/tool-card'
 import { Search as SearchIcon } from 'lucide-react'
 import type { Tool, Profile } from '@/lib/types'
 import { getNavigationMenuTree } from '@/lib/navigation-menu'
+import * as neon from '@/lib/neon/data'
+import { getSessionProfile } from '@/lib/server-profile'
 
 interface SearchPageProps {
   searchParams: Promise<{ q?: string }>
@@ -19,35 +21,16 @@ export async function generateMetadata({ searchParams }: SearchPageProps) {
 
 export default async function SearchPage({ searchParams }: SearchPageProps) {
   const { q } = await searchParams
-  const supabase = await createClient()
   const navigation = await getNavigationMenuTree()
-  
-  // Get current user
-  const { data: { user } } = await supabase.auth.getUser()
-  
-  // Get profile if logged in
-  let profile: Profile | null = null
-  if (user) {
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .single()
-    profile = data
-  }
-  
+
+  const user = await getAuthUser()
+
+  const profile = user ? await getSessionProfile(user.id) : null
+
   // Search tools
   let tools: Tool[] = []
   if (q && q.trim()) {
-    const { data } = await supabase
-      .from('tools')
-      .select('*, category:categories(*)')
-      .eq('status', 'approved')
-      .eq('is_disabled', false)
-      .or(`name.ilike.%${q}%,description.ilike.%${q}%`)
-      .order('view_count', { ascending: false })
-    
-    tools = data || []
+    tools = await neon.neonSearchToolsPublic(q)
   }
 
   return (
@@ -55,7 +38,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       <Sidebar navigation={navigation} enableHomeAnchors />
       
       <div className="pl-16 md:pl-64">
-        <Header user={user} profile={profile} />
+        <Header user={user} profile={profile as Profile | null} />
         
         <main className="p-4 md:p-6">
           <div className="mx-auto max-w-7xl">

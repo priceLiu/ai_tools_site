@@ -5,7 +5,10 @@ import {
   slugFromCategoryMenuHref,
 } from '@/lib/submit-category-choices'
 import type { Category, NavigationMenuItemRow } from '@/lib/types'
-import type { SupabaseClient } from '@supabase/supabase-js'
+import {
+  neonInsertCategory,
+  neonUpdateNavigationItemHref,
+} from '@/lib/neon/data'
 
 function uniqueSlugFromNavChildLabel(
   label: string,
@@ -140,7 +143,6 @@ export function planMissingCategoriesFromNavigation(
 }
 
 export async function syncMissingCategoriesFromNavigation(
-  supabase: SupabaseClient,
   navRows: NavigationMenuItemRow[],
   categories: Category[],
 ): Promise<{ created: number; slugs: string[]; errors: string[] }> {
@@ -149,33 +151,33 @@ export async function syncMissingCategoriesFromNavigation(
   const errors: string[] = []
 
   for (const row of planned) {
-    const { error } = await supabase.from('categories').insert({
-      name: row.name,
-      slug: row.slug,
-      parent_id: row.parent_id,
-      sort_order: row.sort_order,
-      icon: row.icon,
-    })
-    if (error) {
-      errors.push(`${row.slug}: ${error.message}`)
-    } else {
+    try {
+      await neonInsertCategory({
+        name: row.name,
+        slug: row.slug,
+        parent_id: row.parent_id,
+        sort_order: row.sort_order,
+        icon: row.icon,
+      })
       slugs.push(row.slug)
       if (row.navigationMenuItemId) {
-        const { error: navErr } = await supabase
-          .from('navigation_menu_items')
-          .update({
-            href: `/category/${row.slug}`,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', row.navigationMenuItemId)
-        if (navErr) {
+        try {
+          await neonUpdateNavigationItemHref(
+            row.navigationMenuItemId,
+            `/category/${row.slug}`,
+            new Date().toISOString(),
+          )
+        } catch (navErr) {
           errors.push(
-            `分类「${row.slug}」已创建，但菜单链接未更新：${navErr.message}`,
+            `分类「${row.slug}」已创建，但菜单链接未更新：${navErr instanceof Error ? navErr.message : String(navErr)}`,
           )
         }
       }
+    } catch (e) {
+      errors.push(
+        `${row.slug}: ${e instanceof Error ? e.message : String(e)}`,
+      )
     }
   }
-
   return { created: slugs.length, slugs, errors }
 }

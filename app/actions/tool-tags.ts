@@ -1,6 +1,12 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { getAuthUser } from '@/lib/auth/session'
+import {
+  neonGetCategoryNameById,
+  neonGetProfileIsAdmin,
+  neonListToolsIdIntroFormatCategoryName,
+  neonSetToolTagsForTool,
+} from '@/lib/neon/data'
 import {
   buildSuggestedToolTagNames,
   TOOL_TAGS_MAX,
@@ -30,20 +36,12 @@ export async function suggestToolTagNamesAction(input: {
   introductionFormat: IntroductionFormat
   categoryId: string | null
 }): Promise<{ names: string[] } | { error: string }> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) return { error: '未登录' }
 
   let categoryName: string | null = null
   if (input.categoryId?.trim()) {
-    const { data: c } = await supabase
-      .from('categories')
-      .select('name')
-      .eq('id', input.categoryId.trim())
-      .maybeSingle()
-    categoryName = c?.name ?? null
+    categoryName = await neonGetCategoryNameById(input.categoryId.trim())
   }
 
   const names = buildSuggestedToolTagNames({
@@ -55,25 +53,23 @@ export async function suggestToolTagNamesAction(input: {
 }
 
 /**
- * 写入工具标签（所有者或管理员；内部 RPC 校验）
+ * 写入工具标签（所有者或管理员）
  */
 export async function setToolTagsAction(input: {
   toolId: string
   tagNames: string[]
 }): Promise<{ error?: string }> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) return { error: '未登录' }
 
   const names = normalizeTagNames(input.tagNames)
-  const { error } = await supabase.rpc('set_tool_tags_for_tool', {
-    p_tool_id: input.toolId,
-    p_names: names,
+  const isAdmin = await neonGetProfileIsAdmin(user.id)
+  return neonSetToolTagsForTool({
+    actorUserId: user.id,
+    actorIsAdmin: isAdmin,
+    toolId: input.toolId,
+    names,
   })
-  if (error) return { error: error.message }
-  return {}
 }
 
 /** 管理员：为全部工具按当前规则重写标签 */
@@ -82,43 +78,27 @@ export async function bulkExtractToolTagsAdminAction(): Promise<{
   updated: number
   error?: string
 }> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) return { ok: false, updated: 0, error: '未登录' }
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('is_admin')
-    .eq('id', user.id)
-    .single()
-  if (!profile?.is_admin) return { ok: false, updated: 0, error: '无权限' }
+  const isAdmin = await neonGetProfileIsAdmin(user.id)
+  if (!isAdmin) return { ok: false, updated: 0, error: '无权限' }
 
-  const { data: rows, error: fetchErr } = await supabase
-    .from('tools')
-    .select('id, introduction, introduction_format, category:categories(name)')
-  if (fetchErr) return { ok: false, updated: 0, error: fetchErr.message }
-
+  const rows = await neonListToolsIdIntroFormatCategoryName()
   let updated = 0
-  for (const t of rows ?? []) {
-    const row = t as unknown as {
-      id: string
-      introduction: string | null
-      introduction_format?: string | null
-      category: { name: string } | null
-    }
+  for (const row of rows) {
     const names = buildSuggestedToolTagNames({
-      categoryName: row.category?.name ?? null,
+      categoryName: row.category_name,
       introduction: row.introduction ?? '',
       introductionFormat: row.introduction_format as IntroductionFormat,
     })
-    const { error } = await supabase.rpc('set_tool_tags_for_tool', {
-      p_tool_id: row.id,
-      p_names: normalizeTagNames(names),
+    const res = await neonSetToolTagsForTool({
+      actorUserId: user.id,
+      actorIsAdmin: true,
+      toolId: row.id,
+      names: normalizeTagNames(names),
     })
-    if (!error) updated += 1
+    if (!res.error) updated += 1
   }
-
   return { ok: true, updated }
 }

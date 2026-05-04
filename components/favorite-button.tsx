@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Heart } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
+import { toggleFavoriteAction } from '@/app/actions/database-mutations'
 import { cn } from '@/lib/utils'
 
 interface FavoriteButtonProps {
@@ -31,32 +31,24 @@ export function FavoriteButton({
       return
     }
 
-    const supabase = createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+    const sessionRes = await fetch('/api/auth/session', { cache: 'no-store' })
+    const sessionJson = sessionRes.ok
+      ? ((await sessionRes.json()) as { user?: { id: string } | null })
+      : { user: null }
 
-    if (!user) {
+    if (!sessionJson.user) {
       router.push('/auth/login')
       return
     }
 
     if (isFavorited) {
-      const { error } = await supabase
-        .from('favorites')
-        .delete()
-        .eq('user_id', user.id)
-        .eq('tool_id', toolId)
-
+      const { error } = await toggleFavoriteAction(toolId, true)
       if (!error) {
         setIsFavorited(false)
         onFavoriteCountDelta?.(-1)
       }
     } else {
-      const { error } = await supabase
-        .from('favorites')
-        .insert({ user_id: user.id, tool_id: toolId })
-
+      const { error } = await toggleFavoriteAction(toolId, false)
       if (!error) {
         setIsFavorited(true)
         onFavoriteCountDelta?.(1)

@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import {
+  insertToolCommentAction,
+  listToolCommentsAction,
+} from '@/app/actions/database-mutations'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -12,11 +15,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import { MessageCircle, Send } from 'lucide-react'
 import type { ToolComment } from '@/lib/types'
-import type { User } from '@supabase/supabase-js'
+import type { AuthUser } from '@/lib/auth/session'
 
 interface ToolCommentsSectionProps {
   toolId: string
-  initialUser?: User | null
+  initialUser?: AuthUser | null
   initialNickname?: string | null
 }
 
@@ -28,7 +31,7 @@ export function ToolCommentsSection({
   const pathname = usePathname()
   const loginHref = `/auth/login?redirect=${encodeURIComponent(pathname || '/')}`
 
-  const [user, setUser] = useState<User | null>(initialUser ?? null)
+  const [user, setUser] = useState<AuthUser | null>(initialUser ?? null)
   const [comments, setComments] = useState<ToolComment[]>([])
   const [loadingList, setLoadingList] = useState(true)
   const [nickname, setNickname] = useState(initialNickname ?? '')
@@ -40,14 +43,9 @@ export function ToolCommentsSection({
 
   const loadComments = useCallback(async () => {
     setLoadingList(true)
-    const supabase = createClient()
-    const { data, error } = await supabase
-      .from('tool_comments')
-      .select('*')
-      .eq('tool_id', toolId)
-      .order('created_at', { ascending: true })
+    const { comments: list, error } = await listToolCommentsAction(toolId)
     if (!error) {
-      setComments((data ?? []) as ToolComment[])
+      setComments(list)
     } else {
       setComments([])
     }
@@ -59,20 +57,16 @@ export function ToolCommentsSection({
   }, [loadComments])
 
   useEffect(() => {
-    const supabase = createClient()
-
-    void supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
-    })
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null)
-    })
-
+    let cancelled = false
+    void (async () => {
+      const r = await fetch('/api/auth/session', { cache: 'no-store' })
+      if (!cancelled && r.ok) {
+        const j = (await r.json()) as { user: AuthUser | null }
+        setUser(j.user ?? null)
+      }
+    })()
     return () => {
-      subscription.unsubscribe()
+      cancelled = true
     }
   }, [])
 
@@ -111,15 +105,14 @@ export function ToolCommentsSection({
     }
     setSubmitting(true)
     try {
-      const supabase = createClient()
-      const { error: ins } = await supabase.from('tool_comments').insert({
+      const { error: ins } = await insertToolCommentAction({
         tool_id: toolId,
         body: b,
         nickname: n,
         email: em,
         website: wb || null,
       })
-      if (ins) throw new Error(ins.message)
+      if (ins) throw new Error(ins)
       setBody('')
       await loadComments()
     } catch (err) {

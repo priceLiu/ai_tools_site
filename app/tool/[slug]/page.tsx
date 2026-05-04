@@ -1,166 +1,77 @@
-'use client'
-
-import { createClient } from '@/lib/supabase/client'
-import { useEffect, useState } from 'react'
-import { useParams, useSearchParams } from 'next/navigation'
+import { cache } from 'react'
+import { notFound } from 'next/navigation'
 import Link from 'next/link'
+import { ArrowLeft } from 'lucide-react'
 import { Sidebar } from '@/components/sidebar'
-import { Header } from '@/components/header'
-import { FavoriteButton } from '@/components/favorite-button'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+import { HeaderUser } from '@/components/header-user'
+import { ToolDetailPublicView } from '@/components/tool-detail-public-view'
 import {
-  ToolDetailView,
-} from '@/components/tool-detail-view'
-import { toolDetailPageGutterClass, toolDetailMaxWidthClass } from '@/lib/tool-detail-layout'
-import { ArrowLeft, Eye, Heart, ExternalLink } from 'lucide-react'
-import type {
-  NavigationMenuItemRow,
-  NavigationMenuTreeNode,
-  Tool,
-  Profile,
-} from '@/lib/types'
-import { buildNavigationTree } from '@/lib/navigation-tree'
-import { toolPublicPath } from '@/lib/tool-public-path'
-import { FrontendLoadingHint } from '@/components/frontend-loading-hint'
-import type { User } from '@supabase/supabase-js'
+  toolDetailPageGutterClass,
+  toolDetailMaxWidthClass,
+} from '@/lib/tool-detail-layout'
+import { getNavigationMenuTreeStatic } from '@/lib/navigation-menu'
+import * as neon from '@/lib/neon/data'
 
-export default function ToolPage() {
-  const params = useParams()
-  const searchParams = useSearchParams()
-  const slug = decodeURIComponent(String(params.slug ?? '')).trim()
-  const hideCommentsForAdminPreview =
-    searchParams.get('admin_preview') === '1'
+/** 60s ISR：后台保存通过 `revalidatePath` 立即推送 */
+export const revalidate = 60
+export const dynamicParams = true
 
-  const [tool, setTool] = useState<Tool | null>(null)
-  const [navigation, setNavigation] = useState<NavigationMenuTreeNode[]>([])
-  const [user, setUser] = useState<User | null>(null)
-  const [profile, setProfile] = useState<Profile | null>(null)
-  const [isFavorited, setIsFavorited] = useState(false)
-  const [loading, setLoading] = useState(true)
+/** 同一请求内 generateMetadata 与 page 共享一次取数 */
+const getToolBySlugCached = cache((slug: string) =>
+  neon.neonGetToolPublicBySlug(slug),
+)
 
-  useEffect(() => {
-    async function fetchData() {
-      const supabase = createClient()
-      const {
-        data: { user: currentUser },
-      } = await supabase.auth.getUser()
-      setUser(currentUser)
+interface ToolPageProps {
+  params: Promise<{ slug: string }>
+  searchParams: Promise<{ admin_preview?: string }>
+}
 
-      if (currentUser) {
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', currentUser.id)
-          .single()
-        setProfile(profileData)
-      }
-
-      const { data: navData } = await supabase
-        .from('navigation_menu_items')
-        .select('id,parent_id,label,href,icon_name,sort_order,is_visible')
-        .eq('is_visible', true)
-        .order('sort_order')
-
-      setNavigation(
-        navData?.length
-          ? buildNavigationTree(navData as NavigationMenuItemRow[])
-          : [],
-      )
-
-      const publicRes = await fetch(
-        `/api/public/tools/${encodeURIComponent(slug)}`,
-        { cache: 'no-store' },
-      )
-
-      if (publicRes.ok) {
-        const toolData = (await publicRes.json()) as Tool
-        setTool(toolData)
-
-        if (currentUser) {
-          const { data: favorite } = await supabase
-            .from('favorites')
-            .select('id')
-            .eq('user_id', currentUser.id)
-            .eq('tool_id', toolData.id)
-            .maybeSingle()
-          setIsFavorited(!!favorite)
-        }
-      }
-
-      setLoading(false)
+export async function generateStaticParams() {
+  try {
+    const slugs = await neon.neonListApprovedToolSlugs()
+    return slugs.map((slug) => ({ slug }))
+  } catch (e) {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('[tool/[slug] generateStaticParams] 跳过预生成:', e)
     }
-
-    fetchData()
-  }, [slug])
-
-  /** 卡片点击与详情首屏 GET 并发时，访问数可能尚未 +1；稍后再拉一次仅同步 view_count */
-  useEffect(() => {
-    if (!slug || !tool?.id) return
-    const ac = new AbortController()
-    const t = window.setTimeout(async () => {
-      try {
-        const res = await fetch(
-          `/api/public/tools/${encodeURIComponent(slug)}`,
-          { cache: 'no-store', signal: ac.signal },
-        )
-        if (!res.ok) return
-        const fresh = (await res.json()) as Tool
-        setTool((prev) =>
-          prev?.id === fresh.id
-            ? { ...prev, view_count: fresh.view_count }
-            : prev,
-        )
-      } catch {
-        /* aborted */
-      }
-    }, 450)
-    return () => {
-      ac.abort()
-      window.clearTimeout(t)
-    }
-  }, [slug, tool?.id])
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-background">
-        <Sidebar navigation={navigation} enableHomeAnchors={false} />
-        <div className="pl-16 md:pl-64">
-          <Header user={user} profile={profile} />
-          <main className="flex min-h-[50vh] items-center justify-center p-6">
-            <FrontendLoadingHint />
-          </main>
-        </div>
-      </div>
-    )
+    return []
   }
+}
 
-  if (!tool) {
-    return (
-      <div className="min-h-screen bg-background">
-        <Sidebar navigation={navigation} enableHomeAnchors={false} />
-        <div className="pl-16 md:pl-64">
-          <Header user={user} profile={profile} />
-          <main className={toolDetailPageGutterClass}>
-            <div className={`${toolDetailMaxWidthClass} text-center`}>
-              <h1 className="text-2xl font-bold text-foreground">工具未找到</h1>
-              <p className="mt-2 text-muted-foreground">该工具可能已被移除或不存在</p>
-              <Link href="/" className="mt-4 inline-block text-primary hover:underline">
-                返回首页
-              </Link>
-            </div>
-          </main>
-        </div>
-      </div>
-    )
+export async function generateMetadata({ params }: ToolPageProps) {
+  const { slug: raw } = await params
+  const slug = decodeURIComponent(raw ?? '').trim()
+  if (!slug) return { title: '工具未找到 - AI工具集' }
+  const tool = await getToolBySlugCached(slug)
+  if (!tool) return { title: '工具未找到 - AI工具集' }
+  const desc = (tool.description ?? '').trim()
+  return {
+    title: `${tool.name} - AI工具集`,
+    description: desc || `了解 ${tool.name} 的功能与使用方式`,
   }
+}
+
+export default async function ToolPage({ params, searchParams }: ToolPageProps) {
+  const { slug: raw } = await params
+  const slug = decodeURIComponent(raw ?? '').trim()
+  if (!slug) notFound()
+
+  const sp = await searchParams
+  const hideCommentsForAdminPreview = sp.admin_preview === '1'
+
+  const [tool, navigation] = await Promise.all([
+    getToolBySlugCached(slug),
+    getNavigationMenuTreeStatic(),
+  ])
+
+  if (!tool) notFound()
 
   return (
     <div className="min-h-screen bg-background">
       <Sidebar navigation={navigation} enableHomeAnchors={false} />
 
       <div className="pl-16 md:pl-64">
-        <Header user={user} profile={profile} />
+        <HeaderUser />
 
         <main className={toolDetailPageGutterClass}>
           <div className={toolDetailMaxWidthClass}>
@@ -172,64 +83,9 @@ export default function ToolPage() {
               返回首页
             </Link>
 
-            <ToolDetailView
+            <ToolDetailPublicView
               tool={tool}
-              logoHref={toolPublicPath(tool.slug)}
-              showComments={!hideCommentsForAdminPreview}
-              badges={
-                <>
-                  {tool.category ? (
-                    <Link href={`/category/${tool.category.slug}`}>
-                      <Badge variant="secondary">{tool.category.name}</Badge>
-                    </Link>
-                  ) : null}
-                  <span className="flex items-center gap-1 text-sm text-muted-foreground">
-                    <Eye className="h-4 w-4" />
-                    {tool.view_count ?? 0} 次访问
-                  </span>
-                  <span className="flex items-center gap-1 text-sm text-muted-foreground">
-                    <Heart
-                      className="h-4 w-4 shrink-0 text-red-500/70"
-                      aria-hidden
-                    />
-                    {(tool.favorite_count ?? 0).toLocaleString()} 收藏
-                  </span>
-                </>
-              }
-              headerActions={
-                <>
-                  <FavoriteButton
-                    toolId={tool.id}
-                    initialFavorited={isFavorited}
-                    isLoggedIn={!!user}
-                    onFavoriteCountDelta={(delta) => {
-                      setTool((prev) =>
-                        prev
-                          ? {
-                              ...prev,
-                              favorite_count: Math.max(
-                                0,
-                                (prev.favorite_count ?? 0) + delta,
-                              ),
-                            }
-                          : prev,
-                      )
-                    }}
-                  />
-                  <Button asChild>
-                    <a
-                      href={tool.website_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <ExternalLink className="mr-2 h-4 w-4" />
-                      访问网站
-                    </a>
-                  </Button>
-                </>
-              }
-              commentsInitialUser={user}
-              commentsInitialNickname={profile?.display_name ?? null}
+              hideComments={hideCommentsForAdminPreview}
             />
           </div>
         </main>

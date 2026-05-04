@@ -1,20 +1,16 @@
-import { createClient } from '@/lib/supabase/server'
-import { AdminNavigationMenuEditor } from '@/components/admin-navigation-menu-editor'
 import Link from 'next/link'
+import { AdminNavigationMenuEditor } from '@/components/admin-navigation-menu-editor'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft } from 'lucide-react'
 import type { NavigationMenuItemRow } from '@/lib/types'
+import * as neon from '@/lib/neon/data'
 
 export const metadata = {
   title: '菜单管理 - 管理后台',
 }
 
 export default async function AdminNavigationMenuPage() {
-  const supabase = await createClient()
-  const { data: rows } = await supabase
-    .from('navigation_menu_items')
-    .select('id,parent_id,label,href,icon_name,sort_order,is_visible')
-    .order('sort_order', { ascending: true })
+  const rows = await neon.neonListNavigationForAdmin()
 
   return (
     <div className="p-4 md:p-6">

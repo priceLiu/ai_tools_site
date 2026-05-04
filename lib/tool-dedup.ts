@@ -1,5 +1,3 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
-
 /** 与「介绍前 50 字」规则一致，用于名称 + 分类 + 介绍片段三重判重 */
 export const TOOL_DEDUP_INTRO_PREVIEW_LENGTH = 50
 
@@ -12,41 +10,6 @@ export function toolIntroductionPreviewDedup(
   introduction: string | null | undefined,
 ): string {
   return (introduction ?? '').trim().slice(0, TOOL_DEDUP_INTRO_PREVIEW_LENGTH)
-}
-
-/**
- * 若存在另一条记录：名称、分类、介绍前 50 字均相同，则视为重复，返回该行 id。
- * 任一项不同则不算重复（可新增）。
- */
-export async function findDuplicateToolId(
-  supabase: SupabaseClient,
-  params: {
-    name: string
-    introduction: string
-    categoryId: string | null
-    excludeToolId?: string | null
-  },
-): Promise<string | null> {
-  const nameKey = toolNameDedupKey(params.name)
-  const preview = toolIntroductionPreviewDedup(params.introduction)
-
-  let q = supabase.from('tools').select('id,introduction').eq('name', nameKey)
-  if (params.categoryId) {
-    q = q.eq('category_id', params.categoryId)
-  } else {
-    q = q.is('category_id', null)
-  }
-
-  const { data, error } = await q
-  if (error) throw new Error(error.message)
-
-  for (const row of data ?? []) {
-    if (params.excludeToolId && row.id === params.excludeToolId) continue
-    if (toolIntroductionPreviewDedup(row.introduction as string | null) === preview) {
-      return row.id
-    }
-  }
-  return null
 }
 
 export const TOOL_DEDUP_REJECT_MESSAGE =

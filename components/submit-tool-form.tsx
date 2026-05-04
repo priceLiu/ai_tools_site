@@ -3,7 +3,6 @@
 import { useState, useRef, useMemo, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
-import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -43,10 +42,8 @@ import { toolPublicPath } from '@/lib/tool-public-path'
 import { generateToolSlug } from '@/lib/tool-slug'
 import { toolNameDedupKey } from '@/lib/tool-dedup'
 import { assertNoDuplicateToolForSubmitAction } from '@/app/actions/tool-dedup'
-import {
-  setToolTagsAction,
-  suggestToolTagNamesAction,
-} from '@/app/actions/tool-tags'
+import { suggestToolTagNamesAction } from '@/app/actions/tool-tags'
+import { submitToolPersistAction } from '@/app/actions/database-mutations'
 import { ToolDetailView } from '@/components/tool-detail-view'
 import { ToolTagsEditor } from '@/components/tool-tags-editor'
 import { Badge } from '@/components/ui/badge'
@@ -519,73 +516,28 @@ export function SubmitToolForm({
       })
       if (!dedup.ok) throw new Error(dedup.message)
 
-      const supabase = createClient()
-
-      if (editingTool) {
-        const { error: updateError } = await supabase
-          .from('tools')
-          .update({
-            name: displayName,
-            slug: editingTool.slug,
-            description,
-            introduction: body,
-            introduction_format: dbFormat,
-            website_url: websiteUrl.trim(),
-            category_id: resolvedCategoryId,
-            logo_url: logoUrl || null,
-            screenshot_url: screenshotUrl || null,
-            status: 'pending',
-            rejection_reason: null,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', editingTool.id)
-          .eq('user_id', userId)
-
-        if (updateError) {
-          throw new Error(updateError.message)
-        }
-
-        const tagRes = await setToolTagsAction({
-          toolId: editingTool.id,
-          tagNames,
-        })
-        if (tagRes.error) throw new Error(tagRes.error)
-
-        router.push('/account/history?resubmitted=true')
-        return
-      }
-
-      const { data: inserted, error: insertError } = await supabase
-        .from('tools')
-        .insert({
-          name: displayName,
-          slug: generateToolSlug(displayName),
-          description,
-          introduction: body,
-          introduction_format: dbFormat,
-          website_url: websiteUrl.trim(),
-          category_id: resolvedCategoryId,
-          logo_url: logoUrl || null,
-          screenshot_url: screenshotUrl || null,
-          user_id: userId,
-          status: 'pending',
-          is_disabled: false,
-        })
-        .select('id')
-        .maybeSingle()
-
-      if (insertError) {
-        throw new Error(insertError.message)
-      }
-      if (!inserted?.id) throw new Error('创建工具失败')
-
-      const tagRes = await setToolTagsAction({
-        toolId: inserted.id,
+      const persist = await submitToolPersistAction({
+        mode: editingTool ? 'update' : 'create',
+        editingToolId: editingTool?.id,
+        slugForUpdate: editingTool?.slug,
+        newSlug: editingTool ? undefined : generateToolSlug(displayName),
+        displayName,
+        description,
+        introduction: body,
+        introduction_format: dbFormat,
+        website_url: websiteUrl.trim(),
+        category_id: resolvedCategoryId,
+        logo_url: logoUrl || null,
+        screenshot_url: screenshotUrl || null,
         tagNames,
       })
-      if (tagRes.error) throw new Error(tagRes.error)
+      if (persist.error) throw new Error(persist.error)
 
-      router.push('/account/history?success=true')
+      if (editingTool) {
+        router.push('/account/history?resubmitted=true')
+      } else {
+        router.push('/account/history?success=true')
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : '提交失败，请重试')
     } finally {

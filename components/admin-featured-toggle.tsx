@@ -5,8 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { Star } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
-import { revalidateHomeToolBundleAction } from '@/app/actions/revalidate-home-tool-bundle'
+import { adminSetToolFeaturedAction } from '@/app/actions/database-mutations'
 
 interface AdminFeaturedToggleProps {
   toolId: string
@@ -31,21 +30,12 @@ export function AdminFeaturedToggle({
   const toggle = async () => {
     const next = !featured
     setFeatured(next)
-    const supabase = createClient()
-    const { error } = await supabase
-      .from('tools')
-      .update({
-        is_featured: next,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', toolId)
+    const { error } = await adminSetToolFeaturedAction(toolId, next)
 
     if (error) {
       setFeatured(!next)
       return
     }
-
-    await revalidateHomeToolBundleAction()
 
     startTransition(() => {
       router.refresh()

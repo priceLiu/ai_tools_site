@@ -1,26 +1,25 @@
-import { createClient } from '@/lib/supabase/server'
+import { getAuthUser } from '@/lib/auth/session'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft } from 'lucide-react'
 import { AdminUsersTable } from '@/components/admin-users-table'
 import type { Profile } from '@/lib/types'
+import * as neon from '@/lib/neon/data'
 
 export const metadata = {
   title: '用户管理 - 管理后台',
 }
 
 export default async function AdminUsersPage() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const user = await getAuthUser()
 
-  const { data: rows, error } = await supabase
-    .from('profiles')
-    .select('id, display_name, avatar_url, is_admin, is_disabled, created_at')
-    .order('created_at', { ascending: false })
-
-  const profiles = (rows ?? []) as Profile[]
+  let profiles: Profile[] = []
+  let loadError: string | null = null
+  try {
+    profiles = await neon.neonListProfilesForAdmin()
+  } catch (e) {
+    loadError = e instanceof Error ? e.message : '加载失败'
+  }
 
   return (
     <div className="p-4 md:p-6">
@@ -38,9 +37,9 @@ export default async function AdminUsersPage() {
           ）与账号禁用。禁用后用户将被退出且无法继续使用站点功能。
         </p>
 
-        {error ? (
+        {loadError ? (
           <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
-            加载用户列表失败：{error.message}
+            加载用户列表失败：{loadError}
           </div>
         ) : (
           <AdminUsersTable

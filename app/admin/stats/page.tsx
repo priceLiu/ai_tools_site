@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
+import * as neon from '@/lib/neon/data'
 import {
   AdminStatsPanel,
   type AdminCategoryBarDatum,
@@ -33,20 +33,10 @@ function isHomeHotListedTool(t: {
 }
 
 export default async function AdminStatsPage() {
-  const supabase = await createClient()
-
-  const [{ data: categories }, { data: tools }] = await Promise.all([
-    supabase
-      .from('categories')
-      .select('id, name, parent_id, slug, sort_order')
-      .order('sort_order', { ascending: true }),
-    supabase
-      .from('tools')
-      .select('id, category_id, is_featured, status, is_disabled'),
+  const [cats, toolRows] = await Promise.all([
+    neon.neonListStatsCategories(),
+    neon.neonListStatsTools(),
   ])
-
-  const cats = (categories ?? []) as Category[]
-  const toolRows = tools ?? []
 
   const catById = new Map(cats.map((c) => [c.id, c]))
 

@@ -83,6 +83,9 @@ export interface Profile {
   created_at: string
 }
 
+/** 站点会话用户（邮箱密码登录，id 与 profiles.id 一致） */
+export type AuthUser = { id: string; email: string }
+
 export interface Favorite {
   id: string
   user_id: string

@@ -1,24 +1,17 @@
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
 import { getNavigationMenuTree } from '@/lib/navigation-menu'
+import * as neon from '@/lib/neon/data'
 import { AdminImportToolsForm } from '@/components/admin-import-tools-form'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft } from 'lucide-react'
-import type { Category } from '@/lib/types'
 
 export const metadata = {
   title: '批量导入工具 - 管理后台',
 }
 
 export default async function AdminImportToolsPage() {
-  const supabase = await createClient()
-  const [{ data: rows }, navigation] = await Promise.all([
-    supabase.from('categories').select('*').order('sort_order'),
-    getNavigationMenuTree(),
-  ])
-
-  const categories = (rows as Category[] | null) ?? []
-
+  const categories = await neon.neonListCategoriesAll()
+  const navigation = await getNavigationMenuTree()
   return (
     <main className="p-3 md:p-5">
       <div className="mx-auto max-w-3xl">

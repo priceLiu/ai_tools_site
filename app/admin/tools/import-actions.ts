@@ -1,15 +1,15 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createClient } from '@/lib/supabase/server'
+import { getAuthUser } from '@/lib/auth/session'
 import { revalidateHomeToolBundleAction } from '@/app/actions/revalidate-home-tool-bundle'
 import { generateToolSlug } from '@/lib/tool-slug'
 import { randomToolViewSeed } from '@/lib/tool-view-seed'
 import { fetchImageAsDataUrl } from '@/lib/fetch-image-as-data-url'
-import { createServiceRoleClient } from '@/lib/supabase/service-role'
+import * as neon from '@/lib/neon/data'
 import {
-  findDuplicateToolId,
   toolNameDedupKey,
+  toolIntroductionPreviewDedup,
   TOOL_DEDUP_REJECT_MESSAGE,
 } from '@/lib/tool-dedup'
 import {
@@ -38,29 +38,17 @@ export async function importToolsFromDocsJsonAction(input: {
   results?: ImportToolsRowResult[]
   imported?: number
 }> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) return { ok: false, error: '未登录' }
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('is_admin')
-    .eq('id', user.id)
-    .single()
-  if (!profile?.is_admin) return { ok: false, error: '无权限' }
+  const adminOk = await neon.neonGetProfileIsAdmin(user.id)
+  if (!adminOk) return { ok: false, error: '无权限' }
 
   const categoryId = input.categoryId.trim()
   if (!categoryId) return { ok: false, error: '请选择分类' }
 
-  const { data: cat } = await supabase
-    .from('categories')
-    .select('id, name')
-    .eq('id', categoryId)
-    .maybeSingle()
-  if (!cat) return { ok: false, error: '分类不存在' }
-  const categoryName = (cat as { id: string; name: string }).name ?? null
+  const categoryName = await neon.neonGetCategoryNameById(categoryId)
+  if (categoryName == null) return { ok: false, error: '分类不存在' }
 
   const parsed = parseDocsToolsJson(input.rawJson)
   if (!parsed.ok) return { ok: false, error: parsed.error }
@@ -73,7 +61,7 @@ export async function importToolsFromDocsJsonAction(input: {
   let anyApproved = false
 
   for (const item of items) {
-    const rowRes = await importOneTool(supabase, {
+    const rowRes = await importOneTool({
       item,
       categoryId,
       categoryName,
@@ -89,23 +77,20 @@ export async function importToolsFromDocsJsonAction(input: {
 
   if (anyApproved) {
     await revalidateHomeToolBundleAction()
-    revalidatePath('/')
+    revalidatePath('/category/[slug]', 'page')
   }
   revalidatePath('/admin')
 
   return { ok: true, results, imported }
 }
 
-async function importOneTool(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  opts: {
-    item: DocsToolJsonItem
-    categoryId: string
-    categoryName: string | null
-    userId: string
-    status: 'approved' | 'pending'
-  },
-): Promise<ImportToolsRowResult> {
+async function importOneTool(opts: {
+  item: DocsToolJsonItem
+  categoryId: string
+  categoryName: string | null
+  userId: string
+  status: 'approved' | 'pending'
+}): Promise<ImportToolsRowResult> {
   const { item, categoryId, categoryName, userId, status } = opts
   const name = item.name
 
@@ -139,7 +124,6 @@ async function importOneTool(
         rawLogo.startsWith('https://') ||
         rawLogo.startsWith('http://')
       ) {
-        // 部分站点在服务端 fetch 会失败（TLS/反爬）；保留外链供前台 Next/Image 加载
         logo_url = rawLogo
         logoNote = `图标未转存为 Base64：${fetched.error}（已保存原始图标 URL）`
       } else {
@@ -153,12 +137,12 @@ async function importOneTool(
     return { name, ok: false, message: '无法从简介生成概述' }
   }
 
-  const db = createServiceRoleClient() ?? supabase
-  const dupId = await findDuplicateToolId(db, {
-    name: item.name,
-    introduction: item.introduction,
-    categoryId: categoryId,
-  })
+  const dupId = await neon.neonFindDuplicateTool(
+    toolNameDedupKey(item.name),
+    categoryId,
+    toolIntroductionPreviewDedup(item.introduction),
+    null,
+  )
   if (dupId) {
     return { name, ok: false, message: TOOL_DEDUP_REJECT_MESSAGE }
   }
@@ -186,14 +170,15 @@ async function importOneTool(
     insertRow.view_count = randomToolViewSeed()
   }
 
-  const { data: inserted, error } = await supabase
-    .from('tools')
-    .insert(insertRow)
-    .select('id')
-    .single()
-
-  if (error) {
-    return { name, ok: false, message: error.message }
+  let insertedId: string
+  try {
+    insertedId = await neon.neonSubmitInsertTool({ values: insertRow })
+  } catch (e) {
+    return {
+      name,
+      ok: false,
+      message: e instanceof Error ? e.message : '写入失败',
+    }
   }
 
   const tagNames = buildSuggestedToolTagNames({
@@ -201,11 +186,14 @@ async function importOneTool(
     introduction: item.introduction,
     introductionFormat: 'markdown',
   })
-  const { error: tagErr } = await supabase.rpc('set_tool_tags_for_tool', {
-    p_tool_id: inserted.id,
-    p_names: tagNames,
+  let tagNote = ''
+  const tagRes = await neon.neonSetToolTagsForTool({
+    actorUserId: userId,
+    actorIsAdmin: true,
+    toolId: insertedId,
+    names: tagNames,
   })
-  const tagNote = tagErr ? `标签未写入：${tagErr.message}` : ''
+  if (tagRes.error) tagNote = `标签未写入：${tagRes.error}`
 
   return {
     name,

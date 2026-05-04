@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import * as neon from '@/lib/neon/data'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ArrowLeft, ExternalLink } from 'lucide-react'
@@ -22,32 +22,20 @@ interface PageProps {
 
 export async function generateMetadata({ params }: PageProps) {
   const { id } = await params
-  const supabase = await createClient()
-  const { data: tool } = await supabase.from('tools').select('name').eq('id', id).maybeSingle()
-  return { title: tool?.name ? `${tool.name} - 后台预览` : '工具预览' }
+  const name = await neon.neonGetToolNameById(id)
+  return { title: name ? `${name} - 后台预览` : '工具预览' }
 }
 
 export default async function AdminToolPreviewPage({ params }: PageProps) {
   const { id } = await params
-  const supabase = await createClient()
 
-  const { data: row } = await supabase
-    .from('tools')
-    .select(
-      '*, category:categories(*), tool_tags(sort_order, tag:tags(id,name))',
-    )
-    .eq('id', id)
-    .maybeSingle()
+  const row = await neon.neonGetToolByIdAdmin(id)
 
   if (!row) notFound()
 
   const tool = row as Tool
 
-  const { data: categoriesRows } = await supabase
-    .from('categories')
-    .select('*')
-    .order('sort_order')
-  const categories = (categoriesRows || []) as Category[]
+  const categories = (await neon.neonListCategoriesAll()) as Category[]
   const status = submissionStatusConfig[tool.status]
   const StatusIcon = status.icon
 
@@ -77,70 +65,70 @@ export default async function AdminToolPreviewPage({ params }: PageProps) {
         </Button>
 
         <ToolDetailView
-        tool={tool}
-        logoHref={adminPreviewLogoHref}
-        showComments={false}
-        badges={
-          <>
-            <Badge variant={status.variant}>
-              <StatusIcon className={`mr-1 h-3 w-3 ${status.className}`} />
-              {status.label}
-            </Badge>
-            {tool.is_disabled ? (
-              <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-950/50 dark:text-amber-200">
-                前台已禁用
+          tool={tool}
+          logoHref={adminPreviewLogoHref}
+          showComments={false}
+          badges={
+            <>
+              <Badge variant={status.variant}>
+                <StatusIcon className={`mr-1 h-3 w-3 ${status.className}`} />
+                {status.label}
+              </Badge>
+              {tool.is_disabled ? (
+                <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-950/50 dark:text-amber-200">
+                  前台已禁用
+                </span>
+              ) : null}
+              {tool.category ? (
+                <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium">
+                  {tool.category.name}
+                </span>
+              ) : null}
+              <span className="text-sm text-muted-foreground">
+                阅读量 {tool.view_count ?? 0} · 收藏{' '}
+                {(tool.favorite_count ?? 0).toLocaleString()}
               </span>
-            ) : null}
-            {tool.category ? (
-              <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium">
-                {tool.category.name}
-              </span>
-            ) : null}
-            <span className="text-sm text-muted-foreground">
-              阅读量 {tool.view_count ?? 0} · 收藏{' '}
-              {(tool.favorite_count ?? 0).toLocaleString()}
-            </span>
-          </>
-        }
-        headerActions={
-          <Button asChild>
-            <a
-              href={tool.website_url}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <ExternalLink className="mr-2 h-4 w-4" />
-              访问网站
-            </a>
-          </Button>
-        }
-        panelFooter={panelFooter}
-      >
-        <div className="mt-6">
-          <AdminApprovedToolEditor
-            key={`${tool.id}-${tool.updated_at}`}
-            toolId={tool.id}
-            toolStatus={tool.status}
-            initialName={tool.name}
-            initialDescription={tool.description}
-            initialWebsiteUrl={tool.website_url}
-            initialLogoUrl={tool.logo_url}
-            initialScreenshotUrl={tool.screenshot_url}
-            initialIntroduction={tool.introduction ?? ''}
-            initialIntroductionFormat={normalizeIntroductionFormat(
-              tool.introduction_format,
-            )}
-            initialCategoryId={tool.category_id}
-            staleCategoryId={
-              tool.category_id && !tool.category ? tool.category_id : null
-            }
-            initialDisabled={Boolean(tool.is_disabled)}
-            initialFeatured={Boolean(tool.is_featured)}
-            initialTagNames={toolTagLabelsFromTool(tool)}
-            categories={categories}
-          />
-        </div>
-      </ToolDetailView>
+            </>
+          }
+          headerActions={
+            <Button asChild>
+              <a
+                href={tool.website_url}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <ExternalLink className="mr-2 h-4 w-4" />
+                访问网站
+              </a>
+            </Button>
+          }
+          panelFooter={panelFooter}
+        >
+          <div className="mt-6">
+            <AdminApprovedToolEditor
+              key={`${tool.id}-${tool.updated_at}`}
+              toolId={tool.id}
+              toolStatus={tool.status}
+              initialName={tool.name}
+              initialDescription={tool.description}
+              initialWebsiteUrl={tool.website_url}
+              initialLogoUrl={tool.logo_url}
+              initialScreenshotUrl={tool.screenshot_url}
+              initialIntroduction={tool.introduction ?? ''}
+              initialIntroductionFormat={normalizeIntroductionFormat(
+                tool.introduction_format,
+              )}
+              initialCategoryId={tool.category_id}
+              staleCategoryId={
+                tool.category_id && !tool.category ? tool.category_id : null
+              }
+              initialDisabled={Boolean(tool.is_disabled)}
+              initialFeatured={Boolean(tool.is_featured)}
+              initialTagNames={toolTagLabelsFromTool(tool)}
+              categories={categories}
+            />
+          </div>
+        </ToolDetailView>
       </div>
     </div>
   )
