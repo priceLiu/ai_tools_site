@@ -117,19 +117,21 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
     <div className="min-h-screen bg-background">
       <Sidebar navigation={navigation} enableHomeAnchors />
 
-      <div className="pl-16 md:pl-64">
-        <HeaderUser />
+      <div className="md:pl-64">
+        <HeaderUser navigation={navigation} enableHomeAnchors />
 
-        <main className="p-4 md:p-6">
+        <main className="px-3 py-4 sm:px-4 md:p-6">
           <div className="mx-auto max-w-7xl">
-            <div className="mb-8">
+            <div className="mb-5 md:mb-8">
               <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
-                  <Icon className="h-6 w-6 text-primary" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 md:h-12 md:w-12">
+                  <Icon className="h-5 w-5 text-primary md:h-6 md:w-6" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-bold text-foreground">{categoryName}</h1>
-                  <p className="text-sm text-muted-foreground">
+                  <h1 className="text-xl font-bold text-foreground md:text-2xl">
+                    {categoryName}
+                  </h1>
+                  <p className="text-xs text-muted-foreground md:text-sm">
                     共 {tools.length} 个工具
                   </p>
                 </div>
@@ -137,12 +139,9 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
             </div>
 
             {tools.length > 0 ? (
-              <div className="flex flex-wrap justify-center gap-4 sm:justify-start">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                 {tools.map((tool) => (
-                  <ToolCard
-                    key={tool.id}
-                    tool={tool}
-                  />
+                  <ToolCard key={tool.id} tool={tool} fluid />
                 ))}
               </div>
             ) : (

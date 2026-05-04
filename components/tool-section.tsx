@@ -1,7 +1,11 @@
+'use client'
+
+import { useState } from 'react'
 import { ToolCard } from '@/components/tool-card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import type { HomeListedTool } from '@/lib/types'
-import { Flame, Clock } from 'lucide-react'
+import { ChevronDown, Clock, Flame } from 'lucide-react'
 
 interface ToolSectionProps {
   title: string
@@ -11,6 +15,11 @@ interface ToolSectionProps {
   anchorId?: string
   /** 前 N 张列表图使用 loading=priority，改善首屏；其余惰性解码 */
   imagePriorityFirstN?: number
+  /**
+   * 移动端首屏默认显示的卡片数；超过则显示「展开更多」按钮，避免首页一次渲染
+   * 几百张 ToolCard 把弱机型 CPU 拖死。桌面（≥ md）通过 CSS 不受此限制。
+   */
+  mobileInitialCount?: number
 }
 
 export function ToolSection({
@@ -19,10 +28,16 @@ export function ToolSection({
   icon,
   anchorId,
   imagePriorityFirstN = 0,
+  mobileInitialCount = 8,
 }: ToolSectionProps) {
+  const [mobileExpanded, setMobileExpanded] = useState(false)
+
   if (tools.length === 0 && (icon === 'hot' || icon === 'new')) {
     return null
   }
+
+  const hasMobileOverflow =
+    !mobileExpanded && tools.length > mobileInitialCount
 
   return (
     <section
@@ -44,6 +59,11 @@ export function ToolSection({
           )}
           <span className="font-medium">{title}</span>
         </Badge>
+        {hasMobileOverflow ? (
+          <span className="text-xs text-muted-foreground md:hidden">
+            共 {tools.length} 个
+          </span>
+        ) : null}
       </div>
       {tools.length === 0 ? (
         <p className="px-1 text-sm text-muted-foreground">
@@ -54,16 +74,40 @@ export function ToolSection({
           。
         </p>
       ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-          {tools.map((tool, idx) => (
-            <ToolCard
-              key={tool.id}
-              tool={tool}
-              imagePriority={idx < imagePriorityFirstN}
-              fluid
-            />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 md:grid-cols-4 lg:grid-cols-5">
+            {tools.map((tool, idx) => {
+              const overflow = idx >= mobileInitialCount && !mobileExpanded
+              return (
+                <div
+                  key={tool.id}
+                  className={overflow ? 'hidden md:block' : undefined}
+                >
+                  <ToolCard
+                    tool={tool}
+                    imagePriority={idx < imagePriorityFirstN}
+                    fluid
+                  />
+                </div>
+              )
+            })}
+          </div>
+
+          {hasMobileOverflow ? (
+            <div className="md:hidden">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full gap-1.5"
+                onClick={() => setMobileExpanded(true)}
+              >
+                展开剩余 {tools.length - mobileInitialCount} 个
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : null}
+        </>
       )}
     </section>
   )

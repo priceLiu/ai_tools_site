@@ -12,6 +12,12 @@ import { cn } from '@/lib/utils'
 import { trimOrNull } from '@/lib/trim-or-null'
 import { Sparkles, Bot, Eye, Heart } from 'lucide-react'
 
+/**
+ * 全局 Tooltip Provider 在 `app/layout.tsx`，这里只用 Tooltip.Root；
+ * 不再每张卡片重复挂 Provider —— 长列表性能差异显著。
+ * `hidden md:inline-flex` 让移动端整段 Tooltip 不进 DOM，进一步省事件监听。
+ */
+
 const TOOL_TIP_CONTENT_CLASS =
   'z-50 max-w-[340px] rounded-lg border-0 bg-neutral-950 px-4 py-3 text-xs text-white shadow-xl'
 
@@ -178,38 +184,32 @@ export function ToolCard({
   }
 
   return (
-    <Tooltip.Provider delayDuration={280}>
-      <Tooltip.Root delayDuration={280}>
-        <Tooltip.Trigger asChild>
-          <span
-            className={cn(
-              fluid
-                ? 'block min-w-0 max-w-full'
-                : 'inline-flex shrink-0',
-            )}
-            style={
-              fluid
-                ? undefined
-                : { width: TOOL_CARD_WIDTH, maxWidth: '100%' }
-            }
-          >
-            {wrapped}
-          </span>
-        </Tooltip.Trigger>
-        <Tooltip.Portal>
-          <Tooltip.Content
-            side="bottom"
-            sideOffset={10}
-            avoidCollisions
-            className={TOOL_TIP_CONTENT_CLASS}
-          >
-            <p className="line-clamp-2 max-w-[300px] whitespace-pre-wrap text-center text-xs leading-relaxed text-white">
-              {tooltipText}
-            </p>
-            <Tooltip.Arrow className="fill-neutral-950" width={12} height={6} />
-          </Tooltip.Content>
-        </Tooltip.Portal>
-      </Tooltip.Root>
-    </Tooltip.Provider>
+    <Tooltip.Root>
+      <Tooltip.Trigger asChild>
+        <span
+          className={cn(
+            fluid ? 'block min-w-0 max-w-full' : 'inline-flex shrink-0',
+          )}
+          style={
+            fluid ? undefined : { width: TOOL_CARD_WIDTH, maxWidth: '100%' }
+          }
+        >
+          {wrapped}
+        </span>
+      </Tooltip.Trigger>
+      <Tooltip.Portal>
+        <Tooltip.Content
+          side="bottom"
+          sideOffset={10}
+          avoidCollisions
+          className={cn(TOOL_TIP_CONTENT_CLASS, 'hidden md:block')}
+        >
+          <p className="line-clamp-2 max-w-[300px] whitespace-pre-wrap text-center text-xs leading-relaxed text-white">
+            {tooltipText}
+          </p>
+          <Tooltip.Arrow className="fill-neutral-950" width={12} height={6} />
+        </Tooltip.Content>
+      </Tooltip.Portal>
+    </Tooltip.Root>
   )
 }

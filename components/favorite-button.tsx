@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Heart } from 'lucide-react'
@@ -24,6 +24,14 @@ export function FavoriteButton({
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [isFavorited, setIsFavorited] = useState(initialFavorited)
+
+  /**
+   * 父组件（如详情页）首次挂载时通常拿不到 favorited 状态，要等 `/api/account/favorite-status`
+   * 异步返回后才 setState。这里同步 prop → state，让 Heart 颜色跟得上真实值。
+   */
+  useEffect(() => {
+    setIsFavorited(initialFavorited)
+  }, [initialFavorited, toolId])
 
   const handleToggleFavorite = async () => {
     if (!isLoggedIn) {

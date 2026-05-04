@@ -716,6 +716,41 @@ export async function neonGetToolViewCount(toolId: string): Promise<number> {
   return Number((rows[0] as { view_count: number | null } | undefined)?.view_count ?? 0)
 }
 
+/**
+ * 详情页客户端拉真实 view/favorite 计数：详情页 HTML 走 60s ISR，可能比 DB 旧；
+ * 这个接口给客户端在挂载后纠正。返回 null 表示工具不存在/已下架。
+ *
+ * `favorite_count` 不直接读 `tools.favorite_count` 列（部分历史 schema 可能缺失或被禁用），
+ * 改为对 `favorites` 实时计数；走 `tool_id` 索引，开销可忽略。
+ */
+export async function neonGetToolPublicStatsBySlug(
+  slug: string,
+): Promise<{ view_count: number; favorite_count: number } | null> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT
+      t.id,
+      COALESCE(t.view_count, 0) AS view_count,
+      COALESCE(
+        (SELECT count(*)::int FROM favorites f WHERE f.tool_id = t.id),
+        0
+      ) AS favorite_count
+    FROM tools t
+    WHERE t.slug = ${slug}
+      AND t.status = 'approved'
+      AND COALESCE(t.is_disabled, false) = false
+    LIMIT 1
+  `
+  const r = rows[0] as
+    | { view_count: number | null; favorite_count: number | null }
+    | undefined
+  if (!r) return null
+  return {
+    view_count: Number(r.view_count ?? 0),
+    favorite_count: Number(r.favorite_count ?? 0),
+  }
+}
+
 export async function neonApproveTool(input: {
   toolId: string
   featured: boolean

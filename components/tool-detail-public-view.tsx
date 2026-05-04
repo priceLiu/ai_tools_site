@@ -34,11 +34,39 @@ export function ToolDetailPublicView({
   const [favCount, setFavCount] = useState<number>(tool.favorite_count ?? 0)
   const [viewCount, setViewCount] = useState<number>(tool.view_count ?? 0)
 
-  /** 仅本地 +1 显示，真实自增由 `/api/public/tools/:slug/view` 处理 */
+  /**
+   * 详情页 HTML 走 60s ISR，初始 view/favorite 可能是旧值。
+   * 客户端挂载时同步：
+   *   1) POST /view 自增（同时 +1 本地展示）
+   *   2) GET /stats 拿 DB 当前 view + favorite_count，覆盖本地 state
+   */
   useEffect(() => {
     if (!tool.slug) return
+    let cancelled = false
     recordToolViewBySlug(tool.slug)
     setViewCount((v) => v + 1)
+
+    void (async () => {
+      try {
+        const r = await fetch(
+          `/api/public/tools/${encodeURIComponent(tool.slug)}/stats`,
+          { cache: 'no-store' },
+        )
+        if (!r.ok) return
+        const j = (await r.json()) as {
+          view_count?: number
+          favorite_count?: number
+        } | null
+        if (cancelled || !j) return
+        if (typeof j.view_count === 'number') setViewCount(j.view_count + 1)
+        if (typeof j.favorite_count === 'number') setFavCount(j.favorite_count)
+      } catch {
+        /* 静默：用 ISR HTML 里的旧值即可 */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
   }, [tool.slug])
 
   useEffect(() => {

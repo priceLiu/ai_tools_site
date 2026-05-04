@@ -20,18 +20,20 @@ export default async function HomePage() {
       <HomeScrollToHash />
       <Sidebar navigation={navigation} enableHomeAnchors />
 
-      <div className="pl-16 md:pl-64">
-        <HeaderUser />
+      <div className="md:pl-64">
+        <HeaderUser navigation={navigation} enableHomeAnchors />
 
-        <main className="p-4 md:p-6">
-          <div className="mb-8 text-center">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
-              <Sparkles className="h-8 w-8 text-primary" />
+        <main className="px-3 py-4 sm:px-4 md:p-6">
+          <div className="mb-6 text-center md:mb-8">
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 md:mb-4 md:h-16 md:w-16">
+              <Sparkles className="h-6 w-6 text-primary md:h-8 md:w-8" />
             </div>
-            <h1 className="text-2xl font-bold text-foreground md:text-3xl">
+            <h1 className="text-xl font-bold text-foreground sm:text-2xl md:text-3xl">
               AI工具集
             </h1>
-            <p className="mt-2 text-muted-foreground">发现全网最好用的AI工具</p>
+            <p className="mt-1 text-sm text-muted-foreground md:mt-2 md:text-base">
+              发现全网最好用的AI工具
+            </p>
           </div>
 
           <HomeToolSections bundle={bundle} />

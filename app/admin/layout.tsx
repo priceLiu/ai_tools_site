@@ -2,6 +2,7 @@ import { getAuthUser } from '@/lib/auth/session'
 import { redirect } from 'next/navigation'
 import { Header } from '@/components/header'
 import { CompactAppSidebar } from '@/components/compact-app-sidebar'
+import { MobileAccountSheet } from '@/components/mobile-account-sheet'
 import { Toaster } from '@/components/ui/toaster'
 import { Toaster as SonnerToaster } from 'sonner'
 import type { Profile } from '@/lib/types'
@@ -22,11 +23,28 @@ export default async function AdminLayout({
     redirect('/')
   }
 
+  const email = user.email
+  const avatarUrl = profile?.avatar_url ?? null
+
   return (
     <div className="min-h-screen bg-background">
-      <CompactAppSidebar variant="admin" />
-      <div className="flex min-h-screen flex-col pl-52 md:pl-56">
-        <Header user={user} profile={profile as Profile} />
+      <CompactAppSidebar
+        variant="admin"
+        email={email}
+        avatarUrl={avatarUrl}
+      />
+      <div className="flex min-h-screen flex-col md:pl-56">
+        <Header
+          user={user}
+          profile={profile as Profile}
+          mobileNav={
+            <MobileAccountSheet
+              variant="admin"
+              email={email}
+              avatarUrl={avatarUrl}
+            />
+          }
+        />
         <div className="flex-1">{children}</div>
         <Toaster />
         <SonnerToaster

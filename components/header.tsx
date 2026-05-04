@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import type { ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { HeaderSearchForm } from '@/components/header-search-form'
 import {
@@ -17,9 +18,11 @@ import type { Profile } from '@/lib/types'
 interface HeaderProps {
   user: AuthUser | null
   profile: Profile | null
+  /** 移动端左上角汉堡按钮槽位；通常传入 `<MobileNavSheet>` */
+  mobileNav?: ReactNode
 }
 
-export function Header({ user, profile }: HeaderProps) {
+export function Header({ user, profile, mobileNav }: HeaderProps) {
   const handleLogout = () => {
     void (async () => {
       await fetch('/api/auth/logout', { method: 'POST' })
@@ -29,7 +32,12 @@ export function Header({ user, profile }: HeaderProps) {
 
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
-      <div className="flex h-16 items-center justify-between gap-4 px-4 md:px-6">
+      {/**
+       * PC（md+）布局严格对齐原版：h-16 / gap-4 / px-6 / justify-between；
+       * 仅在 < md 用紧凑尺寸 + 渲染 mobileNav 槽位，不影响桌面端。
+       */}
+      <div className="flex h-14 items-center justify-between gap-3 px-3 md:h-16 md:gap-4 md:px-6">
+        {mobileNav}
         <HeaderSearchForm />
 
         {/* Actions */}
@@ -39,26 +47,25 @@ export function Header({ user, profile }: HeaderProps) {
               <Button asChild variant="outline" size="sm">
                 <Link href="/submit">
                   <Plus className="mr-1 h-4 w-4" />
-                  <span className="hidden sm:inline">AI 工具提交</span>
+                  <span>AI 工具提交</span>
                 </Link>
               </Button>
-              <div className="flex items-center gap-0.5">
-                <Button asChild variant="ghost" size="icon" className="rounded-full">
-                  <Link href="/account" aria-label="个人中心" title="个人中心">
-                    <User className="h-5 w-5" />
-                  </Link>
-                </Button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="rounded-full"
-                      aria-label="更多"
-                    >
-                      <MoreVertical className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
+              <Button asChild variant="ghost" size="icon" className="rounded-full">
+                <Link href="/account" aria-label="个人中心" title="个人中心">
+                  <User className="h-5 w-5" />
+                </Link>
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="rounded-full"
+                    aria-label="更多"
+                  >
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-48">
                   <div className="px-2 py-1.5 text-sm font-medium">
                     {profile?.display_name || user.email}
@@ -105,7 +112,6 @@ export function Header({ user, profile }: HeaderProps) {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              </div>
             </>
           ) : (
             <>

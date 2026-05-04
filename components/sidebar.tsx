@@ -53,6 +53,16 @@ interface SidebarProps {
   enableHomeAnchors?: boolean
 }
 
+interface SidebarFrameProps extends SidebarProps {
+  /** 移动抽屉中传入；点击导航项后自动关抽屉 */
+  onItemSelect?: () => void
+  /**
+   * 抽屉里恒为 true（始终铺开 256px、显示 logo 文字 + 节点标签）；
+   * 桌面 aside 下保持 false：md 断点以上才显示文字。
+   */
+  alwaysExpanded?: boolean
+}
+
 function itemRowClass(active: boolean) {
   return cn(
     'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
@@ -76,6 +86,8 @@ function LeafLink({
   enableHomeAnchors,
   activeHomeAnchorId,
   onHomeSectionNavigate,
+  onItemSelect,
+  showLabel,
 }: {
   href: string
   label: string
@@ -84,11 +96,18 @@ function LeafLink({
   enableHomeAnchors: boolean
   activeHomeAnchorId: string | null
   onHomeSectionNavigate: (id: string) => void
+  /** 在抽屉等需要点击后关闭的容器中传入 */
+  onItemSelect?: () => void
+  /** 抽屉里强制显示文字；桌面 collapsed 64px 不显示 */
+  showLabel: boolean
 }) {
+  const labelClass = showLabel
+    ? 'min-w-0 flex-1 truncate'
+    : 'hidden min-w-0 flex-1 truncate md:block'
   const rowInner = (
     <>
       <Icon className="h-5 w-5 shrink-0" />
-      <span className="hidden min-w-0 flex-1 truncate md:block">{label}</span>
+      <span className={labelClass}>{label}</span>
     </>
   )
 
@@ -99,6 +118,7 @@ function LeafLink({
         target="_blank"
         rel="noopener noreferrer"
         className={itemRowClass(false)}
+        onClick={onItemSelect}
       >
         {rowInner}
       </a>
@@ -111,7 +131,10 @@ function LeafLink({
       return (
         <button
           type="button"
-          onClick={() => onHomeSectionNavigate(anchorId)}
+          onClick={() => {
+            onHomeSectionNavigate(anchorId)
+            onItemSelect?.()
+          }}
           className={cn(
             enableHomeAnchors && activeHomeAnchorId === anchorId
               ? 'bg-sidebar-accent text-sidebar-accent-foreground'
@@ -128,6 +151,7 @@ function LeafLink({
         href={`/#${anchorId}`}
         scroll={false}
         className={itemRowClass(false)}
+        onClick={onItemSelect}
       >
         {rowInner}
       </Link>
@@ -136,14 +160,22 @@ function LeafLink({
 
   if (href.startsWith('#')) {
     return (
-      <Link href={`/${href}`} className={itemRowClass(false)}>
+      <Link
+        href={`/${href}`}
+        className={itemRowClass(false)}
+        onClick={onItemSelect}
+      >
         {rowInner}
       </Link>
     )
   }
 
   return (
-    <Link href={href} className={itemRowClass(routeActive(pathname, href))}>
+    <Link
+      href={href}
+      className={itemRowClass(routeActive(pathname, href))}
+      onClick={onItemSelect}
+    >
       {rowInner}
     </Link>
   )
@@ -155,12 +187,16 @@ function NavNode({
   enableHomeAnchors,
   activeHomeAnchorId,
   onHomeSectionNavigate,
+  onItemSelect,
+  showLabel,
 }: {
   node: NavigationMenuTreeNode
   pathname: string | null
   enableHomeAnchors: boolean
   activeHomeAnchorId: string | null
   onHomeSectionNavigate: (id: string) => void
+  onItemSelect?: () => void
+  showLabel: boolean
 }) {
   const Icon = navigationIcon(node.icon_name)
   const children = node.children
@@ -175,6 +211,8 @@ function NavNode({
         enableHomeAnchors={enableHomeAnchors}
         activeHomeAnchorId={activeHomeAnchorId}
         onHomeSectionNavigate={onHomeSectionNavigate}
+        onItemSelect={onItemSelect}
+        showLabel={showLabel}
       />
     )
   }
@@ -184,6 +222,11 @@ function NavNode({
       ? homeSectionAnchorId(node.href) ??
         firstChildHomeSectionAnchorId(children)
       : null
+
+  const parentLabelClass = showLabel ? 'flex-1' : 'hidden flex-1 md:block'
+  const groupChildClass = showLabel
+    ? 'space-y-0.5 pb-1 pl-2 pt-0.5 data-[state=closed]:animate-none ml-3 border-l border-border pl-3'
+    : 'space-y-0.5 pb-1 pl-2 pt-0.5 data-[state=closed]:animate-none md:ml-3 md:border-l md:border-border md:pl-3'
 
   return (
     <Collapsible className="space-y-0.5">
@@ -197,10 +240,10 @@ function NavNode({
         }}
       >
         <Icon className="h-5 w-5 shrink-0 text-primary" />
-        <span className="hidden flex-1 md:block">{node.label}</span>
+        <span className={parentLabelClass}>{node.label}</span>
         <ChevronDown className="ml-auto h-4 w-4 shrink-0 opacity-70 transition-transform" />
       </CollapsibleTrigger>
-      <CollapsibleContent className="space-y-0.5 pb-1 pl-2 pt-0.5 data-[state=closed]:animate-none md:ml-3 md:border-l md:border-border md:pl-3">
+      <CollapsibleContent className={groupChildClass}>
         {children.map((ch) => {
           const CIcon = navigationIcon(ch.icon_name)
           return (
@@ -213,6 +256,8 @@ function NavNode({
               enableHomeAnchors={enableHomeAnchors}
               activeHomeAnchorId={activeHomeAnchorId}
               onHomeSectionNavigate={onHomeSectionNavigate}
+              onItemSelect={onItemSelect}
+              showLabel={showLabel}
             />
           )
         })}
@@ -221,10 +266,16 @@ function NavNode({
   )
 }
 
-export function Sidebar({
+/**
+ * 共享内容：logo 头 / 导航树 / 提交按钮。
+ * 桌面 `<Sidebar>` 与移动 `<MobileNavSheet>` 都使用它，避免重复代码。
+ */
+export function SidebarFrame({
   navigation,
   enableHomeAnchors = false,
-}: SidebarProps) {
+  onItemSelect,
+  alwaysExpanded = false,
+}: SidebarFrameProps) {
   const pathname = usePathname()
   const [homeAnchor, setHomeAnchor] = useState<string | null>(null)
 
@@ -257,48 +308,69 @@ export function Sidebar({
   const activeHomeAnchorId =
     enableHomeAnchors && pathname === '/' ? homeAnchor : null
 
+  const logoTextClass = alwaysExpanded
+    ? 'text-lg font-bold text-foreground'
+    : 'hidden text-lg font-bold text-foreground md:block'
+  const submitTextClass = alwaysExpanded ? 'inline' : 'hidden md:inline'
+  const emptyHintClass = alwaysExpanded
+    ? 'px-2 py-4 text-sm text-muted-foreground'
+    : 'px-2 py-4 text-xs text-muted-foreground md:text-sm'
+
   return (
-    <aside className="fixed left-0 top-0 z-40 h-screen w-16 border-r border-border bg-sidebar md:w-64">
-      <div className="flex h-full flex-col">
-        <div className="flex h-16 items-center justify-center border-b border-border px-4">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-              <Sparkles className="h-5 w-5 text-primary-foreground" />
-            </div>
-            <span className="hidden text-lg font-bold text-foreground md:block">
-              AI工具集
-            </span>
-          </Link>
-        </div>
-
-        <nav className="flex-1 space-y-1 overflow-y-auto p-2">
-          {navigation.length === 0 ? (
-            <p className="px-2 py-4 text-xs text-muted-foreground md:text-sm">
-              侧栏暂无菜单，请管理员在「菜单管理」中配置。
-            </p>
-          ) : (
-            navigation.map((node) => (
-              <NavNode
-                key={node.id}
-                node={node}
-                pathname={pathname}
-                enableHomeAnchors={enableHomeAnchors}
-                activeHomeAnchorId={activeHomeAnchorId}
-                onHomeSectionNavigate={onHomeSectionNavigate}
-              />
-            ))
-          )}
-        </nav>
-
-        <div className="border-t border-border p-3">
-          <Link href="/submit">
-            <Button className="w-full justify-center gap-2" size="sm">
-              <Plus className="h-4 w-4" />
-              <span className="hidden md:inline">AI 工具提交</span>
-            </Button>
-          </Link>
-        </div>
+    <div className="flex h-full flex-col">
+      <div className="flex h-16 items-center justify-center border-b border-border px-4">
+        <Link
+          href="/"
+          className="flex items-center gap-2"
+          onClick={onItemSelect}
+        >
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
+            <Sparkles className="h-5 w-5 text-primary-foreground" />
+          </div>
+          <span className={logoTextClass}>AI工具集</span>
+        </Link>
       </div>
+
+      <nav className="flex-1 space-y-1 overflow-y-auto p-2">
+        {navigation.length === 0 ? (
+          <p className={emptyHintClass}>
+            侧栏暂无菜单，请管理员在「菜单管理」中配置。
+          </p>
+        ) : (
+          navigation.map((node) => (
+            <NavNode
+              key={node.id}
+              node={node}
+              pathname={pathname}
+              enableHomeAnchors={enableHomeAnchors}
+              activeHomeAnchorId={activeHomeAnchorId}
+              onHomeSectionNavigate={onHomeSectionNavigate}
+              onItemSelect={onItemSelect}
+              showLabel={alwaysExpanded}
+            />
+          ))
+        )}
+      </nav>
+
+      <div className="border-t border-border p-3">
+        <Link href="/submit" onClick={onItemSelect}>
+          <Button className="w-full justify-center gap-2" size="sm">
+            <Plus className="h-4 w-4" />
+            <span className={submitTextClass}>AI 工具提交</span>
+          </Button>
+        </Link>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * 桌面侧栏（≥ md 始终可见）。移动端通过 `<MobileNavSheet>` 抽屉访问，避免占用屏宽。
+ */
+export function Sidebar(props: SidebarProps) {
+  return (
+    <aside className="fixed left-0 top-0 z-40 hidden h-screen w-64 border-r border-border bg-sidebar md:block">
+      <SidebarFrame {...props} />
     </aside>
   )
 }

@@ -2,7 +2,7 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ExternalLink, Sparkles, BookOpen } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ToolIntroductionDisplay } from '@/components/tool-introduction-display'
@@ -80,14 +80,14 @@ export function ToolDetailView({
         />
       ) : (
         <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary/20 to-primary/40">
-          <Sparkles className="h-12 w-12 text-primary" />
+          <Sparkles className="h-8 w-8 text-primary md:h-12 md:w-12" />
         </div>
       )}
     </>
   )
 
   const logoClass =
-    'relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-muted outline-none ring-offset-background'
+    'relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-muted outline-none ring-offset-background sm:h-20 sm:w-20 sm:rounded-2xl md:h-24 md:w-24'
 
   const logoEl =
     typeof logoHref === 'string' && logoHref.length > 0 ? (
@@ -110,34 +110,37 @@ export function ToolDetailView({
   return (
     <div className={cn('w-full', className)}>
       {/* 第一版面：头图行 + 概述（5 行）+ 截图 */}
-      <Card className="mb-6 overflow-hidden">
-        <CardContent className="p-6 md:p-8">
-          <div className="flex flex-row flex-wrap items-end gap-x-4 gap-y-3 sm:flex-nowrap">
+      <Card className="mb-4 overflow-hidden md:mb-6">
+        <CardContent className="p-4 sm:p-6 md:p-8">
+          <div className="flex items-start gap-3 sm:items-end sm:gap-4">
             {logoEl}
-            <div className="min-w-0 flex-1 space-y-2">
-              <h1 className="text-2xl font-bold leading-tight text-foreground">
+            <div className="min-w-0 flex-1 space-y-1.5 sm:space-y-2">
+              <h1 className="text-lg font-bold leading-tight text-foreground sm:text-xl md:text-2xl">
                 {tool.name}
               </h1>
               {badges ? (
-                <div className="flex flex-wrap items-center gap-2">{badges}</div>
+                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                  {badges}
+                </div>
               ) : null}
             </div>
-            {headerActions ? (
-              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 sm:pb-0">
-                {headerActions}
-              </div>
-            ) : null}
           </div>
+
+          {headerActions ? (
+            <div className="mt-3 flex flex-wrap items-center gap-2 sm:mt-4">
+              {headerActions}
+            </div>
+          ) : null}
 
           {desc ? (
             <p
-              className="mt-6 break-words text-muted-foreground leading-relaxed line-clamp-5"
+              className="mt-4 break-words text-sm text-muted-foreground leading-relaxed line-clamp-5 md:mt-6 md:text-base"
               title={desc}
             >
               {desc}
             </p>
           ) : (
-            <p className="mt-6 text-sm text-muted-foreground">暂无概述</p>
+            <p className="mt-4 text-sm text-muted-foreground md:mt-6">暂无概述</p>
           )}
 
           {screenshotSrc && !screenshotFailed ? (
@@ -180,18 +183,20 @@ export function ToolDetailView({
         </CardContent>
       </Card>
 
-      {detailTags.length > 0 ? <ToolTagsBar labels={detailTags} className="mb-6" /> : null}
+      {detailTags.length > 0 ? (
+        <ToolTagsBar labels={detailTags} className="mb-4 md:mb-6" />
+      ) : null}
 
       {/* 第二版面：工具介绍 */}
       {showIntroCard ? (
-        <Card className="mb-6 overflow-hidden">
-          <CardHeader className="border-b">
-            <CardTitle className="flex items-center gap-2 text-lg">
+        <Card className="mb-4 overflow-hidden md:mb-6">
+          <CardHeader className="border-b px-4 py-3 sm:px-6 md:py-4">
+            <CardTitle className="flex items-center gap-2 text-base md:text-lg">
               <BookOpen className="h-5 w-5 text-primary" />
               工具介绍
             </CardTitle>
           </CardHeader>
-          <CardContent className="px-4 pt-6 sm:px-6 md:px-8">
+          <CardContent className="px-3 pt-4 sm:px-6 md:px-8 md:pt-6">
             {intro ? (
               <ToolIntroductionDisplay
                 content={tool.introduction!}
@@ -204,9 +209,9 @@ export function ToolDetailView({
         </Card>
       ) : null}
 
-      {/* 第三版面：评论 */}
+      {/* 第三版面：评论 — 进入视口才挂载，移动端首屏减压 */}
       {showComments ? (
-        <ToolCommentsSection
+        <DeferredComments
           toolId={tool.id}
           initialUser={commentsInitialUser}
           initialNickname={commentsInitialNickname}
@@ -215,5 +220,59 @@ export function ToolDetailView({
 
       {children}
     </div>
+  )
+}
+
+/**
+ * 评论组件较重（含登录态、评论列表、表单等）；用 IntersectionObserver 把它推迟到
+ * 用户滚动到附近再挂载，移动端首屏 hydration 时间显著下降。
+ */
+function DeferredComments({
+  toolId,
+  initialUser,
+  initialNickname,
+}: {
+  toolId: string
+  initialUser: AuthUser | null
+  initialNickname: string | null
+}) {
+  const [show, setShow] = useState(false)
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (show) return
+    const el = sentinelRef.current
+    if (!el || typeof IntersectionObserver === 'undefined') {
+      setShow(true)
+      return
+    }
+    const ob = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setShow(true)
+          ob.disconnect()
+        }
+      },
+      { rootMargin: '600px 0px' },
+    )
+    ob.observe(el)
+    return () => ob.disconnect()
+  }, [show])
+
+  if (show) {
+    return (
+      <ToolCommentsSection
+        toolId={toolId}
+        initialUser={initialUser}
+        initialNickname={initialNickname}
+      />
+    )
+  }
+  return (
+    <div
+      ref={sentinelRef}
+      className="min-h-[120px] rounded-xl border border-dashed border-border/60 bg-muted/20"
+      aria-hidden
+    />
   )
 }

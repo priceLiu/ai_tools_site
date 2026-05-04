@@ -70,14 +70,14 @@ export default async function ToolPage({ params, searchParams }: ToolPageProps) 
     <div className="min-h-screen bg-background">
       <Sidebar navigation={navigation} enableHomeAnchors={false} />
 
-      <div className="pl-16 md:pl-64">
-        <HeaderUser />
+      <div className="md:pl-64">
+        <HeaderUser navigation={navigation} />
 
         <main className={toolDetailPageGutterClass}>
           <div className={toolDetailMaxWidthClass}>
             <Link
               href="/"
-              className="mb-6 inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-primary"
+              className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-primary md:mb-6"
             >
               <ArrowLeft className="h-4 w-4" />
               返回首页
