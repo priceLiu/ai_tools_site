@@ -34,7 +34,7 @@ export default async function AdminUsersPage() {
         <h1 className="mb-2 text-2xl font-bold text-foreground">用户管理</h1>
         <p className="mb-6 text-sm text-muted-foreground">
           设置管理员（<code className="rounded bg-muted px-1">is_admin</code>
-          ）与账号禁用。禁用后用户将被退出且无法继续使用站点功能。
+          ）、禁用账号（须填写原因）或删除用户。禁用后用户将被退出且无法登录；删除会一并删除其提交的工具与收藏。
         </p>
 
         {loadError ? (

@@ -247,9 +247,18 @@ export async function neonGetProfileIsDisabled(
 export async function neonListProfilesForAdmin(): Promise<Profile[]> {
   const sql = getNeonSql()
   const rows = await sql`
-    SELECT id, display_name, avatar_url, is_admin, is_disabled, created_at
-    FROM profiles
-    ORDER BY created_at DESC
+    SELECT
+      p.id,
+      p.display_name,
+      p.avatar_url,
+      p.is_admin,
+      p.is_disabled,
+      p.created_at,
+      p.disabled_reason,
+      ac.email AS registration_email
+    FROM profiles p
+    LEFT JOIN public.auth_credentials ac ON ac.user_id = p.id
+    ORDER BY p.created_at DESC
   `
   return (rows as Record<string, unknown>[]).map(mapProfileRow)
 }
@@ -1205,12 +1214,21 @@ export async function neonUpdateProfileAdminFlags(input: {
   id: string
   is_admin?: boolean
   is_disabled?: boolean
+  /** 仅在 is_disabled === true 时写入；解除禁用时应在调用方传 false 并清空 */
+  disabled_reason?: string | null
 }): Promise<void> {
   const sql = getNeonSql()
   if (input.is_admin !== undefined && input.is_disabled !== undefined) {
+    const reason =
+      input.is_disabled === true
+        ? (input.disabled_reason?.trim() ?? null)
+        : null
     await sql`
       UPDATE profiles
-      SET is_admin = ${input.is_admin}, is_disabled = ${input.is_disabled}
+      SET
+        is_admin = ${input.is_admin},
+        is_disabled = ${input.is_disabled},
+        disabled_reason = ${input.is_disabled ? reason : null}
       WHERE id = ${input.id}
     `
     return
@@ -1221,10 +1239,34 @@ export async function neonUpdateProfileAdminFlags(input: {
     `
   }
   if (input.is_disabled !== undefined) {
+    const reason =
+      input.is_disabled === true
+        ? (input.disabled_reason?.trim() ?? null)
+        : null
     await sql`
-      UPDATE profiles SET is_disabled = ${input.is_disabled} WHERE id = ${input.id}
+      UPDATE profiles
+      SET
+        is_disabled = ${input.is_disabled},
+        disabled_reason = ${input.is_disabled ? reason : null}
+      WHERE id = ${input.id}
     `
   }
+}
+
+/**
+ * 删除用户及其提交的工具、收藏；auth_credentials 随 profiles ON DELETE CASCADE 一并删除。
+ */
+export async function neonAdminDeleteUser(userId: string): Promise<void> {
+  const sql = getNeonSql()
+  const toolRows = await sql`
+    SELECT id FROM tools WHERE user_id = ${userId}
+  `
+  const ids = (toolRows as { id: string }[]).map((r) => String(r.id))
+  if (ids.length > 0) {
+    await neonAdminDeleteToolsByIds(ids)
+  }
+  await sql`DELETE FROM favorites WHERE user_id = ${userId}`
+  await sql`DELETE FROM profiles WHERE id = ${userId}`
 }
 
 export async function neonGetFavoritePair(

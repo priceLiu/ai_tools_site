@@ -68,6 +68,14 @@ export function mapProfileRow(r: Record<string, unknown>): Profile {
     avatar_url: r.avatar_url == null ? null : String(r.avatar_url),
     is_admin: Boolean(r.is_admin),
     is_disabled: r.is_disabled === true,
+    disabled_reason:
+      r.disabled_reason === undefined || r.disabled_reason === null
+        ? null
+        : String(r.disabled_reason),
+    registration_email:
+      r.registration_email === undefined || r.registration_email === null
+        ? null
+        : String(r.registration_email),
     created_at: asIso(r.created_at),
   }
 }

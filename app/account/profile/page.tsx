@@ -1,5 +1,6 @@
 import { getAuthUser } from '@/lib/auth/session'
 import { AccountProfileForm } from '@/components/account-profile-form'
+import { AccountChangePasswordCard } from '@/components/account-change-password-card'
 import { AccountAvatarEditor } from '@/components/account-avatar-editor'
 import type { Profile } from '@/lib/types'
 import { getSessionProfile } from '@/lib/server-profile'
@@ -26,6 +27,8 @@ export default async function AccountProfilePage() {
       <AccountAvatarEditor profile={p} />
 
       <AccountProfileForm profile={p} email={user.email ?? null} />
+
+      <AccountChangePasswordCard />
     </div>
   )
 }

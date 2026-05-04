@@ -80,6 +80,10 @@ export interface Profile {
   is_admin: boolean
   /** true 时禁止登录使用（中间件会退出会话） */
   is_disabled?: boolean
+  /** 管理员禁用时填写；解除禁用时为空 */
+  disabled_reason?: string | null
+  /** 管理员用户列表：关联 auth_credentials.email */
+  registration_email?: string | null
   created_at: string
 }
 
