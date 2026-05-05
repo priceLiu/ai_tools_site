@@ -325,7 +325,8 @@ async function loadHomeToolBundleWithSnapshot(): Promise<HomeToolBundle> {
  * - logo / 截图字段在 Neon 数据访问层已替换为 `/api/img/tool/<id>/<kind>?v=...` 代理 URL，
  *   bundle 体积稳定在数十 KB；可安全进入 Next.js Data Cache（单条 2MB 限制）。
  * - 用 `unstable_cache(tag = HOME_TOOL_BUNDLE_CACHE_TAG)` 跨请求复用解析结果，避免每次请求都
- *   重新拼装 bundle；管理后台的写操作通过 `revalidateTag(HOME_TOOL_BUNDLE_CACHE_TAG)` 失效。
+ *   重新拼装 bundle；失效前须先 **`loadHomeToolBundle` + `uploadHomeToolBundleSnapshot`**（见
+ *   `revalidateHomeToolBundleAction`），否则下一轮会照旧读旧快照把缓存填满。
  * - 页面层 ISR（`app/page.tsx` 的 `revalidate=60`）继续缓存 HTML，命中时无 DB 访问。
  */
 const cachedHomeToolBundle = unstable_cache(

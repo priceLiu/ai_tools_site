@@ -1,7 +1,6 @@
 'use server'
 
 import { revalidateTag, revalidatePath } from 'next/cache'
-import { after } from 'next/server'
 import { getAuthUser } from '@/lib/auth/session'
 import { neonGetProfileIsAdmin } from '@/lib/neon/data'
 import { loadHomeToolBundle } from '@/lib/cached-home-data'
@@ -15,28 +14,31 @@ import {
 /**
  * 工具/分类等影响首页列表时调用。
  *
- * 先 `revalidateTag` 失效 Data Cache 与 `revalidatePath('/')` 让 ISR 在下次访问时重建；
- * `app_kv` 快照重建放进 `after()`，**不阻塞**当前 Server Action 响应。
+ * `getHomeToolBundle()` **优先读 `app_kv` 快照**。若先发 `revalidateTag`、再在 `after()` 里异步写快照，
+ * 下一轮 Data Cache 重建会立刻用**旧快照**把缓存填满，要到下次失效或手动「生成静态」才纠正。
+ *
+ * 因此顺序必须是：**先从 Neon 拉齐 bundle → 写入 `app_kv`**，再失效 tag + `/` 的 ISR。
+ *
+ * 同步失效 `HOME_ADS_CACHE_TAG`：广告位展示关联工具（名称 / logo 等），审核上线或编辑已通过工具后应与首页一致刷新。
  */
 export async function revalidateHomeToolBundleAction(): Promise<{
   scheduled: true
 }> {
-  revalidateTag(HOME_TOOL_BUNDLE_CACHE_TAG, { expire: 0 })
-  revalidatePath('/')
-
-  after(async () => {
-    try {
-      const bundle = await loadHomeToolBundle()
-      const uploaded = await uploadHomeToolBundleSnapshot(bundle)
-      if (!uploaded.ok && process.env.NODE_ENV === 'development') {
-        console.warn('[revalidateHomeToolBundle/after]', uploaded.error)
-      }
-    } catch (e) {
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('[revalidateHomeToolBundle/after] rebuild failed:', e)
-      }
+  try {
+    const bundle = await loadHomeToolBundle()
+    const uploaded = await uploadHomeToolBundleSnapshot(bundle)
+    if (!uploaded.ok && process.env.NODE_ENV === 'development') {
+      console.warn('[revalidateHomeToolBundle] snapshot:', uploaded.error)
     }
-  })
+  } catch (e) {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('[revalidateHomeToolBundle] snapshot rebuild failed:', e)
+    }
+  }
+
+  revalidateTag(HOME_TOOL_BUNDLE_CACHE_TAG, { expire: 0 })
+  revalidateTag(HOME_ADS_CACHE_TAG, { expire: 0 })
+  revalidatePath('/')
 
   return { scheduled: true }
 }
@@ -59,16 +61,17 @@ export async function regeneratePublicStaticAction(): Promise<{
   const ok = await neonGetProfileIsAdmin(user.id)
   if (!ok) return { ok: false, message: '无权限' }
 
-  revalidateTag(HOME_TOOL_BUNDLE_CACHE_TAG, { expire: 0 })
-  revalidateTag(NAVIGATION_MENU_CACHE_TAG, { expire: 0 })
-  revalidateTag(HOME_ADS_CACHE_TAG, { expire: 0 })
-  revalidatePath('/')
-  revalidatePath('/category/[slug]', 'page')
-  revalidatePath('/tool/[slug]', 'page')
-
   try {
     const bundle = await loadHomeToolBundle()
     const uploaded = await uploadHomeToolBundleSnapshot(bundle)
+
+    revalidateTag(HOME_TOOL_BUNDLE_CACHE_TAG, { expire: 0 })
+    revalidateTag(NAVIGATION_MENU_CACHE_TAG, { expire: 0 })
+    revalidateTag(HOME_ADS_CACHE_TAG, { expire: 0 })
+    revalidatePath('/')
+    revalidatePath('/category/[slug]', 'page')
+    revalidatePath('/tool/[slug]', 'page')
+
     if (uploaded.ok) {
       return {
         ok: true,
@@ -80,6 +83,12 @@ export async function regeneratePublicStaticAction(): Promise<{
       message: `静态页缓存已失效。app_kv 快照未写入：${uploaded.error ?? '请检查 DATABASE_URL 与 app_kv 表'}。`,
     }
   } catch (e) {
+    revalidateTag(HOME_TOOL_BUNDLE_CACHE_TAG, { expire: 0 })
+    revalidateTag(NAVIGATION_MENU_CACHE_TAG, { expire: 0 })
+    revalidateTag(HOME_ADS_CACHE_TAG, { expire: 0 })
+    revalidatePath('/')
+    revalidatePath('/category/[slug]', 'page')
+    revalidatePath('/tool/[slug]', 'page')
     return {
       ok: true,
       message: `静态页缓存已失效。快照重建失败：${e instanceof Error ? e.message : String(e)}`,

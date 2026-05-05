@@ -11,7 +11,7 @@ import { regeneratePublicStaticAction } from '@/app/actions/revalidate-home-tool
 /**
  * 管理后台「生成静态」按钮。
  * 一键失效首页 / 分类 / 详情 ISR + 重建 `app_kv` 首页快照。
- * 平时审核保存会自动失效，本按钮用于：分类/导航大调整后或快照与 DB 不一致时。
+ * 日常审核已通过会走 `revalidateHomeToolBundleAction`（先写快照再失效）；本按钮用于导航/大批量调整或兜底。
  */
 export function AdminRegenerateStaticButton({
   className,

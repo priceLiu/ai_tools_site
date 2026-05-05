@@ -44,6 +44,7 @@
    - 支持 ISR 静态化（后台"生成静态"按钮会刷新广告缓存）
    - 图片代理 `/api/img/ad/[id]` 处理 banner 图
    - 工具 logo：`data:` 内联仍走 `/api/img/tool/<id>/logo`，`http(s)` 原样直链，无 logo 时不下发占位代理 URL（避免无谓 404 与服务端查询）
+   - **首页快照与缓存**：bundle 写入 `app_kv` 后轮询读；失效 Data Cache / ISR 时必须**先重建快照再 `revalidateTag`**，审核通过等后台写操作会通过 `revalidateHomeToolBundleAction` 同步执行，避免出现「刷新了首页却仍读旧快照」；同一 action 会一并 `revalidateTag(home-ads)`，广告位与工具上线/编辑保持同步
    - 响应式设计：PC 端按设计显示，移动端自适应
 
 ---
