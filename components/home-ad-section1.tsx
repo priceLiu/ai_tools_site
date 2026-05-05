@@ -179,17 +179,24 @@ function ToolGrid({ list }: { list: AdPlacement[] }) {
   }
 
   return (
-    <div
-      className={cn(
-        'home-ad-scroll flex-1 overflow-y-auto overflow-x-hidden rounded-xl bg-muted/30',
-        // 1.5 张 logo 的高度：单行卡片 + 半行（提示用户可下滑）
-        'h-[140px] sm:h-[150px] md:h-[160px]',
-      )}
-    >
-      <div className="grid grid-cols-2 gap-2 p-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-        {tools.map(({ id, tool, bannerUrl }, idx) => (
-          <MediaCard key={id} tool={tool} bannerUrl={bannerUrl} prefetch={idx < 5} />
-        ))}
+    <div className="@container/home-s1 min-w-0 flex-1">
+      <div
+        className={cn(
+          'relative overflow-hidden rounded-xl bg-muted/30',
+          // cqw 相对外层（即右侧栏实际宽度）；行高 = 16:9 单元格高。固定 px 易与 aspect-video 脱节造成底部留白。
+          'h-[calc(1.5*((100cqw-8px-0.375rem)/2)*(9/16)+0.375rem+8px)]',
+          'sm:h-[calc(1.5*((100cqw-8px-2*0.375rem)/3)*(9/16)+0.375rem+8px)]',
+          'md:h-[calc(1.5*((100cqw-8px-3*0.375rem)/4)*(9/16)+0.375rem+8px)]',
+          'lg:h-[calc(1.5*((100cqw-8px-4*0.375rem)/5)*(9/16)+0.375rem+8px)]',
+        )}
+      >
+        <div className="home-ad-scroll absolute inset-1 overflow-y-auto overflow-x-hidden">
+          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+            {tools.map(({ id, tool, bannerUrl }, idx) => (
+              <MediaCard key={id} tool={tool} bannerUrl={bannerUrl} prefetch={idx < 5} />
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -204,25 +211,23 @@ function MediaCard({
   bannerUrl?: string | null
   prefetch: boolean
 }) {
-  const [imgLoaded, setImgLoaded] = useState(false)
-  const [imgError, setImgError] = useState(false)
+  const [bannerLoaded, setBannerLoaded] = useState(false)
+  const [bannerError, setBannerError] = useState(false)
+  const [logoError, setLogoError] = useState(false)
 
-  const handleLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
-    const img = e.currentTarget
-    if (img.naturalWidth > 1 && img.naturalHeight > 1) {
-      setImgLoaded(true)
-    } else {
-      setImgError(true)
-    }
-  }, [])
+  const handleBannerLoad = useCallback(
+    (e: React.SyntheticEvent<HTMLImageElement>) => {
+      const img = e.currentTarget
+      if (img.naturalWidth > 1 && img.naturalHeight > 1) {
+        setBannerLoaded(true)
+      } else {
+        setBannerError(true)
+      }
+    },
+    [],
+  )
 
-  const handleError = useCallback(() => {
-    setImgError(true)
-  }, [])
-
-  const imgSrc = bannerUrl || `/api/img/tool/${tool.id}/screenshot`
-  const fallbackSrc = `/api/img/tool/${tool.id}/logo`
-  const showFallback = !imgLoaded || imgError
+  const showBanner = bannerUrl && !bannerError && bannerLoaded
 
   return (
     <Link
@@ -233,38 +238,43 @@ function MediaCard({
       prefetch={prefetch}
       title={tool.description || tool.name}
     >
-      {/* 背景图 */}
-      {!imgError && (
+      {/* 用户上传的 banner（仅当 bannerUrl 存在时尝试加载） */}
+      {bannerUrl && !bannerError && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={imgSrc}
+          src={bannerUrl}
           alt={tool.name}
           loading="lazy"
           decoding="async"
           className={cn(
             'absolute inset-0 h-full w-full object-cover transition-opacity',
-            imgLoaded ? 'opacity-100' : 'opacity-0',
+            showBanner ? 'opacity-100' : 'opacity-0',
           )}
-          onLoad={handleLoad}
-          onError={handleError}
+          onLoad={handleBannerLoad}
+          onError={() => setBannerError(true)}
         />
       )}
 
-      {/* 无图占位：紫色渐变 + 工具 logo */}
-      {showFallback && (
+      {/* 占位：紫色渐变 + 居中 logo（默认显示，banner 加载完成后被覆盖） */}
+      {!showBanner && (
         <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-violet-200 via-violet-300 to-purple-400">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={fallbackSrc}
-            alt=""
-            loading="lazy"
-            decoding="async"
-            className="h-10 w-10 rounded-lg object-contain opacity-90 sm:h-12 sm:w-12"
-            onError={(e) => {
-              e.currentTarget.style.display = 'none'
-            }}
-          />
-          <Sparkles className="absolute h-6 w-6 text-white/40" />
+          {!logoError ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={`/api/img/tool/${tool.id}/logo`}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              className="h-9 w-9 rounded-lg bg-white/30 object-contain p-1 shadow-sm sm:h-11 sm:w-11"
+              onLoad={(e) => {
+                const img = e.currentTarget
+                if (img.naturalWidth <= 1) setLogoError(true)
+              }}
+              onError={() => setLogoError(true)}
+            />
+          ) : (
+            <Sparkles className="h-7 w-7 text-white/80 drop-shadow" />
+          )}
         </div>
       )}
 
