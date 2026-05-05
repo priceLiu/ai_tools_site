@@ -1,6 +1,7 @@
 import { getNeonSql } from '@/lib/neon/sql'
 import {
   mapAdRow,
+  mapAdminCommentRow,
   mapCommentRow,
   mapProfileRow,
   mapToolRow,
@@ -12,6 +13,7 @@ import type {
   NavigationMenuItemRow,
   Profile,
   Tool,
+  AdminCommentRow,
   ToolComment,
 } from '@/lib/types'
 import type { IntroductionFormat } from '@/lib/introduction-format'
@@ -276,6 +278,8 @@ export async function neonListProfilesForAdmin(): Promise<Profile[]> {
       p.is_disabled,
       p.created_at,
       p.disabled_reason,
+      COALESCE(p.comment_muted, false) AS comment_muted,
+      p.comment_mute_reason,
       ac.email AS registration_email
     FROM profiles p
     LEFT JOIN public.auth_credentials ac ON ac.user_id = p.id
@@ -384,6 +388,7 @@ export async function neonListToolCommentsForTool(
   const rows = await sql`
     SELECT * FROM tool_comments
     WHERE tool_id = ${toolId}
+      AND COALESCE(is_hidden, false) = false
     ORDER BY created_at ASC
   `
   return (rows as Record<string, unknown>[]).map(mapCommentRow)
@@ -706,18 +711,376 @@ export async function neonInsertToolComment(input: {
   nickname: string
   email: string
   website: string | null
+  user_id?: string | null
 }): Promise<void> {
   const sql = getNeonSql()
+  const uid =
+    input.user_id != null && String(input.user_id).trim() !== ''
+      ? String(input.user_id).trim()
+      : null
   await sql`
-    INSERT INTO tool_comments (tool_id, body, nickname, email, website)
+    INSERT INTO tool_comments (tool_id, body, nickname, email, website, user_id)
     VALUES (
       ${input.tool_id},
       ${input.body},
       ${input.nickname},
       ${input.email},
-      ${input.website}
+      ${input.website},
+      ${uid}
     )
   `
+}
+
+export type AdminCommentVisibilityFilter = 'all' | 'visible' | 'hidden'
+
+export async function neonGetProfileCommentMuted(
+  profileId: string,
+): Promise<boolean> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT COALESCE(comment_muted, false) AS m
+    FROM profiles
+    WHERE id = ${profileId}
+    LIMIT 1
+  `
+  const r = rows[0] as { m: boolean } | undefined
+  return r?.m === true
+}
+
+export async function neonAdminSetProfileCommentMute(input: {
+  profileId: string
+  muted: boolean
+  reason: string | null
+}): Promise<void> {
+  const sql = getNeonSql()
+  const reason =
+    input.muted && input.reason?.trim()
+      ? input.reason.trim().slice(0, 500)
+      : null
+  await sql`
+    UPDATE profiles
+    SET
+      comment_muted = ${input.muted},
+      comment_mute_reason = ${reason}
+    WHERE id = ${input.profileId}
+  `
+}
+
+export async function neonAdminCommentTotals(): Promise<{
+  total: number
+  visible: number
+  hidden: number
+}> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT
+      count(*)::int AS total,
+      count(*) FILTER (WHERE COALESCE(is_hidden, false) = false)::int AS visible,
+      count(*) FILTER (WHERE is_hidden = true)::int AS hidden
+    FROM tool_comments
+  `
+  const r = rows[0] as { total: number; visible: number; hidden: number }
+  return {
+    total: Number(r?.total ?? 0),
+    visible: Number(r?.visible ?? 0),
+    hidden: Number(r?.hidden ?? 0),
+  }
+}
+
+export async function neonAdminCommentCountsByTool(
+  limit: number,
+): Promise<
+  {
+    tool_id: string
+    name: string
+    slug: string
+    visible: number
+    hidden: number
+    total: number
+  }[]
+> {
+  const lim = Math.max(1, Math.min(200, Math.floor(limit)))
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT
+      t.id AS tool_id,
+      t.name,
+      t.slug,
+      count(*) FILTER (WHERE COALESCE(c.is_hidden, false) = false)::int AS visible,
+      count(*) FILTER (WHERE c.is_hidden = true)::int AS hidden,
+      count(*)::int AS total
+    FROM tool_comments c
+    INNER JOIN tools t ON t.id = c.tool_id
+    GROUP BY t.id
+    ORDER BY total DESC NULLS LAST, t.name ASC
+    LIMIT ${lim}
+  `
+  return rows as {
+    tool_id: string
+    name: string
+    slug: string
+    visible: number
+    hidden: number
+    total: number
+  }[]
+}
+
+export async function neonAdminCommentCountsVisibleByCategory(): Promise<
+  { category_id: string | null; category_name: string; count: number }[]
+> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT
+      cat.id AS category_id,
+      cat.name AS category_name,
+      count(c.id)::int AS count
+    FROM tool_comments c
+    INNER JOIN tools t ON t.id = c.tool_id
+    LEFT JOIN categories cat ON cat.id = t.category_id
+    WHERE COALESCE(c.is_hidden, false) = false
+    GROUP BY cat.id, cat.name
+    ORDER BY count DESC NULLS LAST, category_name ASC NULLS LAST
+  `
+  return (rows as Record<string, unknown>[]).map((row) => ({
+    category_id:
+      row.category_id == null ? null : String(row.category_id),
+    category_name:
+      row.category_name == null || String(row.category_name).trim() === ''
+        ? '未分类'
+        : String(row.category_name),
+    count: Number(row.count ?? 0),
+  }))
+}
+
+export async function neonAdminListCommentsCount(opts: {
+  q: string
+  visibility: AdminCommentVisibilityFilter
+}): Promise<number> {
+  const sql = getNeonSql()
+  const q = opts.q.trim()
+  const pattern = `%${q}%`
+  const vis = opts.visibility
+
+  if (vis === 'all' && q === '') {
+    const rows = await sql`
+      SELECT count(*)::int AS n FROM tool_comments c
+    `
+    return Number((rows[0] as { n: number })?.n ?? 0)
+  }
+  if (vis === 'all' && q !== '') {
+    const rows = await sql`
+      SELECT count(*)::int AS n
+      FROM tool_comments c
+      WHERE c.body ILIKE ${pattern}
+        OR c.nickname ILIKE ${pattern}
+        OR c.email ILIKE ${pattern}
+    `
+    return Number((rows[0] as { n: number })?.n ?? 0)
+  }
+  if (vis === 'visible' && q === '') {
+    const rows = await sql`
+      SELECT count(*)::int AS n
+      FROM tool_comments c
+      WHERE COALESCE(c.is_hidden, false) = false
+    `
+    return Number((rows[0] as { n: number })?.n ?? 0)
+  }
+  if (vis === 'visible' && q !== '') {
+    const rows = await sql`
+      SELECT count(*)::int AS n
+      FROM tool_comments c
+      WHERE COALESCE(c.is_hidden, false) = false
+        AND (
+          c.body ILIKE ${pattern}
+          OR c.nickname ILIKE ${pattern}
+          OR c.email ILIKE ${pattern}
+        )
+    `
+    return Number((rows[0] as { n: number })?.n ?? 0)
+  }
+  if (vis === 'hidden' && q === '') {
+    const rows = await sql`
+      SELECT count(*)::int AS n FROM tool_comments c WHERE c.is_hidden = true
+    `
+    return Number((rows[0] as { n: number })?.n ?? 0)
+  }
+  const rows = await sql`
+    SELECT count(*)::int AS n
+    FROM tool_comments c
+    WHERE c.is_hidden = true
+      AND (
+        c.body ILIKE ${pattern}
+        OR c.nickname ILIKE ${pattern}
+        OR c.email ILIKE ${pattern}
+      )
+  `
+  return Number((rows[0] as { n: number })?.n ?? 0)
+}
+
+export async function neonAdminListComments(opts: {
+  q: string
+  visibility: AdminCommentVisibilityFilter
+  limit: number
+  offset: number
+}): Promise<AdminCommentRow[]> {
+  const limit = Math.max(1, Math.min(100, Math.floor(opts.limit)))
+  const offset = Math.max(0, Math.floor(opts.offset))
+  const sql = getNeonSql()
+  const q = opts.q.trim()
+  const pattern = `%${q}%`
+  const vis = opts.visibility
+
+  let rows: Record<string, unknown>[]
+
+  if (vis === 'all' && q === '') {
+    rows = await sql`
+      SELECT c.*, t.name AS tool_name, t.slug AS tool_slug
+      FROM tool_comments c
+      INNER JOIN tools t ON t.id = c.tool_id
+      ORDER BY c.created_at DESC
+      LIMIT ${limit} OFFSET ${offset}
+    `
+  } else if (vis === 'all' && q !== '') {
+    rows = await sql`
+      SELECT c.*, t.name AS tool_name, t.slug AS tool_slug
+      FROM tool_comments c
+      INNER JOIN tools t ON t.id = c.tool_id
+      WHERE c.body ILIKE ${pattern}
+        OR c.nickname ILIKE ${pattern}
+        OR c.email ILIKE ${pattern}
+      ORDER BY c.created_at DESC
+      LIMIT ${limit} OFFSET ${offset}
+    `
+  } else if (vis === 'visible' && q === '') {
+    rows = await sql`
+      SELECT c.*, t.name AS tool_name, t.slug AS tool_slug
+      FROM tool_comments c
+      INNER JOIN tools t ON t.id = c.tool_id
+      WHERE COALESCE(c.is_hidden, false) = false
+      ORDER BY c.created_at DESC
+      LIMIT ${limit} OFFSET ${offset}
+    `
+  } else if (vis === 'visible' && q !== '') {
+    rows = await sql`
+      SELECT c.*, t.name AS tool_name, t.slug AS tool_slug
+      FROM tool_comments c
+      INNER JOIN tools t ON t.id = c.tool_id
+      WHERE COALESCE(c.is_hidden, false) = false
+        AND (
+          c.body ILIKE ${pattern}
+          OR c.nickname ILIKE ${pattern}
+          OR c.email ILIKE ${pattern}
+        )
+      ORDER BY c.created_at DESC
+      LIMIT ${limit} OFFSET ${offset}
+    `
+  } else if (vis === 'hidden' && q === '') {
+    rows = await sql`
+      SELECT c.*, t.name AS tool_name, t.slug AS tool_slug
+      FROM tool_comments c
+      INNER JOIN tools t ON t.id = c.tool_id
+      WHERE c.is_hidden = true
+      ORDER BY c.created_at DESC
+      LIMIT ${limit} OFFSET ${offset}
+    `
+  } else {
+    rows = await sql`
+      SELECT c.*, t.name AS tool_name, t.slug AS tool_slug
+      FROM tool_comments c
+      INNER JOIN tools t ON t.id = c.tool_id
+      WHERE c.is_hidden = true
+        AND (
+          c.body ILIKE ${pattern}
+          OR c.nickname ILIKE ${pattern}
+          OR c.email ILIKE ${pattern}
+        )
+      ORDER BY c.created_at DESC
+      LIMIT ${limit} OFFSET ${offset}
+    `
+  }
+
+  return rows.map(mapAdminCommentRow)
+}
+
+export async function neonAdminSetCommentHidden(
+  commentId: string,
+  hidden: boolean,
+): Promise<boolean> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    UPDATE tool_comments
+    SET is_hidden = ${hidden}
+    WHERE id = ${commentId}
+    RETURNING id
+  `
+  return rows.length > 0
+}
+
+export async function neonAdminSearchProfilesForCommentMute(
+  q: string,
+  limit: number,
+): Promise<Profile[]> {
+  const sq = q.trim()
+  if (sq.length < 2) return []
+  const lim = Math.max(1, Math.min(50, Math.floor(limit)))
+  const pattern = `%${sq}%`
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT
+      p.id,
+      p.display_name,
+      p.avatar_url,
+      p.is_admin,
+      p.is_disabled,
+      p.created_at,
+      p.disabled_reason,
+      COALESCE(p.comment_muted, false) AS comment_muted,
+      p.comment_mute_reason,
+      ac.email AS registration_email
+    FROM profiles p
+    LEFT JOIN public.auth_credentials ac ON ac.user_id = p.id
+    WHERE ac.email ILIKE ${pattern}
+      OR p.display_name ILIKE ${pattern}
+    ORDER BY ac.email ASC NULLS LAST
+    LIMIT ${lim}
+  `
+  return (rows as Record<string, unknown>[]).map(mapProfileRow)
+}
+
+export async function neonListProfilesCommentMutedRecent(
+  limit: number,
+): Promise<Profile[]> {
+  const lim = Math.max(1, Math.min(100, Math.floor(limit)))
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT
+      p.id,
+      p.display_name,
+      p.avatar_url,
+      p.is_admin,
+      p.is_disabled,
+      p.created_at,
+      p.disabled_reason,
+      COALESCE(p.comment_muted, false) AS comment_muted,
+      p.comment_mute_reason,
+      ac.email AS registration_email
+    FROM profiles p
+    LEFT JOIN public.auth_credentials ac ON ac.user_id = p.id
+    WHERE COALESCE(p.comment_muted, false) = true
+    ORDER BY p.created_at DESC
+    LIMIT ${lim}
+  `
+  return (rows as Record<string, unknown>[]).map(mapProfileRow)
+}
+
+export async function neonCountProfilesCommentMuted(): Promise<number> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT count(*)::int AS n
+    FROM profiles
+    WHERE COALESCE(comment_muted, false) = true
+  `
+  return Number((rows[0] as { n: number })?.n ?? 0)
 }
 
 export async function neonUpdateProfileFields(

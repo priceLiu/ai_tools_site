@@ -82,6 +82,10 @@ export interface Profile {
   is_disabled?: boolean
   /** 管理员禁用时填写；解除禁用时为空 */
   disabled_reason?: string | null
+  /** 管理员禁言后禁止发表评论 */
+  comment_muted?: boolean
+  /** 禁言原因；解除时可空 */
+  comment_mute_reason?: string | null
   /** 管理员用户列表：关联 auth_credentials.email */
   registration_email?: string | null
   created_at: string
@@ -106,6 +110,16 @@ export interface ToolComment {
   email: string
   website: string | null
   created_at: string
+  /** 发表评论的登录用户 id；历史数据可能为空 */
+  user_id?: string | null
+  /** 管理端可见；前台列表不返回为 true 的评论 */
+  is_hidden?: boolean
+}
+
+/** 管理后台评论列表行 */
+export interface AdminCommentRow extends ToolComment {
+  tool_name: string
+  tool_slug: string
 }
 
 export interface NavigationMenuItemRow {

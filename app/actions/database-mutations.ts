@@ -162,12 +162,17 @@ export async function insertToolCommentAction(input: {
 
   const ok = await neon.neonToolIsApprovedVisibleById(input.tool_id)
   if (!ok) return { error: '无法评论该工具' }
+  const muted = await neon.neonGetProfileCommentMuted(user.id)
+  if (muted) {
+    return { error: '您的账号已被禁止发表评论，如有疑问请联系管理员。' }
+  }
   await neon.neonInsertToolComment({
     tool_id: input.tool_id,
     body,
     nickname,
     email,
     website: website && website.length > 0 ? website : null,
+    user_id: user.id,
   })
   return {}
 }

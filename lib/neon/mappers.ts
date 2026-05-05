@@ -1,4 +1,13 @@
-import type { AdPlacement, Category, Favorite, Profile, Tool, ToolComment, ToolTagLink } from '@/lib/types'
+import type {
+  AdPlacement,
+  AdminCommentRow,
+  Category,
+  Favorite,
+  Profile,
+  Tool,
+  ToolComment,
+  ToolTagLink,
+} from '@/lib/types'
 import { trimOrNullImageSrc } from '@/lib/trim-or-null'
 
 export function asIso(v: unknown): string {
@@ -72,6 +81,11 @@ export function mapProfileRow(r: Record<string, unknown>): Profile {
       r.disabled_reason === undefined || r.disabled_reason === null
         ? null
         : String(r.disabled_reason),
+    comment_muted: r.comment_muted === true,
+    comment_mute_reason:
+      r.comment_mute_reason === undefined || r.comment_mute_reason === null
+        ? null
+        : String(r.comment_mute_reason),
     registration_email:
       r.registration_email === undefined || r.registration_email === null
         ? null
@@ -89,6 +103,20 @@ export function mapCommentRow(r: Record<string, unknown>): ToolComment {
     email: String(r.email ?? ''),
     website: r.website == null ? null : String(r.website),
     created_at: asIso(r.created_at),
+    user_id:
+      r.user_id == null || String(r.user_id).trim() === ''
+        ? null
+        : String(r.user_id),
+    is_hidden: r.is_hidden === true,
+  }
+}
+
+export function mapAdminCommentRow(r: Record<string, unknown>): AdminCommentRow {
+  const base = mapCommentRow(r)
+  return {
+    ...base,
+    tool_name: String(r.tool_name ?? ''),
+    tool_slug: String(r.tool_slug ?? ''),
   }
 }
 

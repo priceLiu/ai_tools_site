@@ -17,6 +17,7 @@ import {
   BarChart3,
   Heart,
   Megaphone,
+  MessageSquare,
   type LucideIcon,
 } from 'lucide-react'
 import { AdminRegenerateStaticButton } from '@/components/admin-regenerate-static-button'
@@ -163,8 +164,10 @@ export function CompactAppSidebarFrame({
   const importAdminActive = pathname.startsWith('/admin/import-tools')
   const statsAdminActive = pathname.startsWith('/admin/stats')
   const adsAdminActive = pathname.startsWith('/admin/ads')
+  const commentsAdminActive = pathname.startsWith('/admin/comments')
   const reviewsAdminActive =
     pathname.startsWith('/admin') &&
+    !commentsAdminActive &&
     !navigationAdminActive &&
     !usersAdminActive &&
     !importAdminActive &&
@@ -237,6 +240,13 @@ export function CompactAppSidebarFrame({
               label="广告位管理"
               Icon={Megaphone}
               active={adsAdminActive}
+              onItemSelect={onItemSelect}
+            />
+            <NavRow
+              href="/admin/comments"
+              label="评论管理"
+              Icon={MessageSquare}
+              active={commentsAdminActive}
               onItemSelect={onItemSelect}
             />
 
