@@ -7,6 +7,7 @@ import { neonGetProfileIsAdmin } from '@/lib/neon/data'
 import { loadHomeToolBundle } from '@/lib/cached-home-data'
 import { uploadHomeToolBundleSnapshot } from '@/lib/home-bundle-snapshot'
 import {
+  HOME_ADS_CACHE_TAG,
   HOME_TOOL_BUNDLE_CACHE_TAG,
   NAVIGATION_MENU_CACHE_TAG,
 } from '@/lib/navigation-menu-cache-config'
@@ -60,6 +61,7 @@ export async function regeneratePublicStaticAction(): Promise<{
 
   revalidateTag(HOME_TOOL_BUNDLE_CACHE_TAG, { expire: 0 })
   revalidateTag(NAVIGATION_MENU_CACHE_TAG, { expire: 0 })
+  revalidateTag(HOME_ADS_CACHE_TAG, { expire: 0 })
   revalidatePath('/')
   revalidatePath('/category/[slug]', 'page')
   revalidatePath('/tool/[slug]', 'page')

@@ -1,0 +1,24 @@
+-- =============================================================================
+-- 【重要】本文件不再是「一键建库」脚本，请勿在 Neon 空库上单独执行历史正文。
+--
+-- 原内容问题（审查结论，2026-05）：
+-- 1) 仅有索引 / 函数 / 触发器 / RLS，缺少 profiles、categories、tools、favorites 的 CREATE TABLE，
+--    无法单独撑起全新数据库。
+-- 2) 含 profiles_guard_flags、is_admin_user()，与纯 Neon 应用冲突；应在
+--    supabase/migrations/20260504160000_drop_supabase_rls_deps.sql 中删除，
+--    若在 drop 之后又执行本文件会把旧逻辑加回去。
+-- 3) handle_new_user() 面向 Supabase auth.users；当前项目用 Neon + auth_credentials 注册，
+--    不需要该触发器链。
+--
+-- 【推荐】全新库 / 换库一键执行：
+--   export DATABASE_URL='postgresql://...?sslmode=require'
+--   bash scripts/apply-neon-migrations.sh
+--
+-- 基准表结构从：supabase/migrations/20260101000000_baseline_core_schema.sql 开始，
+-- 其后按 supabase/migrations/*.sql 文件名排序依次应用。
+-- 纯 Neon 默认 NEON_SKIP_STORAGE=1，会跳过依赖 Supabase Storage 的两条迁移。
+--
+-- 更详细的说明见：docs/neon-schema.md
+-- =============================================================================
+
+SELECT '请使用 scripts/apply-neon-migrations.sh + supabase/migrations/，勿运行本占位语句以外的旧片段。'::text AS notice;

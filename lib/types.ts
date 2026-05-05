@@ -121,3 +121,40 @@ export interface NavigationMenuItemRow {
 export interface NavigationMenuTreeNode extends NavigationMenuItemRow {
   children: NavigationMenuTreeNode[]
 }
+
+/** 首页广告位投放（与 tools 多对多：同一工具可有多条不同时段的投放） */
+export interface AdPlacement {
+  id: string
+  tool_id: string
+  placement: 'section1' | 'section2'
+  /** section1: 'A' / 'B' / 'C'；section2: null */
+  tab_key: 'A' | 'B' | 'C' | null
+  /** section2 必填；前端通过 /api/img/ad/<id> 代理 */
+  banner_url: string | null
+  price: number
+  starts_at: string
+  ends_at: string
+  status: 'pending' | 'approved' | 'rejected'
+  rejection_reason: string | null
+  sort_order: number
+  submitted_by: string | null
+  created_at: string
+  updated_at: string
+  /** 关联读取时一起带出 */
+  tool?: Pick<Tool, 'id' | 'name' | 'slug' | 'logo_url' | 'description'>
+}
+
+/** 全局广告位设置（存于 app_kv，key = `ad:settings`） */
+export interface AdSettings {
+  /** 总开关，关闭后首页两个版块整体不渲染 */
+  enabled_section1: boolean
+  enabled_section2: boolean
+  section1_tab_a_label: string
+  section1_tab_b_label: string
+  section1_tab_c_label: string
+  /** Section 2 自动轮播秒数，最小 3 */
+  section2_rotate_seconds: number
+  /** 用户提交时的参考价（人民币） */
+  default_price_section1: number
+  default_price_section2: number
+}

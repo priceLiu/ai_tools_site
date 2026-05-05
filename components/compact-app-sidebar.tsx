@@ -16,6 +16,7 @@ import {
   Upload,
   BarChart3,
   Heart,
+  Megaphone,
   type LucideIcon,
 } from 'lucide-react'
 import { AdminRegenerateStaticButton } from '@/components/admin-regenerate-static-button'
@@ -161,12 +162,14 @@ export function CompactAppSidebarFrame({
   const usersAdminActive = pathname.startsWith('/admin/users')
   const importAdminActive = pathname.startsWith('/admin/import-tools')
   const statsAdminActive = pathname.startsWith('/admin/stats')
+  const adsAdminActive = pathname.startsWith('/admin/ads')
   const reviewsAdminActive =
     pathname.startsWith('/admin') &&
     !navigationAdminActive &&
     !usersAdminActive &&
     !importAdminActive &&
-    !statsAdminActive
+    !statsAdminActive &&
+    !adsAdminActive
 
   return (
     <div className="flex h-full flex-col px-3 py-4">
@@ -227,6 +230,13 @@ export function CompactAppSidebarFrame({
               label="批量导入"
               Icon={Upload}
               active={importAdminActive}
+              onItemSelect={onItemSelect}
+            />
+            <NavRow
+              href="/admin/ads"
+              label="广告位管理"
+              Icon={Megaphone}
+              active={adsAdminActive}
               onItemSelect={onItemSelect}
             />
 

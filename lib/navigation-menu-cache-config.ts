@@ -6,3 +6,6 @@ export const NAVIGATION_MENU_CACHE_TAG = 'navigation-menu'
 export const NAVIGATION_MENU_CACHE_REVALIDATE_SECONDS = 600
 
 export const HOME_TOOL_BUNDLE_CACHE_TAG = 'home-tool-bundle'
+
+/** 首页广告位（section1 / section2）数据缓存；写后调用 revalidateTag(...) 立即刷新 */
+export const HOME_ADS_CACHE_TAG = 'home-ads'

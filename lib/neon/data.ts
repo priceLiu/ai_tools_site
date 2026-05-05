@@ -1,11 +1,13 @@
 import { getNeonSql } from '@/lib/neon/sql'
 import {
+  mapAdRow,
   mapCommentRow,
   mapProfileRow,
   mapToolRow,
   parseCategoryJson,
 } from '@/lib/neon/mappers'
 import type {
+  AdPlacement,
   Category,
   NavigationMenuItemRow,
   Profile,
@@ -191,6 +193,25 @@ export async function neonListApprovedToolSlugs(): Promise<string[]> {
   return (rows as { slug: string }[])
     .map((r) => (r.slug ?? '').trim())
     .filter((s) => s.length > 0)
+}
+
+/** 获取已审核工具列表（用于下拉选择） */
+export async function neonListApprovedToolsForSelect(
+  limit: number,
+): Promise<{ id: string; name: string; slug: string }[]> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT id, name, slug
+    FROM tools
+    WHERE status = 'approved' AND COALESCE(is_disabled, false) = false
+    ORDER BY view_count DESC NULLS LAST, created_at DESC
+    LIMIT ${limit}
+  `
+  return (rows as { id: string; name: string; slug: string }[]).map((r) => ({
+    id: String(r.id),
+    name: String(r.name ?? ''),
+    slug: String(r.slug ?? ''),
+  }))
 }
 
 export async function neonGetToolPublicBySlug(slug: string): Promise<Tool | null> {
@@ -1397,4 +1418,292 @@ export async function neonCountProfilesAdmins(): Promise<number> {
     SELECT count(*)::int AS n FROM profiles WHERE is_admin = true
   `
   return Number((rows[0] as { n: number }).n ?? 0)
+}
+
+// =============================================================================
+// 广告位 (ad_placements)
+// =============================================================================
+
+/** 后台列表（全部状态、全部时段），管理员排序界面使用 */
+export async function neonListAdsForAdmin(): Promise<AdPlacement[]> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT a.id, a.tool_id, a.placement, a.tab_key, a.banner_url, a.price,
+      a.starts_at, a.ends_at, a.status, a.rejection_reason, a.sort_order,
+      a.submitted_by, a.created_at, a.updated_at,
+      t.name AS tool_name, t.slug AS tool_slug,
+      t.description AS tool_description, t.logo_url AS tool_logo_url
+    FROM ad_placements a
+    LEFT JOIN tools t ON t.id = a.tool_id
+    ORDER BY a.placement ASC, COALESCE(a.tab_key, '') ASC,
+             a.sort_order ASC, a.created_at DESC
+  `
+  return (rows as Record<string, unknown>[]).map((r) => {
+    const ad = mapAdRow(r)
+    // banner / logo 都走代理（避免 data: URL 撑爆 RSC payload）
+    ad.banner_url = ad.banner_url ? `/api/img/ad/${ad.id}` : null
+    if (ad.tool) ad.tool.logo_url = `/api/img/tool/${ad.tool_id}/logo`
+    return ad
+  })
+}
+
+/** 前台读取：仅 approved + 在生效期；section1 取每个 tab，section2 取所有 */
+export async function neonListActiveAds(opts: {
+  placement: 'section1' | 'section2'
+  /** section1 限定 tab；section2 不需要 */
+  tabKey?: 'A' | 'B' | 'C' | null
+  limit: number
+}): Promise<AdPlacement[]> {
+  const sql = getNeonSql()
+  const limit = Math.max(1, Math.min(50, Math.floor(opts.limit)))
+  if (opts.placement === 'section1') {
+    const rows = await sql`
+      SELECT a.id, a.tool_id, a.placement, a.tab_key, a.banner_url, a.price,
+        a.starts_at, a.ends_at, a.status, a.rejection_reason, a.sort_order,
+        a.submitted_by, a.created_at, a.updated_at,
+        t.name AS tool_name, t.slug AS tool_slug,
+        t.description AS tool_description, t.logo_url AS tool_logo_url
+      FROM ad_placements a
+      JOIN tools t ON t.id = a.tool_id
+      WHERE a.placement = 'section1'
+        AND a.tab_key = ${opts.tabKey ?? 'A'}
+        AND a.status = 'approved'
+        AND now() BETWEEN a.starts_at AND a.ends_at
+        AND COALESCE(t.is_disabled, false) = false
+      ORDER BY a.sort_order ASC, a.created_at DESC
+      LIMIT ${limit}
+    `
+    return (rows as Record<string, unknown>[]).map((r) => {
+      const ad = mapAdRow(r)
+      // banner / logo 都走代理（避免 data: URL 撑爆缓存）
+      ad.banner_url = ad.banner_url ? `/api/img/ad/${ad.id}` : null
+      if (ad.tool) ad.tool.logo_url = `/api/img/tool/${ad.tool_id}/logo`
+      return ad
+    })
+  }
+  const rows = await sql`
+    SELECT a.id, a.tool_id, a.placement, a.tab_key, a.banner_url, a.price,
+      a.starts_at, a.ends_at, a.status, a.rejection_reason, a.sort_order,
+      a.submitted_by, a.created_at, a.updated_at,
+      t.name AS tool_name, t.slug AS tool_slug,
+      t.description AS tool_description, t.logo_url AS tool_logo_url
+    FROM ad_placements a
+    JOIN tools t ON t.id = a.tool_id
+    WHERE a.placement = 'section2'
+      AND a.status = 'approved'
+      AND now() BETWEEN a.starts_at AND a.ends_at
+      AND COALESCE(t.is_disabled, false) = false
+    ORDER BY a.sort_order ASC, a.created_at DESC
+    LIMIT ${limit}
+  `
+  return (rows as Record<string, unknown>[]).map((r) => {
+    const ad = mapAdRow(r)
+    // banner 走代理
+    ad.banner_url = ad.banner_url ? `/api/img/ad/${ad.id}` : null
+    if (ad.tool) ad.tool.logo_url = `/api/img/tool/${ad.tool_id}/logo`
+    return ad
+  })
+}
+
+export async function neonGetAdById(id: string): Promise<AdPlacement | null> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT a.id, a.tool_id, a.placement, a.tab_key, a.banner_url, a.price,
+      a.starts_at, a.ends_at, a.status, a.rejection_reason, a.sort_order,
+      a.submitted_by, a.created_at, a.updated_at,
+      t.name AS tool_name, t.slug AS tool_slug,
+      t.description AS tool_description, t.logo_url AS tool_logo_url
+    FROM ad_placements a
+    LEFT JOIN tools t ON t.id = a.tool_id
+    WHERE a.id = ${id}
+    LIMIT 1
+  `
+  if (!rows.length) return null
+  return mapAdRow(rows[0] as Record<string, unknown>)
+}
+
+/** 仅返回 banner_url 原值；image proxy 用 */
+export async function neonGetAdBannerRawById(
+  id: string,
+): Promise<string | null> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT banner_url FROM ad_placements WHERE id = ${id} LIMIT 1
+  `
+  if (!rows.length) return null
+  const v = (rows[0] as { banner_url: string | null }).banner_url
+  return v == null || String(v).trim() === '' ? null : String(v)
+}
+
+export interface AdInsertInput {
+  tool_id: string
+  placement: 'section1' | 'section2'
+  tab_key: 'A' | 'B' | 'C' | null
+  banner_url: string | null
+  price: number
+  starts_at: string
+  ends_at: string
+  status: AdPlacement['status']
+  sort_order: number
+  submitted_by: string | null
+}
+
+export async function neonInsertAd(input: AdInsertInput): Promise<string> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    INSERT INTO ad_placements (
+      tool_id, placement, tab_key, banner_url, price,
+      starts_at, ends_at, status, sort_order, submitted_by
+    ) VALUES (
+      ${input.tool_id},
+      ${input.placement},
+      ${input.tab_key},
+      ${input.banner_url},
+      ${input.price},
+      ${input.starts_at}::timestamptz,
+      ${input.ends_at}::timestamptz,
+      ${input.status},
+      ${input.sort_order},
+      ${input.submitted_by}
+    ) RETURNING id
+  `
+  return String((rows[0] as { id: string }).id)
+}
+
+export interface AdUpdateInput {
+  id: string
+  tool_id?: string
+  placement?: 'section1' | 'section2'
+  tab_key?: 'A' | 'B' | 'C' | null
+  banner_url?: string | null
+  price?: number
+  starts_at?: string
+  ends_at?: string
+  status?: AdPlacement['status']
+  rejection_reason?: string | null
+  sort_order?: number
+}
+
+export async function neonUpdateAd(input: AdUpdateInput): Promise<void> {
+  const sql = getNeonSql()
+  await sql`
+    UPDATE ad_placements SET
+      tool_id            = COALESCE(${input.tool_id ?? null}, tool_id),
+      placement          = COALESCE(${input.placement ?? null}, placement),
+      tab_key            = CASE WHEN ${input.placement ?? null} IS NULL
+                                 THEN tab_key
+                                 ELSE ${input.tab_key ?? null}
+                            END,
+      banner_url         = COALESCE(${input.banner_url ?? null}, banner_url),
+      price              = COALESCE(${input.price ?? null}, price),
+      starts_at          = COALESCE(${input.starts_at ?? null}::timestamptz, starts_at),
+      ends_at            = COALESCE(${input.ends_at ?? null}::timestamptz, ends_at),
+      status             = COALESCE(${input.status ?? null}, status),
+      rejection_reason   = CASE WHEN ${input.status ?? null} = 'rejected'
+                                 THEN ${input.rejection_reason ?? null}
+                                 WHEN ${input.status ?? null} IN ('approved','pending')
+                                 THEN NULL
+                                 ELSE rejection_reason
+                            END,
+      sort_order         = COALESCE(${input.sort_order ?? null}, sort_order),
+      updated_at         = now()
+    WHERE id = ${input.id}
+  `
+}
+
+export async function neonDeleteAd(id: string): Promise<void> {
+  const sql = getNeonSql()
+  await sql`DELETE FROM ad_placements WHERE id = ${id}`
+}
+
+/** 单独更新排序（避免 COALESCE 复杂 null 类型推断问题） */
+export async function neonUpdateAdSortOrder(
+  id: string,
+  sort_order: number,
+): Promise<void> {
+  const sql = getNeonSql()
+  await sql`
+    UPDATE ad_placements
+    SET sort_order = ${Math.floor(sort_order)}, updated_at = now()
+    WHERE id = ${id}
+  `
+}
+
+/** 单独更新状态（避免复杂 null 类型推断） */
+export async function neonUpdateAdStatus(
+  id: string,
+  status: AdPlacement['status'],
+  rejection_reason: string | null,
+): Promise<void> {
+  const sql = getNeonSql()
+  await sql`
+    UPDATE ad_placements
+    SET status = ${status},
+        rejection_reason = ${status === 'rejected' ? rejection_reason : null},
+        updated_at = now()
+    WHERE id = ${id}
+  `
+}
+
+/** 检查同一工具在指定时段内、同一 placement 是否已有重叠的 approved 投放（排除自身） */
+export async function neonCheckAdOverlap(opts: {
+  tool_id: string
+  placement: 'section1' | 'section2'
+  starts_at: string
+  ends_at: string
+  exclude_id?: string
+}): Promise<boolean> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT 1 FROM ad_placements
+    WHERE tool_id = ${opts.tool_id}
+      AND placement = ${opts.placement}
+      AND status = 'approved'
+      AND id != ${opts.exclude_id ?? '00000000-0000-0000-0000-000000000000'}
+      AND (
+        (starts_at <= ${opts.ends_at}::timestamptz AND ends_at >= ${opts.starts_at}::timestamptz)
+      )
+    LIMIT 1
+  `
+  return rows.length > 0
+}
+
+export async function neonCountActiveAdsByPlacement(): Promise<{
+  section1A: number
+  section1B: number
+  section1C: number
+  section2: number
+  pending: number
+}> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT
+      placement,
+      COALESCE(tab_key, '') AS tab_key,
+      status,
+      now() BETWEEN starts_at AND ends_at AS in_period,
+      count(*)::int AS n
+    FROM ad_placements
+    GROUP BY placement, COALESCE(tab_key, ''), status, (now() BETWEEN starts_at AND ends_at)
+  `
+  let section1A = 0
+  let section1B = 0
+  let section1C = 0
+  let section2 = 0
+  let pending = 0
+  for (const r of rows as {
+    placement: string
+    tab_key: string
+    status: string
+    in_period: boolean
+    n: number
+  }[]) {
+    if (r.status === 'pending') pending += Number(r.n)
+    if (r.status !== 'approved' || !r.in_period) continue
+    if (r.placement === 'section1' && r.tab_key === 'A') section1A += Number(r.n)
+    else if (r.placement === 'section1' && r.tab_key === 'B') section1B += Number(r.n)
+    else if (r.placement === 'section1' && r.tab_key === 'C') section1C += Number(r.n)
+    else if (r.placement === 'section2') section2 += Number(r.n)
+  }
+  return { section1A, section1B, section1C, section2, pending }
 }
