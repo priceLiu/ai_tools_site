@@ -112,7 +112,13 @@ function isLive(ad: AdPlacement): boolean {
   return new Date(ad.starts_at).getTime() <= now && now <= new Date(ad.ends_at).getTime()
 }
 
-function AdToolLogo({ toolId, toolName }: { toolId: string; toolName?: string }) {
+function AdToolLogo({
+  toolName,
+  logoUrl,
+}: {
+  toolName?: string
+  logoUrl?: string | null
+}) {
   const [loaded, setLoaded] = useState(false)
   const [errored, setErrored] = useState(false)
 
@@ -125,19 +131,24 @@ function AdToolLogo({ toolId, toolName }: { toolId: string; toolName?: string })
     }
   }, [])
 
+  const src =
+    typeof logoUrl === 'string' && logoUrl.trim().length > 0
+      ? logoUrl.trim()
+      : null
+
   return (
     <div
       className={cn(
         'relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-md border',
-        (!loaded || errored)
+        (!loaded || errored || !src)
           ? 'border-violet-200 bg-gradient-to-br from-violet-300 via-violet-400 to-purple-500'
           : 'bg-muted',
       )}
     >
-      {!errored && (
+      {!errored && src && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={`/api/img/tool/${toolId}/logo`}
+          src={src}
           alt={toolName ?? ''}
           className={cn(
             'h-full w-full object-contain transition-opacity',
@@ -147,7 +158,7 @@ function AdToolLogo({ toolId, toolName }: { toolId: string; toolName?: string })
           onError={() => setErrored(true)}
         />
       )}
-      {(!loaded || errored) && (
+      {(!loaded || errored || !src) && (
         <Sparkles className="absolute h-4 w-4 text-white drop-shadow-sm" />
       )}
     </div>
@@ -625,7 +636,10 @@ function BucketPanel({
                   )}
                 >
                   <div className="flex flex-1 items-center gap-3">
-                    <AdToolLogo toolId={ad.tool_id} toolName={tool?.name} />
+                    <AdToolLogo
+                      toolName={tool?.name}
+                      logoUrl={tool?.logo_url}
+                    />
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium">
                         {tool?.name ?? ad.tool_id.slice(0, 8)}

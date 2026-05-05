@@ -228,6 +228,10 @@ function MediaCard({
   )
 
   const showBanner = bannerUrl && !bannerError && bannerLoaded
+  const logoSrc =
+    typeof tool.logo_url === 'string' && tool.logo_url.trim().length > 0
+      ? tool.logo_url.trim()
+      : null
 
   return (
     <Link
@@ -258,10 +262,10 @@ function MediaCard({
       {/* 占位：紫色渐变 + 居中 logo（默认显示，banner 加载完成后被覆盖） */}
       {!showBanner && (
         <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-violet-200 via-violet-300 to-purple-400">
-          {!logoError ? (
+          {logoSrc && !logoError ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={`/api/img/tool/${tool.id}/logo`}
+              src={logoSrc}
               alt=""
               loading="lazy"
               decoding="async"

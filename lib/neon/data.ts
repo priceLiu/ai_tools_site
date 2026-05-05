@@ -16,7 +16,7 @@ import type {
 } from '@/lib/types'
 import type { IntroductionFormat } from '@/lib/introduction-format'
 import { toolIntroductionPreviewDedup } from '@/lib/tool-dedup'
-import { publicizeToolImages } from '@/lib/public-tool-image-url'
+import { publicizeToolImages, publicizeToolLogoUrl } from '@/lib/public-tool-image-url'
 
 /** 与首页「最新收录」limit 一致 */
 export const HOME_LATEST_MAX = 15
@@ -1440,9 +1440,15 @@ export async function neonListAdsForAdmin(): Promise<AdPlacement[]> {
   `
   return (rows as Record<string, unknown>[]).map((r) => {
     const ad = mapAdRow(r)
-    // banner / logo 都走代理（避免 data: URL 撑爆 RSC payload）
+    // banner / logo 都走代理（避免 data: URL 撑爆 RSC payload）；无 logo 时勿填代理 URL，否则会无意义请求 404。
     ad.banner_url = ad.banner_url ? `/api/img/ad/${ad.id}` : null
-    if (ad.tool) ad.tool.logo_url = `/api/img/tool/${ad.tool_id}/logo`
+    if (ad.tool) {
+      ad.tool.logo_url = publicizeToolLogoUrl(
+        ad.tool_id,
+        ad.tool.logo_url,
+        undefined,
+      )
+    }
     return ad
   })
 }
@@ -1475,9 +1481,15 @@ export async function neonListActiveAds(opts: {
     `
     return (rows as Record<string, unknown>[]).map((r) => {
       const ad = mapAdRow(r)
-      // banner / logo 都走代理（避免 data: URL 撑爆缓存）
+      // banner / logo 都走代理（避免 data: URL 撑爆缓存）；无 logo 时不请求占位代理。
       ad.banner_url = ad.banner_url ? `/api/img/ad/${ad.id}` : null
-      if (ad.tool) ad.tool.logo_url = `/api/img/tool/${ad.tool_id}/logo`
+      if (ad.tool) {
+        ad.tool.logo_url = publicizeToolLogoUrl(
+          ad.tool_id,
+          ad.tool.logo_url,
+          undefined,
+        )
+      }
       return ad
     })
   }
@@ -1498,9 +1510,15 @@ export async function neonListActiveAds(opts: {
   `
   return (rows as Record<string, unknown>[]).map((r) => {
     const ad = mapAdRow(r)
-    // banner 走代理
+    // banner 走代理；无 logo 时不请求占位代理。
     ad.banner_url = ad.banner_url ? `/api/img/ad/${ad.id}` : null
-    if (ad.tool) ad.tool.logo_url = `/api/img/tool/${ad.tool_id}/logo`
+    if (ad.tool) {
+      ad.tool.logo_url = publicizeToolLogoUrl(
+        ad.tool_id,
+        ad.tool.logo_url,
+        undefined,
+      )
+    }
     return ad
   })
 }
