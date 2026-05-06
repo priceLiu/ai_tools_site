@@ -26,7 +26,8 @@ export async function generateMetadata({ searchParams }: SubmitPageProps) {
   }
 }
 
-export default async function SubmitPage({ searchParams }: SubmitPageProps) {
+/** TEMP DEBUG: CloudBase Run 上 /submit 报 Server Components render error，临时把堆栈渲染到页面 */
+async function renderSubmitPageInner({ searchParams }: SubmitPageProps) {
   const { edit: editId } = await searchParams
   const user = await getAuthUser()
 
@@ -142,4 +143,44 @@ export default async function SubmitPage({ searchParams }: SubmitPageProps) {
       </div>
     </AccountChrome>
   )
+}
+
+/** TEMP DEBUG: 包一层 try/catch，CloudBase Run 上拿到详细堆栈后即删 */
+export default async function SubmitPage(props: SubmitPageProps) {
+  try {
+    return await renderSubmitPageInner(props)
+  } catch (e) {
+    /** redirect()/notFound() 内部会抛特殊符号化错误，必须重新抛出，否则会吞掉跳转。 */
+    if (e && typeof e === 'object' && 'digest' in e) {
+      const d = (e as { digest?: unknown }).digest
+      if (typeof d === 'string' && (d.startsWith('NEXT_REDIRECT') || d === 'NEXT_NOT_FOUND')) {
+        throw e
+      }
+    }
+    const msg = e instanceof Error ? e.message : String(e)
+    const stack = e instanceof Error ? e.stack ?? '' : ''
+    const causeMsg =
+      e instanceof Error && (e as Error & { cause?: unknown }).cause
+        ? String((e as Error & { cause?: unknown }).cause)
+        : ''
+    console.error('[SubmitPage SSR error]', e)
+    return (
+      <pre
+        style={{
+          margin: 0,
+          padding: '24px',
+          background: '#111',
+          color: '#f88',
+          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+          fontSize: '12px',
+          lineHeight: '1.5',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-all',
+        }}
+      >{`[SubmitPage SSR ERROR]
+message: ${msg}
+${causeMsg ? `cause:   ${causeMsg}\n` : ''}stack:
+${stack}`}</pre>
+    )
+  }
 }
