@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server'
 import { getNeonSql } from '@/lib/neon/sql'
+import {
+  getDatabaseKind,
+  getDeployTarget,
+  isDatabaseViaVpc,
+} from '@/lib/deploy-target'
 
 /**
  * 诊断 JSON 接口 —— 跟 `/diag` 同源，但返回纯 JSON。
@@ -51,6 +56,12 @@ function maskUrl(u: string | undefined): string {
 
 function neonRegion(host: string): string {
   const m = host.match(/\.([a-z0-9-]+)\.aws\.neon\.tech$/i)
+  return m ? m[1] : ''
+}
+
+/** 腾讯云 PG 公网串形如 `sh-postgres-xxxx.sql.tencentcdb.com` —— 第一段是地域代码。 */
+function tencentRegion(host: string): string {
+  const m = host.match(/^([a-z]+)-[a-z]+-[a-z0-9]+\.sql\.tencentcdb\.com$/i)
   return m ? m[1] : ''
 }
 
@@ -116,10 +127,18 @@ export async function GET() {
         NEXT_RUNTIME: process.env.NEXT_RUNTIME ?? 'nodejs',
         NODE_ENV: process.env.NODE_ENV ?? null,
         NEON_DRIVER: process.env.NEON_DRIVER ?? null,
+        DEPLOY_TARGET: process.env.DEPLOY_TARGET ?? null,
+        TENCENTCLOUD_RUNENV: process.env.TENCENTCLOUD_RUNENV ?? null,
+      },
+      deploy: {
+        target: getDeployTarget(),
       },
       database: {
         host: dbHost,
-        region: neonRegion(dbHost),
+        kind: getDatabaseKind(dbUrl),
+        via_vpc: isDatabaseViaVpc(dbUrl),
+        region:
+          neonRegion(dbHost) || tencentRegion(dbHost) || null,
         url: maskUrl(dbUrl),
       },
       get_sql_error: getSqlError,
@@ -129,6 +148,8 @@ export async function GET() {
           'VERCEL_REGION 与 database.region 不在同一物理区时，单次 SQL 多 150~300ms',
         cold_start:
           'Neon serverless 默认 5min 无活动会 suspend；首次唤醒约 1-2s，可在 Neon 控制台关闭 auto-suspend',
+        dual_run:
+          '双跑期间通过 deploy.target + database.kind 判断当前请求被哪个部署、哪个 DB 服务到。两端写都打到同一个 Tencent PG（详见 docs/dual-run-strategy.md）。',
       },
     },
     {

@@ -1,8 +1,18 @@
+import { deployTargetHeaders } from '@/lib/deploy-target'
 import { runAuthMiddleware } from '@/lib/auth/middleware-session'
 import { type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
-  return runAuthMiddleware(request)
+  const res = await runAuthMiddleware(request)
+  /**
+   * 双跑期间在所有响应里附带部署/数据库识别头。
+   * 浏览器 DevTools → Network → 任意请求 → Response Headers 即可一眼看出。
+   * 详见 lib/deploy-target.ts 与 docs/dual-run-strategy.md。
+   */
+  for (const [k, v] of Object.entries(deployTargetHeaders())) {
+    res.headers.set(k, v)
+  }
+  return res
 }
 
 export const config = {

@@ -4,6 +4,118 @@
 
 ---
 
+## 2026-05-06（深夜）
+
+### Neon → 腾讯云 数据迁移完成（阶段 5：实测）
+
+**进度**：阶段 5 / 7（数据迁移完成；剩 CloudBase Run 部署 + 收紧安全 + 留档）。
+
+**实操过程关键里程碑**（仅记里程碑，调试细节看本节末「踩坑录」）：
+
+1. **跳过 `pg_dump`/`pg_restore`，改用纯 Node 迁移**：`scripts/migrate-neon-to-tencent.mjs`
+   - 不依赖 `libpq` / Docker / 系统包；只用项目已有的 `postgres` npm 包
+   - 自动按 `information_schema.referential_constraints` **拓扑排序**插入顺序
+   - 自引用 FK（`categories.parent_id`、`navigation_menu_items.parent_id`）**两阶段处理**（先置 NULL 整批插入，再回填 UPDATE）
+   - 单批 200 行，失败自动降级到逐行重试（便于定位脏数据）
+   - 全程 30 秒内完成；可重复执行（DELETE → INSERT 模式幂等）
+   - `--check` 仅做连通性测试；`--skip-schema` / `--data-only` 复跑用
+
+2. **辅助探针脚本**：
+   - `scripts/probe-tencent-pg.mjs`：4 种 SSL 配置穷举
+   - `scripts/probe-tencent-raw-tcp.mjs`：raw TCP 层手发 PG SSL 请求包，看返回字节
+
+3. **腾讯云 PG 实例配置**（用户侧已完成）：
+   - 上海二区主、上海三区备（高可用版，月费约 800 元；后续可在线降配为单节点 ≈400 元）
+   - PG 16.10、1c2g、20GB 存储、UTF-8、VPC `aitools-vpc` / 子网 `aitools-subnet-sh`
+   - 安全组 `aitools-pg-sg` 当前临时全开 `0.0.0.0/0`（debug 状态，**部署后必须收紧**）
+   - 默认数据库 `postgres`；脚本里 `CREATE DATABASE aitools OWNER aitools_admin` 自动建库
+
+4. **schema + 数据迁移结果（2026-05-06 14:31）**：
+
+   | 表 | Neon 行数 | Tencent 行数 | 备注 |
+   |---|---|---|---|
+   | tools | 174 | 174 ✓ | |
+   | tags | 249 | 249 ✓ | curated 217 + 历史 32 |
+   | tool_tags | 898 | 898 ✓ | |
+   | navigation_menu_items | 14 | 14 ✓ | 自引用 FK |
+   | categories | 13 | 13 ✓ | 自引用 FK |
+   | ad_placements | 12 | 12 ✓ | |
+   | tag_categories | 8 | 8 ✓ | |
+   | profiles | 2 | 2 ✓ | |
+   | auth_credentials | 2 | 2 ✓ | |
+   | app_kv | 2 | 2 ✓ | base64 logo / 图片 |
+   | tool_comments | 1 | 1 ✓ | |
+   | favorites | 0 | 0 ✓ | |
+   | **合计** | **1375** | **1375** | **100% 一致** |
+
+   schema 应用：27 个迁移文件全部 ✓，跳过 2 个 `storage.*`（Supabase 残留，纯 PG 不需要）；`pgcrypto` 扩展自动启用。
+
+5. **应用代码层**：
+   - `.env.local` 切到 `DATABASE_URL=Tencent (公网串)`，原 Neon 串保留为 `NEON_DATABASE_URL_BACKUP` 紧急回滚用
+   - `lib/neon/sql.ts` 已在阶段 1–4 改成纯 `postgres` TCP，无需再改
+
+**踩坑录（按发生顺序）**：
+
+| 序号 | 现象 | 原因 | 解决 |
+|---|---|---|---|
+| ① | `pnpm install --no-frozen-lockfile` 卡死交互 | pnpm 卡在「是否清空 node_modules」 | `--config.confirmModulesPurge=false` |
+| ② | `brew install libpq` 跑 8 分钟无声 | `2>&1 \| tail` 吞掉所有输出 + 国外网络慢 | 弃用 `pg_dump`，改纯 Node |
+| ③ | TencentDB 通过买 `cynosdb` 路径找不到 PG Serverless | TDSQL-C PostgreSQL **没有** Serverless 形态 | 改买「云数据库 PostgreSQL」（pgsql 路径） |
+| ④ | URL 里密码含 `@` 把 host 割成 `1389@sh-postgres-...` | URL 解析器把密码里 `@` 当分隔符 | 重置成纯字母数字下划线密码 |
+| ⑤ | `nc -zv` 通但 PG 协议 30 秒零返回 | SG 入站规则 `216.227.168.217/32` **不生效**（原因不明，可能是 LB 与 SG 绑定的客户端 IP 与 ifconfig.me 不一致） | 临时改 `0.0.0.0/0` 跑通；部署后改走 VPC 内网 |
+| ⑥ | `ssl: 'require'` 连不上 | 腾讯云 PG 实例**默认未开 SSL** | URL 改 `?sslmode=disable`、`postgres({ssl: false})` |
+| ⑦ | `database "aitools" does not exist` | 创实例只默认建 `postgres` 库 | 脚本先连 `postgres` 库 `CREATE DATABASE aitools` |
+
+**当前已知风险（部署前必处理）**：
+
+- ⚠️ SG 仍是 `0.0.0.0/0`（debug 残留）→ 部署后改走 VPC 内网，SG 直接删那条
+- ⚠️ 密码 `Password_1` 偏弱 → 部署后改强密码（用 `openssl rand -base64 24`）
+- ⚠️ SSL 关闭 → 公网串带 `sslmode=disable`；走 VPC 内网后无所谓
+
+---
+
+## 2026-05-06（晚）
+
+### Neon → 腾讯云 整站迁移（启动 / 阶段 1–4 完成）
+
+**需求背景**：国内移动网络访问 `*.vercel.app` 不稳；同时 Neon 跨境到 Vercel 即使同区也有 30ms 网络往返。把整站搬到腾讯云广州 / 上海，DB 与应用同 VPC 内网，配合 ICP 备案彻底解决访问稳定性。
+
+**最终路线**：
+- 数据库：Neon PG → **腾讯云 云数据库 PostgreSQL 16**（TencentDB for PostgreSQL，原生 PG，与现有 100 处 SQL 模板 0 冲突）
+- 应用：Vercel → **CloudBase Run（容器托管）**，与 DB 同地域 VPC
+- **不做**的事：不切 CloudBase 文档型 / MySQL（避免 1.5–3 周重写）；不动 100 处 SQL；不改 schema；不改鉴权 / 图片 / 业务
+
+> 中途修正：原计划写「TDSQL-C PostgreSQL Serverless」**实际不存在**（腾讯云 Serverless PG 只有 MySQL 版）。改为「云数据库 PostgreSQL」（标准托管 PG 16，单机版起步约 ¥85/月），与 Neon 行为最接近、价格也最低。
+
+**本次实现内容（机器侧 4 步，无需腾讯账号）**：
+
+1. **迁移手册 + 进度看板**：`docs/migration-tencent.md`
+   - 12 步勾选式进度看板
+   - 用户侧（开账号 / 买实例 / 备案）+ 机器侧（dump / restore / 部署）+ 验收 + 回滚 + 问题速查
+   - 目标架构 mermaid 图
+
+2. **数据迁移脚本**（无 `psql` 也能跑就提示，需要时 `brew install libpq`）：
+   - `scripts/dump-from-neon.sh`：`pg_dump` 自定义格式 + 纯 SQL 双备份 + 表行数 / 函数 / 扩展 / RLS 策略统计
+   - `scripts/restore-to-tencent.sh`：先 `CREATE EXTENSION pgcrypto`、跑 `anon` / `authenticated` 角色与 `auth.uid()` 桩、再 `pg_restore --jobs=4`、最后 `ANALYZE` + 健康检查
+   - `dumps/` 目录已加入 `.gitignore`
+
+3. **最小代码改造**（保留 `lib/neon/` 路径不动，60+ 文件 import 不受影响）：
+   - `lib/neon/sql.ts`：移除 `@neondatabase/serverless` HTTP 驱动分支与 `usePostgresTcp` / `isNextEdgeRuntime` 路由，永远走 `postgres` TCP；错误文案 `Neon` → `数据库`
+   - `package.json`：删 `@neondatabase/serverless`；保留 `postgres@3.4.5`；`pnpm-lock.yaml` 同步
+   - `next.config.mjs`：加 `output: 'standalone'`
+   - 新增 `Dockerfile`：3 阶段（deps / build / runtime），node:22-alpine + alpine 装 argon2 编译依赖 + 非 root 用户运行
+   - 新增 `.dockerignore`：排除 `node_modules` / `.next/cache` / `.env*` / `docs` / `supabase` / `dumps` / `scripts` / `.vercel`
+   - 更新 `database.env.sample`：移除废弃的 `NEON_DRIVER`、补 Tencent DB URL 格式
+
+4. **验证**：
+   - `npx tsc --noEmit` 通过
+   - `pnpm run build` 通过；`.next/standalone/server.js`（6.8 KB）+ `.next/static`（74 MB）正常产出
+   - `Grep '@neondatabase/serverless'` 仅剩注释里的历史背景说明
+
+**下一步（暂停等用户）**：用户按 `docs/migration-tencent.md` 第三节走 6 步开通腾讯云资源（账号 / CloudBase 环境 / TDSQL-C PG / CloudBase Run）；拿到 Tencent DB 公网串后我跑 dump → restore → CloudBase Run 部署 → 验收切流。
+
+---
+
 ## 2026-05-05
 
 ### 首页广告位系统

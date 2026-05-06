@@ -1,5 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  /**
+   * standalone：构建时把 server.js + 必要 node_modules 打包到 .next/standalone/
+   * 用于 CloudBase Run 等容器化场景；Vercel 不读取此目录，老部署不受影响。
+   */
+  output: 'standalone',
   typescript: {
     ignoreBuildErrors: true,
   },

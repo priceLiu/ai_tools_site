@@ -1,0 +1,39 @@
+# Node / Next.js
+node_modules
+.next
+.next/cache
+out
+
+# 环境 / 密钥
+.env*
+!.env.production
+
+# 版本控制
+.git
+.gitignore
+.gitattributes
+
+# IDE / OS
+.vscode
+.idea
+.DS_Store
+*.swp
+
+# 文档 / 数据
+docs
+supabase
+dumps
+*.md
+!README.md
+
+# 测试 / 构建
+coverage
+*.log
+.npm
+.eslintcache
+
+# 部署用不到的脚本目录（dump/restore 仅在本机跑）
+scripts
+
+# Vercel 残留
+.vercel

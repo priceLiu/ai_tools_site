@@ -10,9 +10,23 @@ next.user-config.*
 # Environment variables
 .env*.local
 .env.example
+.env.txt
+**/.env.txt
+docs/.env*
+docs/.secret*
+
 # Common ignores
 node_modules
 .next/
 .DS_Store
 
 deploy.md
+
+# DB 迁移产物（pg_dump 输出 / 临时还原日志）
+dumps/
+
+# pnpm 临时缓存（之前误装到工程内）
+.pnpm-store/
+
+# TypeScript 增量构建信息（每次 build 都变，无追踪意义）
+tsconfig.tsbuildinfo
