@@ -24,7 +24,18 @@ import type { Tool } from '@/lib/types'
 
 /** 60s ISR：标签 / 分类 / 工具任意写入都会失效 */
 export const revalidate = 60
-export const dynamicParams = false
+/**
+ * `dynamicParams = true`：允许运行时为未预渲染的 slug SSR + ISR。
+ * 历史上是 `false`（强制 build 时把 9 个角色全预渲染）。但腾讯云 CloudBase Run 的 Docker
+ * 构建阶段拿不到 `DATABASE_URL`（环境变量只在运行时注入），强制预渲染会让 `next build`
+ * 在 `neonListTagCategoriesAll()` 抛出 `DATABASE_URL is required` 而失败。
+ *
+ * 现在的策略：
+ *  - build 期 `generateStaticParams()` 在缺 DB 时返回 `[]` → 不预渲染任何 slug → build 通过；
+ *  - 运行时第一次访问 `/role/<slug>` 触发 SSR，命中 60s ISR，后续走缓存；
+ *  - 无效 slug 走 `getTagRoleBySlug` → `notFound()`，行为与 `dynamicParams=false` 等价。
+ */
+export const dynamicParams = true
 
 interface PageProps {
   params: Promise<{ slug: string }>
@@ -54,6 +65,13 @@ const getRoleBundleCached = cache(async (slug: string) => {
 })
 
 export async function generateStaticParams() {
+  /**
+   * 构建容器拿不到 `DATABASE_URL`（CloudBase Run 把环境变量留到运行时）时，
+   * 直接返回 `[]` 跳过预渲染——否则页面渲染会调用 `neonListTagCategoriesAll()`
+   * 抛 `DATABASE_URL is required` 把 build 干挂。
+   * 运行时第一次访问会 SSR + ISR 缓存。
+   */
+  if (!process.env.DATABASE_URL) return []
   return TAG_ROLE_SLUGS.map((slug) => ({ slug }))
 }
 

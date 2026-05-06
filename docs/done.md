@@ -65,6 +65,7 @@
 | ⑤ | `nc -zv` 通但 PG 协议 30 秒零返回 | SG 入站规则 `216.227.168.217/32` **不生效**（原因不明，可能是 LB 与 SG 绑定的客户端 IP 与 ifconfig.me 不一致） | 临时改 `0.0.0.0/0` 跑通；部署后改走 VPC 内网 |
 | ⑥ | `ssl: 'require'` 连不上 | 腾讯云 PG 实例**默认未开 SSL** | URL 改 `?sslmode=disable`、`postgres({ssl: false})` |
 | ⑦ | `database "aitools" does not exist` | 创实例只默认建 `postgres` 库 | 脚本先连 `postgres` 库 `CREATE DATABASE aitools` |
+| ⑧ | CloudBase Run 首次构建挂在 `Error: DATABASE_URL is required` at `neonListTagCategoriesAll`（`Export encountered an error on /role/office-worker`）| `app/role/[slug]/page.tsx` 早期是 `dynamicParams = false`，强制 build 时把 9 个角色 slug 全预渲染；但 Docker 构建阶段拿不到运行时环境变量，DB 调用直接报错 | 改 `dynamicParams = true` + 给 `generateStaticParams()` 加 `if (!process.env.DATABASE_URL) return []` 哨兵：build 期不预渲染任何角色页，运行时首次访问 SSR + 60s ISR；与其他 4 个动态页（`tag` / `tag-category` / `category` / `tool`）的 try/catch 兜底等价，行为对用户透明 |
 
 **当前已知风险（部署前必处理）**：
 
