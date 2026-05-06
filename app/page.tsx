@@ -51,7 +51,12 @@ export default async function HomePage() {
     '@type': 'Organization',
     name: 'AI 工具集',
     url: `${siteUrl}/`,
-    logo: `${siteUrl}/icon.svg`,
+    /**
+     * Schema.org Organization logo：用 PNG（部分爬虫对 WebP 兼容差）。
+     * 文件 `public/logo-zhixuanai.png` = 512×512 110KB，符合 Google
+     * Knowledge Panel 推荐的 ≥ 112px 最小尺寸；视觉展示用同名 .webp。
+     */
+    logo: `${siteUrl}/logo-zhixuanai.png`,
   }
 
   return (
@@ -64,11 +69,17 @@ export default async function HomePage() {
 
         <main className="px-3 py-4 sm:px-4 md:p-6">
           <div className="mb-4 flex flex-col items-center md:mb-6">
+            {/**
+             * 品牌 logo：原图 2048×2048 PNG 1.3MB（手机网络下"一行行渐进解码"）。
+             * 2026-05-06 优化：sips 缩到 512×512 后再 cwebp -q 85 转 WebP → 31KB（42× 缩小）。
+             * 显示宽 224px（md 56），512×512 仍是 2.3× 视网膜余量。
+             * 原图在 git 历史里：`git show HEAD~:public/logo-zhixuanai.png` 可恢复。
+             */}
             <Image
-              src="/logo-zhixuanai.png"
+              src="/logo-zhixuanai.webp"
               alt="智选 AI · 打工人、创业老板、自由职业，找 AI 上智选"
-              width={1024}
-              height={1024}
+              width={512}
+              height={512}
               priority
               className="h-auto w-40 md:w-56"
             />

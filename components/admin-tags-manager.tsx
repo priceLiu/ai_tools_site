@@ -165,6 +165,7 @@ export function AdminTagsManager({
               categoryName={cat.name}
               categorySlug={cat.slug}
               tags={list}
+              mergeTargetPool={tags}
               tagCategories={tagCategories}
               router={router}
             />
@@ -177,6 +178,7 @@ export function AdminTagsManager({
             categoryName="未分类（可标 curated 并指定一级分类）"
             categorySlug={null}
             tags={grouped.get('unset') ?? []}
+            mergeTargetPool={tags}
             tagCategories={tagCategories}
             router={router}
           />
@@ -246,12 +248,15 @@ function CategorySection({
   categoryName,
   categorySlug,
   tags,
+  mergeTargetPool,
   tagCategories,
   router,
 }: {
   categoryName: string
   categorySlug: string | null
   tags: AdminTagRow[]
+  /** 合并时用全库标签候选（含 curated），避免仅能合并到本节内的行 */
+  mergeTargetPool: AdminTagRow[]
   tagCategories: TagCategory[]
   router: ReturnType<typeof useRouter>
 }) {
@@ -283,7 +288,7 @@ function CategorySection({
                 key={t.id}
                 row={t}
                 tagCategories={tagCategories}
-                allTags={tags}
+                mergeTargetPool={mergeTargetPool}
                 onChanged={() => router.refresh()}
               />
             ))}
@@ -297,12 +302,12 @@ function CategorySection({
 function TagRowView({
   row,
   tagCategories,
-  allTags,
+  mergeTargetPool,
   onChanged,
 }: {
   row: AdminTagRow
   tagCategories: TagCategory[]
-  allTags: AdminTagRow[]
+  mergeTargetPool: AdminTagRow[]
   onChanged: () => void
 }) {
   const [, startTransition] = useTransition()
@@ -408,7 +413,11 @@ function TagRowView({
           </Button>
 
           <RenameDialog row={row} onChanged={onChanged} />
-          <MergeDialog row={row} allTags={allTags} onChanged={onChanged} />
+          <MergeDialog
+            row={row}
+            mergeTargetPool={mergeTargetPool}
+            onChanged={onChanged}
+          />
 
           <Button
             type="button"
@@ -501,11 +510,11 @@ function RenameDialog({
 
 function MergeDialog({
   row,
-  allTags,
+  mergeTargetPool,
   onChanged,
 }: {
   row: AdminTagRow
-  allTags: AdminTagRow[]
+  mergeTargetPool: AdminTagRow[]
   onChanged: () => void
 }) {
   const [open, setOpen] = useState(false)
@@ -516,13 +525,13 @@ function MergeDialog({
 
   const candidates = useMemo(() => {
     const kw = keyword.trim().toLowerCase()
-    return allTags
+    return mergeTargetPool
       .filter((t) => t.id !== row.id)
       .filter((t) =>
         kw ? t.name.toLowerCase().includes(kw) : true,
       )
       .slice(0, 30)
-  }, [allTags, keyword, row.id])
+  }, [mergeTargetPool, keyword, row.id])
 
   const submit = () => {
     if (!targetId) {

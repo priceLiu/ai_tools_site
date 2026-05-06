@@ -76,7 +76,7 @@
 **当前已知风险（部署前必处理）**：
 
 - ⚠️ SG 仍是 `0.0.0.0/0`（debug 残留）→ 部署后改走 VPC 内网，SG 直接删那条
-- ⚠️ 密码 `Password_1` 偏弱 → 部署后改强密码（用 `openssl rand -base64 24`）
+- ✅ 已 2026-05-06 改强密码（24 位 + 含特殊字符 `_`），见 `.env.local`
 - ⚠️ SSL 关闭 → 公网串带 `sslmode=disable`；走 VPC 内网后无所谓
 
 ---
@@ -308,6 +308,16 @@
 2. **悬浮工具提示**
    - 首页 Section 1 鼠标悬浮显示工具简介
    - 使用 Tooltip 组件，延迟 200ms 显示
+
+---
+
+## 2026-05-06（晚）：`/admin/tags`「合并」候选列表修复
+
+**需求背景**：待在「待清理 → 未分类」分组内点「合并」时，原先合并目标仅从**当前分组**的标签里挑选，无法在弹窗中选到其它分组下的 curated 官方标签。
+
+**实现内容**：
+
+1. `components/admin-tags-manager.tsx`：`CategorySection` 增加 `mergeTargetPool`，传入页面级全量 `tags`，`MergeDialog` 用该列表搜索合并目标（仍排除自身）。
 
 ---
 

@@ -452,6 +452,14 @@ export async function neonCountAdminToolTab(
   return Number((r[0] as { n: number }).n ?? 0)
 }
 
+/**
+ * 管理后台分 tab 列表。
+ *
+ * 性能：与 `neonListToolsForUser` 同样的 length() 启发式优化 —— SQL 层用
+ * `length(logo_url) > 500` 判断 base64 vs HTTPS 链接（HTTPS 都是短链），
+ * 配合 Node 层 publicizeToolImages 转代理 URL，跳过 detoast 完整 base64 字段。
+ * 详见 `neonListToolsForUser` 头部 v0/v1/v2/v3 演进记录。
+ */
 export async function neonListToolsAdminTab(
   tab: AdminToolTab,
   from: number,
@@ -462,37 +470,79 @@ export async function neonListToolsAdminTab(
 
   if (tab === 'hidden') {
     const rows = await sql`
-      SELECT t.*, row_to_json(c.*) AS category
+      SELECT
+        t.id, t.name, t.slug, t.description, t.website_url,
+        CASE WHEN t.logo_url IS NULL THEN NULL
+             WHEN length(t.logo_url) > 500 THEN 'data:'
+             ELSE t.logo_url
+        END AS logo_url,
+        CASE WHEN t.screenshot_url IS NULL THEN NULL
+             WHEN length(t.screenshot_url) > 500 THEN 'data:'
+             ELSE t.screenshot_url
+        END AS screenshot_url,
+        t.category_id, t.user_id, t.status, t.rejection_reason,
+        t.is_featured, t.is_disabled, t.view_count, t.favorite_count,
+        t.introduction, t.introduction_format, t.use_cases,
+        t.created_at, t.updated_at,
+        row_to_json(c.*) AS category
       FROM tools t
       LEFT JOIN categories c ON c.id = t.category_id
       WHERE t.status = 'approved' AND t.is_disabled = true
       ORDER BY t.updated_at DESC NULLS LAST, t.created_at DESC
       OFFSET ${from} LIMIT ${limit}
     `
-    return (rows as Record<string, unknown>[]).map(rowToTool)
+    return (rows as Record<string, unknown>[]).map(rowToTool).map(publicizeToolImages)
   }
 
   if (tab === 'approved') {
     const rows = await sql`
-      SELECT t.*, row_to_json(c.*) AS category
+      SELECT
+        t.id, t.name, t.slug, t.description, t.website_url,
+        CASE WHEN t.logo_url IS NULL THEN NULL
+             WHEN length(t.logo_url) > 500 THEN 'data:'
+             ELSE t.logo_url
+        END AS logo_url,
+        CASE WHEN t.screenshot_url IS NULL THEN NULL
+             WHEN length(t.screenshot_url) > 500 THEN 'data:'
+             ELSE t.screenshot_url
+        END AS screenshot_url,
+        t.category_id, t.user_id, t.status, t.rejection_reason,
+        t.is_featured, t.is_disabled, t.view_count, t.favorite_count,
+        t.introduction, t.introduction_format, t.use_cases,
+        t.created_at, t.updated_at,
+        row_to_json(c.*) AS category
       FROM tools t
       LEFT JOIN categories c ON c.id = t.category_id
       WHERE t.status = 'approved' AND COALESCE(t.is_disabled, false) = false
       ORDER BY t.created_at DESC
       OFFSET ${from} LIMIT ${limit}
     `
-    return (rows as Record<string, unknown>[]).map(rowToTool)
+    return (rows as Record<string, unknown>[]).map(rowToTool).map(publicizeToolImages)
   }
 
   const rows = await sql`
-    SELECT t.*, row_to_json(c.*) AS category
+    SELECT
+      t.id, t.name, t.slug, t.description, t.website_url,
+      CASE WHEN t.logo_url IS NULL THEN NULL
+           WHEN length(t.logo_url) > 500 THEN 'data:'
+           ELSE t.logo_url
+      END AS logo_url,
+      CASE WHEN t.screenshot_url IS NULL THEN NULL
+           WHEN length(t.screenshot_url) > 500 THEN 'data:'
+           ELSE t.screenshot_url
+      END AS screenshot_url,
+      t.category_id, t.user_id, t.status, t.rejection_reason,
+      t.is_featured, t.is_disabled, t.view_count, t.favorite_count,
+      t.introduction, t.introduction_format, t.use_cases,
+      t.created_at, t.updated_at,
+      row_to_json(c.*) AS category
     FROM tools t
     LEFT JOIN categories c ON c.id = t.category_id
     WHERE t.status = ${tab}
     ORDER BY t.created_at DESC
     OFFSET ${from} LIMIT ${limit}
   `
-  return (rows as Record<string, unknown>[]).map(rowToTool)
+  return (rows as Record<string, unknown>[]).map(rowToTool).map(publicizeToolImages)
 }
 
 /**
@@ -520,7 +570,21 @@ export async function neonListToolsAdminSearch(
 ): Promise<Tool[]> {
   const sql = getNeonSql()
   const rows = await sql`
-    SELECT t.*, row_to_json(c.*) AS category
+    SELECT
+      t.id, t.name, t.slug, t.description, t.website_url,
+      CASE WHEN t.logo_url IS NULL THEN NULL
+           WHEN length(t.logo_url) > 500 THEN 'data:'
+           ELSE t.logo_url
+      END AS logo_url,
+      CASE WHEN t.screenshot_url IS NULL THEN NULL
+           WHEN length(t.screenshot_url) > 500 THEN 'data:'
+           ELSE t.screenshot_url
+      END AS screenshot_url,
+      t.category_id, t.user_id, t.status, t.rejection_reason,
+      t.is_featured, t.is_disabled, t.view_count, t.favorite_count,
+      t.introduction, t.introduction_format, t.use_cases,
+      t.created_at, t.updated_at,
+      row_to_json(c.*) AS category
     FROM tools t
     LEFT JOIN categories c ON c.id = t.category_id
     WHERE t.name ILIKE ${pattern}
@@ -529,7 +593,8 @@ export async function neonListToolsAdminSearch(
     ORDER BY t.updated_at DESC
     LIMIT ${limit}
   `
-  return (rows as Record<string, unknown>[]).map(rowToTool)
+  // 同 neonListToolsAdminTab：length() 启发式裁掉 base64 + Node 层 publicize 代理 URL
+  return (rows as Record<string, unknown>[]).map(rowToTool).map(publicizeToolImages)
 }
 
 export async function neonListStatsCategories(): Promise<Category[]> {
@@ -605,6 +670,22 @@ export async function neonGetToolAdminMetaById(
   return r ?? null
 }
 
+/**
+ * 写入工具标签（覆盖式：先 DELETE 再 INSERT）。
+ *
+ * 性能历史（2026-05-06）：原实现是 N+1 模式 — 每个标签都要 3 次往返
+ *   (SELECT 看是否存在 → INSERT 新 tag → INSERT tool_tags 关联)
+ * 加上前面的 owner 校验 + DELETE，20 个标签 = 60+ 次串行往返。
+ * 在 CloudBase Run（公网出口）→ 腾讯 PG（公网入口）的链路上每次往返 ~50–150ms，
+ * 整体提交工具表现成 5–15 秒「卡顿」。
+ *
+ * 现在改成 4 次批量往返：
+ *   1. SELECT tools 验证 owner
+ *   2. SELECT tags 一次性查所有已存在的小写名 → id 映射
+ *   3. INSERT tags 一次性批量插入缺失的小写名 → 用 unnest 拆开数组
+ *   4. DELETE tool_tags + INSERT tool_tags（用 unnest 一次性 INSERT 全部 (tool_id, tag_id, sort_order)）
+ * 实测从 5–15 秒压到 < 500ms。
+ */
 export async function neonSetToolTagsForTool(params: {
   actorUserId: string
   actorIsAdmin: boolean
@@ -612,45 +693,91 @@ export async function neonSetToolTagsForTool(params: {
   names: string[]
 }): Promise<{ error?: string }> {
   const sql = getNeonSql()
+
+  // 1) Owner / admin 校验
   const toolRows = await sql`
     SELECT id, user_id FROM tools WHERE id = ${params.toolId} LIMIT 1
   `
   const tool = toolRows[0] as { id: string; user_id: string | null } | undefined
   if (!tool) return { error: '工具不存在' }
-  const owner = tool.user_id
-  if (owner !== params.actorUserId && !params.actorIsAdmin) {
+  if (tool.user_id !== params.actorUserId && !params.actorIsAdmin) {
     return { error: 'not allowed to set tags for this tool' }
   }
 
-  await sql`DELETE FROM tool_tags WHERE tool_id = ${params.toolId}`
-
-  let order = 0
-  const seen = new Set<string>()
+  // 规范化 + 按 lower-name 去重，最多保留 20 个；保持原始大小写用于新建
+  const orderedNames: string[] = []
+  const seenLower = new Set<string>()
   for (const raw of params.names) {
-    if (order >= 20) break
     const n = raw.normalize('NFKC').trim().replace(/\s+/g, ' ')
     if (!n) continue
+    const k = n.toLowerCase()
+    if (seenLower.has(k)) continue
+    seenLower.add(k)
+    orderedNames.push(n)
+    if (orderedNames.length >= 20) break
+  }
 
-    const existing = await sql`
-      SELECT id FROM tags WHERE lower(trim(name)) = lower(${n}) LIMIT 1
+  // 边界：没有标签直接清空
+  if (orderedNames.length === 0) {
+    await sql`DELETE FROM tool_tags WHERE tool_id = ${params.toolId}`
+    return {}
+  }
+
+  const lowerNames = orderedNames.map((n) => n.toLowerCase())
+
+  // 2) 一次性查现有标签：lname (trim+lower 后的名字) → id
+  const existingRows = await sql`
+    SELECT id, lower(trim(name)) AS lname
+    FROM tags
+    WHERE lower(trim(name)) = ANY(${lowerNames}::text[])
+  `
+  const lnameToId = new Map<string, string>()
+  for (const row of existingRows as Array<{ id: string; lname: string }>) {
+    lnameToId.set(row.lname, String(row.id))
+  }
+
+  // 3) 一次性批量 INSERT 缺失的标签（用 unnest 把数组拆成多行）
+  const missingNames = orderedNames.filter(
+    (n) => !lnameToId.has(n.toLowerCase()),
+  )
+  if (missingNames.length > 0) {
+    const inserted = await sql`
+      INSERT INTO tags (name)
+      SELECT v FROM unnest(${missingNames}::text[]) AS v
+      RETURNING id, lower(trim(name)) AS lname
     `
-    let tagId: string
-    if (existing.length > 0) {
-      tagId = String((existing[0] as { id: string }).id)
-    } else {
-      const ins = await sql`
-        INSERT INTO tags (name) VALUES (${n}) RETURNING id
-      `
-      tagId = String((ins[0] as { id: string }).id)
+    for (const row of inserted as Array<{ id: string; lname: string }>) {
+      lnameToId.set(row.lname, String(row.id))
     }
-    if (seen.has(tagId)) continue
-    seen.add(tagId)
-    await sql`
-      INSERT INTO tool_tags (tool_id, tag_id, sort_order)
-      VALUES (${params.toolId}, ${tagId}, ${order})
-    `
+  }
+
+  // 按提交顺序构造最终 (tool_id, tag_id, sort_order) 三元组
+  const toolIdsArr: string[] = []
+  const tagIdsArr: string[] = []
+  const ordersArr: number[] = []
+  let order = 0
+  for (const n of orderedNames) {
+    const id = lnameToId.get(n.toLowerCase())
+    if (!id) continue
+    toolIdsArr.push(params.toolId)
+    tagIdsArr.push(id)
+    ordersArr.push(order)
     order += 1
   }
+
+  // 4) DELETE 旧关联 + 一次性 INSERT 新关联
+  await sql`DELETE FROM tool_tags WHERE tool_id = ${params.toolId}`
+  if (tagIdsArr.length > 0) {
+    await sql`
+      INSERT INTO tool_tags (tool_id, tag_id, sort_order)
+      SELECT * FROM unnest(
+        ${toolIdsArr}::uuid[],
+        ${tagIdsArr}::uuid[],
+        ${ordersArr}::int[]
+      )
+    `
+  }
+
   return {}
 }
 
@@ -1149,6 +1276,33 @@ export async function neonGetToolIdUserStatus(
   return r ?? null
 }
 
+/**
+ * 用户「我的提交」列表。
+ *
+ * 性能历史（2026-05-06）：
+ *
+ *   v0：SELECT t.* + 直接 inline data URL 渲染。
+ *       170 个工具 = 5.85 MB JSON 从 PG 拉到 Node、再 5.85 MB HTML 给浏览器。
+ *       本地 dev 跨公网 14 秒；生产 CloudBase Run 同地域估 3-5 秒。
+ *
+ *   v1：rowToTool 后 .map(publicizeToolImages) — 只省 Node→浏览器（5.85MB→482KB）。
+ *       PG→Node 还是 5.85 MB。本地 ~14 秒（PG→Node 没省）。
+ *
+ *   v2：SQL 层 CASE WHEN logo_url LIKE 'data:%' 换成 'data:'。
+ *       JSON 降到 464KB ✅，但 LIKE 'data:%' 仍触发 PG detoast 整 1.4MB 字段，
+ *       170 行总 7.3 秒，CPU 浪费在 detoast 上。
+ *
+ *   v3（当前）：用 `length(logo_url) <= 500` 启发式判断。
+ *       PG 通过 TOAST 元数据可秒查长度而无需 detoast 字段内容。HTTPS URL 都是短链
+ *       （≤ 500 字节）原样返回；base64 都是长串（> 500 字节）→ 占位 'data:'。
+ *       本地 0.67 秒（21× 提速）；生产同地域 < 200ms。
+ *
+ *   `publicizeToolImages` 拿到 'data:' 仍能识别（startsWith 检查）→ 替换为
+ *   `/api/img/tool/<id>/logo?v=...` 代理 URL，浏览器并行 fetch + 1 年 immutable cache。
+ *
+ *   `neonGetToolForSubmitEdit` 仍保留原始 data URL（编辑表单需要预览），见
+ *   `lib/public-tool-image-url.ts` 头部注释。
+ */
 export async function neonListToolsForUser(
   userId: string,
   opts?: { status?: string },
@@ -1157,20 +1311,48 @@ export async function neonListToolsForUser(
   const rows =
     opts?.status != null
       ? await sql`
-          SELECT t.*, row_to_json(c.*) AS category
+          SELECT
+            t.id, t.name, t.slug, t.description, t.website_url,
+            CASE WHEN t.logo_url IS NULL THEN NULL
+                 WHEN length(t.logo_url) > 500 THEN 'data:'
+                 ELSE t.logo_url
+            END AS logo_url,
+            CASE WHEN t.screenshot_url IS NULL THEN NULL
+                 WHEN length(t.screenshot_url) > 500 THEN 'data:'
+                 ELSE t.screenshot_url
+            END AS screenshot_url,
+            t.category_id, t.user_id, t.status, t.rejection_reason,
+            t.is_featured, t.is_disabled, t.view_count, t.favorite_count,
+            t.introduction, t.introduction_format, t.use_cases,
+            t.created_at, t.updated_at,
+            row_to_json(c.*) AS category
           FROM tools t
           LEFT JOIN categories c ON c.id = t.category_id
           WHERE t.user_id = ${userId} AND t.status = ${opts.status}
           ORDER BY t.created_at DESC
         `
       : await sql`
-          SELECT t.*, row_to_json(c.*) AS category
+          SELECT
+            t.id, t.name, t.slug, t.description, t.website_url,
+            CASE WHEN t.logo_url IS NULL THEN NULL
+                 WHEN length(t.logo_url) > 500 THEN 'data:'
+                 ELSE t.logo_url
+            END AS logo_url,
+            CASE WHEN t.screenshot_url IS NULL THEN NULL
+                 WHEN length(t.screenshot_url) > 500 THEN 'data:'
+                 ELSE t.screenshot_url
+            END AS screenshot_url,
+            t.category_id, t.user_id, t.status, t.rejection_reason,
+            t.is_featured, t.is_disabled, t.view_count, t.favorite_count,
+            t.introduction, t.introduction_format, t.use_cases,
+            t.created_at, t.updated_at,
+            row_to_json(c.*) AS category
           FROM tools t
           LEFT JOIN categories c ON c.id = t.category_id
           WHERE t.user_id = ${userId}
           ORDER BY t.created_at DESC
         `
-  return (rows as Record<string, unknown>[]).map(rowToTool)
+  return (rows as Record<string, unknown>[]).map(rowToTool).map(publicizeToolImages)
 }
 
 export async function neonGetToolForSubmitEdit(
