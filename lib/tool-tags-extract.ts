@@ -1,135 +1,29 @@
 import type { IntroductionFormat } from '@/lib/introduction-format'
 import type { ToolTagLink } from '@/lib/types'
 import { normalizeIntroductionFormat } from '@/lib/introduction-format'
-
-/** 对外最多展示 / 入库的标签数 */
-export const TOOL_TAGS_MAX = 6
-
-export type CapabilityRule = {
-  /** 写入库中的标准名称（与已有 tags 表 name 匹配） */
-  label: string
-  /** 在介绍正文中匹配（已统一小写空白后的小写串上做测试时可再包一层） */
-  patterns: RegExp[]
-}
+import {
+  CURATED_TAG_NAMES,
+  TAG_TO_CATEGORY_NAME,
+  getTagKeywordSpec,
+} from '@/lib/tag-keywords'
 
 /**
- * AI 能力向标签规则：仅从介绍中匹配能力维度（分类标签单独由分类名注入）
- * 顺序约靠前优先命中；会与分类名合并后去重截断至 TOOL_TAGS_MAX
+ * 入库时单工具最多 20 个标签（与 schema 迁移
+ * `20260506000000_tag_categories_and_curated_tags.sql` 中 `tool_tags_sort_order_range` 0..19 一致）
  */
-export const AI_CAPABILITY_TAG_RULES: CapabilityRule[] = [
-  {
-    label: '视频',
-    patterns: [
-      /视频/,
-      /\bvideo\b/i,
-      /影片/,
-      /短视频/,
-      /音视频/,
-      /生成视频/,
-      /文生视频/,
-      /图生视频/,
-    ],
-  },
-  {
-    label: '音频',
-    patterns: [/音频/, /\baudio\b/i, /语音/, /播客/, /配乐/, /音效/],
-  },
-  {
-    label: '动画',
-    patterns: [/动画/, /动效/, /motion\b/i, /animat/i],
-  },
-  {
-    label: '图像生成',
-    patterns: [/文生图/, /图生图/, /图像生成/, /出图/, /ai绘画/, /ai绘图/, /\bai\s*image/i],
-  },
-  {
-    label: '图像编辑',
-    patterns: [/修图/, /抠图/, /图像编辑/, /图片编辑/, /inpaint/i, /图像处理/],
-  },
-  {
-    label: '代码',
-    patterns: [
-      /代码生成/,
-      /编程助手/,
-      /\bcopilot\b/i,
-      /\bcode\s*gen/i,
-      /写代码/,
-      /代码补全/,
-      /ide插件/,
-      /\bgithub\b.*\bai\b/i,
-    ],
-  },
-  {
-    label: '文本写作',
-    patterns: [/写作/, /文案/, /撰文/, /续写/, /润色/, /生成文本/, /\bwriting\b/i],
-  },
-  {
-    label: '对话',
-    patterns: [/对话/, /聊天机器人/, /chatbot/i, /\bchat\b.*\bai\b/i, /多轮对话/],
-  },
-  {
-    label: '搜索',
-    patterns: [/搜索/, /检索增强/, /\brag\b/i, /联网搜索/, /实时信息/],
-  },
-  {
-    label: '翻译',
-    patterns: [/翻译/, /\btranslate/i, /多语言/, /本地化/],
-  },
-  {
-    label: '数据分析',
-    patterns: [/数据分析/, /数据可视化/, /bi\b/i, /报表/, /统计/, /excel/i, /表格分析/],
-  },
-  {
-    label: '表格',
-    patterns: [/电子表格/, /表格/, /\bspreadsheet/i, /\bexcel\b/i],
-  },
-  {
-    label: '演示文档',
-    patterns: [/ppt/i, /幻灯片/, /演示文稿/, /deck/i],
-  },
-  {
-    label: 'PDF',
-    patterns: [/\bpdf\b/i, /pdf文档/],
-  },
-  {
-    label: '3D',
-    patterns: [/\b3d\b/i, /三维/, /建模/],
-  },
-  {
-    label: '学术文献',
-    patterns: [/文献/, /论文/, /引用/, /\bcitation/i, /doi\b/i, /zotero|mendeley|endnote/i],
-  },
-  {
-    label: 'OCR',
-    patterns: [/\bocr\b/i, /文字识别/, /识图识字/],
-  },
-  {
-    label: '语音合成',
-    patterns: [/语音合成/, /tts\b/i, /朗读/, /文本转语音/],
-  },
-  {
-    label: '语音识别',
-    patterns: [/语音识别/, /语音转文字/, /asr\b/i, /听写/],
-  },
-  {
-    label: '会议',
-    patterns: [/会议/, /纪要/, /会议记录/, /实时字幕/],
-  },
-  {
-    label: '智能体',
-    patterns: [/智能体/, /\bagent\b/i, /自动化工作流/, /工作流/, /编排/],
-  },
-  {
-    label: '知识库',
-    patterns: [/知识库/, /企业知识/, /文档问答/],
-  },
-  {
-    label: '多模态',
-    patterns: [/多模态/, /\bmultimodal\b/i],
-  },
-]
+export const TOOL_TAGS_MAX = 20
 
-/** 将介绍转为适合关键词匹配的单行小写文本（尽量剔除 markdown/html 噪音） */
+/** 自动建议默认输出上限（含分类名兜底位） */
+export const TOOL_TAGS_SUGGEST_MAX = 12
+
+/** 字段权重：标题 > 描述 > 介绍 */
+const FIELD_WEIGHTS = {
+  name: 5,
+  description: 3,
+  introduction: 1,
+} as const
+
+/** 将介绍转为适合关键词匹配的单行小写文本（尽量剔除 markdown / html 噪音） */
 export function introductionToTagScanText(
   raw: string,
   format: IntroductionFormat | string | null | undefined,
@@ -153,58 +47,121 @@ export function introductionToTagScanText(
   return t.replace(/\s+/g, ' ').trim().toLowerCase()
 }
 
-export function extractAiCapabilityLabels(scanTextLower: string): string[] {
-  if (!scanTextLower) return []
-  const out: string[] = []
-  const lower = scanTextLower
-  for (const rule of AI_CAPABILITY_TAG_RULES) {
-    const hit = rule.patterns.some((p) => {
-      try {
-        return p.test(lower)
-      } catch {
-        return false
-      }
-    })
-    if (hit && !out.includes(rule.label)) {
-      out.push(rule.label)
-    }
+function plainLower(text: string | null | undefined): string {
+  return (text ?? '')
+    .toString()
+    .normalize('NFKC')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+}
+
+function tagOrderIndex(name: string): number {
+  const idx = CURATED_TAG_NAMES.indexOf(name)
+  return idx >= 0 ? idx : Number.POSITIVE_INFINITY
+}
+
+/** 用 217 关键词词典对三段文本分别评分；返回 { tagName: score } */
+function scoreTagsForFields(fields: {
+  name: string
+  description: string
+  introduction: string
+}): Map<string, number> {
+  const scores = new Map<string, number>()
+  for (const tag of CURATED_TAG_NAMES) {
+    const kws = getTagKeywordSpec(tag).map((s) => s.toLowerCase())
+    let s = 0
+    if (kws.some((k) => k && fields.name.includes(k))) s += FIELD_WEIGHTS.name
+    if (kws.some((k) => k && fields.description.includes(k))) s += FIELD_WEIGHTS.description
+    if (kws.some((k) => k && fields.introduction.includes(k))) s += FIELD_WEIGHTS.introduction
+    if (s > 0) scores.set(tag, s)
   }
-  return out
+  return scores
+}
+
+export interface BuildSuggestedToolTagNamesInput {
+  /** 工具名称（可选，匹配权重 5） */
+  name?: string | null
+  /** 简介 / 描述（可选，匹配权重 3） */
+  description?: string | null
+  /** 富文本介绍（必填，匹配权重 1） */
+  introduction: string
+  introductionFormat: IntroductionFormat | string | null | undefined
+  /** 一级分类名（来自 categories.name），首位兜底；若属 217 词表会被规整为 curated 标准名 */
+  categoryName: string | null | undefined
+  /** 自定义最多输出标签数（含分类名）；默认 `TOOL_TAGS_SUGGEST_MAX` (12) */
+  limit?: number
 }
 
 /**
- * 组装完整标签建议：第 1 个为分类名（若有），其后为介绍中解析的 AI 能力标签；去重、最多 6 个
+ * 组装完整标签建议：
+ *   1) 第 1 个为分类名（若有；属 217 词表则规整为 curated 标准名）；
+ *   2) 后续按 217 关键词词典评分排序（标题 5 + 描述 3 + 介绍 1）；
+ *   3) 全部去重；总数 ≤ `limit`（默认 12，硬上限 `TOOL_TAGS_MAX` = 20）。
  */
-export function buildSuggestedToolTagNames(input: {
-  categoryName: string | null | undefined
-  introduction: string
-  introductionFormat: IntroductionFormat | string | null | undefined
-}): string[] {
-  const scan = introductionToTagScanText(
-    input.introduction,
-    input.introductionFormat,
+export function buildSuggestedToolTagNames(
+  input: BuildSuggestedToolTagNamesInput,
+): string[] {
+  const limit = Math.max(
+    1,
+    Math.min(input.limit ?? TOOL_TAGS_SUGGEST_MAX, TOOL_TAGS_MAX),
   )
-  const caps = extractAiCapabilityLabels(scan)
-  const cat = (input.categoryName ?? '').normalize('NFKC').trim().replace(/\s+/g, ' ')
+
+  const fields = {
+    name: plainLower(input.name),
+    description: plainLower(input.description),
+    introduction: introductionToTagScanText(
+      input.introduction,
+      input.introductionFormat,
+    ),
+  }
+
+  const scores = scoreTagsForFields(fields)
+  const ranked = Array.from(scores.entries()).sort((a, b) => {
+    if (b[1] !== a[1]) return b[1] - a[1]
+    return tagOrderIndex(a[0]) - tagOrderIndex(b[0])
+  })
+
   const out: string[] = []
-  if (cat) {
-    out.push(cat)
+  const seen = new Set<string>()
+
+  const catRaw = (input.categoryName ?? '')
+    .normalize('NFKC')
+    .trim()
+    .replace(/\s+/g, ' ')
+  if (catRaw) {
+    const canonical = CURATED_TAG_NAMES.find(
+      (t) => t.toLowerCase() === catRaw.toLowerCase(),
+    )
+    const useName = canonical ?? catRaw
+    out.push(useName)
+    seen.add(useName.toLowerCase())
   }
-  for (const c of caps) {
-    if (out.length >= TOOL_TAGS_MAX) break
-    const cNorm = c.normalize('NFKC').trim()
-    if (!cNorm) continue
-    const dup = out.some((x) => x.toLowerCase() === cNorm.toLowerCase())
-    if (!dup) out.push(cNorm)
+
+  for (const [name] of ranked) {
+    if (out.length >= limit) break
+    const k = name.toLowerCase()
+    if (seen.has(k)) continue
+    out.push(name)
+    seen.add(k)
   }
+
   return out.slice(0, TOOL_TAGS_MAX)
 }
 
-export function toolTagLabelsFromTool(tool: { tool_tags?: ToolTagLink[] }): string[] {
+/** 列表展示：从 tool.tool_tags 里按 sort_order 取出标签名数组 */
+export function toolTagLabelsFromTool(tool: {
+  tool_tags?: ToolTagLink[]
+}): string[] {
   const rows = tool.tool_tags
   if (!rows?.length) return []
   return [...rows]
     .sort((a, b) => a.sort_order - b.sort_order)
     .map((r) => r.tag?.name)
     .filter((x): x is string => Boolean(x?.trim()))
+}
+
+/** 标签 → 一级分类名（不在 curated 词表里的返回 null） */
+export function tagCategoryNameOf(tagName: string): string | null {
+  return TAG_TO_CATEGORY_NAME[tagName] ?? null
 }

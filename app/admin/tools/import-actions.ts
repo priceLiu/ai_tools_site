@@ -183,6 +183,8 @@ async function importOneTool(opts: {
 
   const tagNames = buildSuggestedToolTagNames({
     categoryName,
+    name: toolNameDedupKey(item.name),
+    description,
     introduction: item.introduction,
     introductionFormat: 'markdown',
   })

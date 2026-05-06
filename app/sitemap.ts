@@ -1,12 +1,20 @@
 import type { MetadataRoute } from 'next'
 import * as neon from '@/lib/neon/data'
 import { getSiteUrl } from '@/lib/site-url'
+import { TAG_ROLES } from '@/lib/tag-roles'
 
 /**
  * Sitemap：每小时构建一次（与 Next ISR 配合，Vercel 上请求会命中已生成的版本）。
  * 失败时退化为只列首页 + about + 注册（保证爬虫至少能拿到入口页）。
  *
- * 公开页：首页 / about / 全部 approved 工具 / 全部分类 / `/category/hot`。
+ * 公开页：
+ *   - 首页 / about / `/category/hot`
+ *   - 全部 approved 工具：/tool/[slug]
+ *   - 全部一级 / 二级分类：/category/[slug]
+ *   - 全部 8 个场景一级分类：/tag-category/[slug]
+ *   - 全部 curated 标签：/tag/[name]
+ *   - 全部 4 个角色：/role/[slug]
+ *
  * 不进 sitemap：admin、account、auth、api、submit、search、my-submissions、favorites、诊断页。
  */
 export const revalidate = 3600
@@ -36,8 +44,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     },
   ]
 
+  const roleEntries: MetadataRoute.Sitemap = TAG_ROLES.map((r) => ({
+    url: `${base}/role/${encodeURIComponent(r.slug)}`,
+    lastModified: now,
+    changeFrequency: 'daily' as const,
+    priority: 0.8,
+  }))
+
   let toolEntries: MetadataRoute.Sitemap = []
   let categoryEntries: MetadataRoute.Sitemap = []
+  let tagCategoryEntries: MetadataRoute.Sitemap = []
+  let tagEntries: MetadataRoute.Sitemap = []
 
   try {
     const [slugs, cats] = await Promise.all([
@@ -63,9 +80,51 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }))
   } catch (e) {
     if (process.env.NODE_ENV === 'development') {
-      console.warn('[sitemap] 数据库不可用，仅输出静态入口:', e)
+      console.warn('[sitemap] 工具/分类不可用，跳过相关条目:', e)
     }
   }
 
-  return [...staticEntries, ...categoryEntries, ...toolEntries]
+  /**
+   * 标签管理新表（20260506_* 迁移）独立 try：在迁移上线前不影响主体 sitemap。
+   */
+  try {
+    const [tagCategories, tagsAll] = await Promise.all([
+      neon.neonListTagCategoriesAll(),
+      neon.neonAdminListTagsAll(),
+    ])
+    tagCategoryEntries = tagCategories
+      .map((c) => (c.slug ?? '').trim())
+      .filter((s) => s.length > 0)
+      .map((slug) => ({
+        url: `${base}/tag-category/${encodeURIComponent(slug)}`,
+        lastModified: now,
+        changeFrequency: 'daily' as const,
+        priority: 0.8,
+      }))
+
+    tagEntries = tagsAll
+      .filter((t) => t.is_curated && t.tool_count > 0)
+      .map((t) => ({
+        url: `${base}/tag/${encodeURIComponent(t.name)}`,
+        lastModified: now,
+        changeFrequency: 'weekly' as const,
+        priority: 0.6,
+      }))
+  } catch (e) {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn(
+        '[sitemap] tag_categories / tags 元数据缺失（迁移可能未执行）:',
+        e instanceof Error ? e.message : e,
+      )
+    }
+  }
+
+  return [
+    ...staticEntries,
+    ...roleEntries,
+    ...categoryEntries,
+    ...tagCategoryEntries,
+    ...tagEntries,
+    ...toolEntries,
+  ]
 }

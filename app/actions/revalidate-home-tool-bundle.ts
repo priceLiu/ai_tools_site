@@ -7,6 +7,7 @@ import { loadHomeToolBundle } from '@/lib/cached-home-data'
 import { uploadHomeToolBundleSnapshot } from '@/lib/home-bundle-snapshot'
 import {
   HOME_ADS_CACHE_TAG,
+  HOME_TAG_CATEGORIES_CACHE_TAG,
   HOME_TOOL_BUNDLE_CACHE_TAG,
   NAVIGATION_MENU_CACHE_TAG,
 } from '@/lib/navigation-menu-cache-config'
@@ -38,6 +39,7 @@ export async function revalidateHomeToolBundleAction(): Promise<{
 
   revalidateTag(HOME_TOOL_BUNDLE_CACHE_TAG, { expire: 0 })
   revalidateTag(HOME_ADS_CACHE_TAG, { expire: 0 })
+  revalidateTag(HOME_TAG_CATEGORIES_CACHE_TAG, { expire: 0 })
   revalidatePath('/')
 
   return { scheduled: true }
@@ -68,9 +70,13 @@ export async function regeneratePublicStaticAction(): Promise<{
     revalidateTag(HOME_TOOL_BUNDLE_CACHE_TAG, { expire: 0 })
     revalidateTag(NAVIGATION_MENU_CACHE_TAG, { expire: 0 })
     revalidateTag(HOME_ADS_CACHE_TAG, { expire: 0 })
+    revalidateTag(HOME_TAG_CATEGORIES_CACHE_TAG, { expire: 0 })
     revalidatePath('/')
     revalidatePath('/category/[slug]', 'page')
     revalidatePath('/tool/[slug]', 'page')
+    revalidatePath('/tag-category/[slug]', 'page')
+    revalidatePath('/tag/[slug]', 'page')
+    revalidatePath('/role/[slug]', 'page')
 
     if (uploaded.ok) {
       return {
@@ -86,9 +92,13 @@ export async function regeneratePublicStaticAction(): Promise<{
     revalidateTag(HOME_TOOL_BUNDLE_CACHE_TAG, { expire: 0 })
     revalidateTag(NAVIGATION_MENU_CACHE_TAG, { expire: 0 })
     revalidateTag(HOME_ADS_CACHE_TAG, { expire: 0 })
+    revalidateTag(HOME_TAG_CATEGORIES_CACHE_TAG, { expire: 0 })
     revalidatePath('/')
     revalidatePath('/category/[slug]', 'page')
     revalidatePath('/tool/[slug]', 'page')
+    revalidatePath('/tag-category/[slug]', 'page')
+    revalidatePath('/tag/[slug]', 'page')
+    revalidatePath('/role/[slug]', 'page')
     return {
       ok: true,
       message: `静态页缓存已失效。快照重建失败：${e instanceof Error ? e.message : String(e)}`,

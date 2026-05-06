@@ -2,18 +2,22 @@ import { getNeonSql } from '@/lib/neon/sql'
 import {
   mapAdRow,
   mapAdminCommentRow,
+  mapAdminTagRow,
   mapCommentRow,
   mapProfileRow,
+  mapTagCategoryRow,
   mapToolRow,
   parseCategoryJson,
 } from '@/lib/neon/mappers'
 import type {
   AdPlacement,
+  AdminCommentRow,
+  AdminTagRow,
   Category,
   NavigationMenuItemRow,
   Profile,
+  TagCategory,
   Tool,
-  AdminCommentRow,
   ToolComment,
 } from '@/lib/types'
 import type { IntroductionFormat } from '@/lib/introduction-format'
@@ -623,7 +627,7 @@ export async function neonSetToolTagsForTool(params: {
   let order = 0
   const seen = new Set<string>()
   for (const raw of params.names) {
-    if (order >= 6) break
+    if (order >= 20) break
     const n = raw.normalize('NFKC').trim().replace(/\s+/g, ' ')
     if (!n) continue
 
@@ -1754,9 +1758,30 @@ export async function neonToolIsApprovedVisibleById(
   return rows.length > 0
 }
 
+export async function neonGetToolNameDescriptionById(
+  id: string,
+): Promise<{ name: string; description: string | null } | null> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT name, description FROM tools WHERE id = ${id} LIMIT 1
+  `
+  const row = rows[0] as { name: string; description: string | null } | undefined
+  if (!row) return null
+  return {
+    name: String(row.name ?? ''),
+    description: row.description == null ? null : String(row.description),
+  }
+}
+
+/**
+ * 用于「批量重打标签」：仅返回已审核（status='approved'）且未禁用的工具。
+ * 待审核 / 被拒的工具不参与全量重打，避免无意义的数据写入。
+ */
 export async function neonListToolsIdIntroFormatCategoryName(): Promise<
   {
     id: string
+    name: string
+    description: string | null
     introduction: string | null
     introduction_format: string | null
     category_name: string | null
@@ -1764,11 +1789,15 @@ export async function neonListToolsIdIntroFormatCategoryName(): Promise<
 > {
   const sql = getNeonSql()
   return (await sql`
-    SELECT t.id, t.introduction, t.introduction_format, c.name AS category_name
+    SELECT t.id, t.name, t.description, t.introduction, t.introduction_format,
+           c.name AS category_name
     FROM tools t
     LEFT JOIN categories c ON c.id = t.category_id
+    WHERE t.status = 'approved' AND COALESCE(t.is_disabled, false) = false
   `) as {
     id: string
+    name: string
+    description: string | null
     introduction: string | null
     introduction_format: string | null
     category_name: string | null
@@ -2087,4 +2116,314 @@ export async function neonCountActiveAdsByPlacement(): Promise<{
     else if (r.placement === 'section2') section2 += Number(r.n)
   }
   return { section1A, section1B, section1C, section2, pending }
+}
+
+// =====================================================================
+// 标签管理（/admin/tags）
+// =====================================================================
+
+export async function neonListTagCategoriesAll(): Promise<TagCategory[]> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT id, name, slug, icon, sort_order, description, created_at
+    FROM tag_categories
+    ORDER BY sort_order ASC, name ASC
+  `
+  return (rows as Record<string, unknown>[]).map(mapTagCategoryRow)
+}
+
+export async function neonGetTagCategoryBySlug(
+  slug: string,
+): Promise<TagCategory | null> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT id, name, slug, icon, sort_order, description, created_at
+    FROM tag_categories WHERE slug = ${slug} LIMIT 1
+  `
+  const r = rows[0] as Record<string, unknown> | undefined
+  return r ? mapTagCategoryRow(r) : null
+}
+
+/**
+ * 管理后台：列出全部标签 + 工具数 + 一级分类。
+ * 排序：is_curated DESC（curated 在前），同分类内按名称。
+ */
+export async function neonAdminListTagsAll(): Promise<AdminTagRow[]> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT t.id,
+           t.name,
+           t.tag_category_id,
+           t.is_curated,
+           t.aliases,
+           t.created_at,
+           tc.name AS category_name,
+           tc.slug AS category_slug,
+           COALESCE((SELECT COUNT(*) FROM tool_tags tt WHERE tt.tag_id = t.id), 0)::int
+             AS tool_count
+    FROM tags t
+    LEFT JOIN tag_categories tc ON tc.id = t.tag_category_id
+    ORDER BY t.is_curated DESC,
+             COALESCE(tc.sort_order, 999) ASC,
+             tc.name NULLS LAST,
+             t.name ASC
+  `
+  return (rows as Record<string, unknown>[]).map(mapAdminTagRow)
+}
+
+/**
+ * 待清理列表：is_curated = false，按工具数降序、再按名称。
+ */
+export async function neonAdminListUncuratedTags(): Promise<AdminTagRow[]> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT t.id,
+           t.name,
+           t.tag_category_id,
+           t.is_curated,
+           t.aliases,
+           t.created_at,
+           tc.name AS category_name,
+           tc.slug AS category_slug,
+           COALESCE((SELECT COUNT(*) FROM tool_tags tt WHERE tt.tag_id = t.id), 0)::int
+             AS tool_count
+    FROM tags t
+    LEFT JOIN tag_categories tc ON tc.id = t.tag_category_id
+    WHERE t.is_curated = false
+    ORDER BY tool_count DESC, t.name ASC
+  `
+  return (rows as Record<string, unknown>[]).map(mapAdminTagRow)
+}
+
+export async function neonAdminGetTagById(
+  id: string,
+): Promise<AdminTagRow | null> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT t.id,
+           t.name,
+           t.tag_category_id,
+           t.is_curated,
+           t.aliases,
+           t.created_at,
+           tc.name AS category_name,
+           tc.slug AS category_slug,
+           COALESCE((SELECT COUNT(*) FROM tool_tags tt WHERE tt.tag_id = t.id), 0)::int
+             AS tool_count
+    FROM tags t
+    LEFT JOIN tag_categories tc ON tc.id = t.tag_category_id
+    WHERE t.id = ${id}
+    LIMIT 1
+  `
+  const r = rows[0] as Record<string, unknown> | undefined
+  return r ? mapAdminTagRow(r) : null
+}
+
+/**
+ * 合并：把 source 上所有 tool_tags.tag_id → target.tag_id（保留 sort_order，遇冲突删源），
+ * 把 source.name 写入 target.aliases，删除 source。
+ *
+ * 整体在事务里执行；只允许 source != target。
+ */
+export async function neonAdminMergeTags(input: {
+  sourceTagId: string
+  targetTagId: string
+}): Promise<{ ok: boolean; error?: string; movedTools: number }> {
+  if (input.sourceTagId === input.targetTagId) {
+    return { ok: false, error: '不能合并到自身', movedTools: 0 }
+  }
+  const sql = getNeonSql()
+  const src = (
+    await sql`SELECT id, name FROM tags WHERE id = ${input.sourceTagId} LIMIT 1`
+  )[0] as { id: string; name: string } | undefined
+  const dst = (
+    await sql`SELECT id, name, aliases FROM tags WHERE id = ${input.targetTagId} LIMIT 1`
+  )[0] as { id: string; name: string; aliases: string[] | null } | undefined
+  if (!src || !dst) return { ok: false, error: '标签不存在', movedTools: 0 }
+
+  await sql`BEGIN`
+  try {
+    /** 把 source 上的 tool_tags 转过来；冲突（同 tool 已有 target）的直接删源 */
+    const updated = await sql`
+      UPDATE tool_tags tt
+      SET tag_id = ${input.targetTagId}
+      WHERE tt.tag_id = ${input.sourceTagId}
+        AND NOT EXISTS (
+          SELECT 1 FROM tool_tags x
+          WHERE x.tool_id = tt.tool_id AND x.tag_id = ${input.targetTagId}
+        )
+      RETURNING tool_id
+    `
+    /** 剩下的（同 tool 已有 target）直接删源 */
+    await sql`
+      DELETE FROM tool_tags WHERE tag_id = ${input.sourceTagId}
+    `
+    /** 把 source.name 加入 target.aliases（去重） */
+    const newAlias = (src.name ?? '').trim()
+    if (newAlias) {
+      await sql`
+        UPDATE tags
+        SET aliases = (
+          SELECT array_agg(DISTINCT v)
+          FROM unnest(COALESCE(aliases, '{}') || ARRAY[${newAlias}]::text[]) AS v
+          WHERE v <> ''
+        )
+        WHERE id = ${input.targetTagId}
+      `
+    }
+    await sql`DELETE FROM tags WHERE id = ${input.sourceTagId}`
+    await sql`COMMIT`
+    return { ok: true, movedTools: updated.length }
+  } catch (e) {
+    try {
+      await sql`ROLLBACK`
+    } catch {
+      /* ignore */
+    }
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : '合并失败',
+      movedTools: 0,
+    }
+  }
+}
+
+export async function neonAdminRenameTag(input: {
+  tagId: string
+  newName: string
+}): Promise<{ ok: boolean; error?: string }> {
+  const n = input.newName.normalize('NFKC').trim().replace(/\s+/g, ' ')
+  if (!n) return { ok: false, error: '名称不能为空' }
+  const sql = getNeonSql()
+  /** 命中已有同名标签（lower(trim) 唯一） */
+  const dup = await sql`
+    SELECT id FROM tags
+    WHERE lower(trim(name)) = lower(${n}) AND id <> ${input.tagId}
+    LIMIT 1
+  `
+  if (dup.length > 0) return { ok: false, error: '已存在同名标签，请使用合并' }
+  await sql`UPDATE tags SET name = ${n} WHERE id = ${input.tagId}`
+  return { ok: true }
+}
+
+export async function neonAdminDeleteTag(
+  tagId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const sql = getNeonSql()
+  const n = (
+    await sql`SELECT COUNT(*)::int AS n FROM tool_tags WHERE tag_id = ${tagId}`
+  )[0] as { n: number }
+  if (n && Number(n.n) > 0) {
+    return { ok: false, error: '该标签下仍有工具，请先合并或重打' }
+  }
+  await sql`DELETE FROM tags WHERE id = ${tagId}`
+  return { ok: true }
+}
+
+export async function neonAdminSetTagCurated(input: {
+  tagId: string
+  isCurated: boolean
+  tagCategoryId: string | null
+}): Promise<void> {
+  const sql = getNeonSql()
+  await sql`
+    UPDATE tags
+    SET is_curated = ${input.isCurated},
+        tag_category_id = ${input.tagCategoryId}
+    WHERE id = ${input.tagId}
+  `
+}
+
+/** 公开：按 tag slug 风格匹配（slug = lower trim 的 tag.name）查标签 */
+export async function neonGetTagByName(name: string): Promise<{
+  id: string
+  name: string
+  tag_category_id: string | null
+} | null> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT id, name, tag_category_id FROM tags
+    WHERE lower(trim(name)) = lower(${name})
+    LIMIT 1
+  `
+  const r = rows[0] as Record<string, unknown> | undefined
+  if (!r) return null
+  return {
+    id: String(r.id),
+    name: String(r.name),
+    tag_category_id:
+      r.tag_category_id == null ? null : String(r.tag_category_id),
+  }
+}
+
+export async function neonListToolsByTagId(tagId: string): Promise<Tool[]> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT t.*, row_to_json(c) AS category
+    FROM tool_tags tt
+    JOIN tools t ON t.id = tt.tool_id
+    LEFT JOIN categories c ON c.id = t.category_id
+    WHERE tt.tag_id = ${tagId}
+      AND t.status = 'approved' AND COALESCE(t.is_disabled, false) = false
+    ORDER BY t.is_featured DESC, t.created_at DESC, t.id
+  `
+  const tools = (rows as Record<string, unknown>[])
+    .map(rowToTool)
+    .map(publicizeToolImages)
+  if (tools.length === 0) return tools
+  const tagMap = await loadToolTagsForTools(tools.map((x) => x.id))
+  return tools.map((t) => {
+    const tags = tagMap.get(t.id)
+    return tags ? { ...t, tool_tags: tags } : t
+  })
+}
+
+export async function neonListToolsByTagCategoryId(
+  tagCategoryId: string,
+): Promise<Tool[]> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT DISTINCT ON (t.id) t.*, row_to_json(c) AS category
+    FROM tool_tags tt
+    JOIN tags tg ON tg.id = tt.tag_id
+    JOIN tools t ON t.id = tt.tool_id
+    LEFT JOIN categories c ON c.id = t.category_id
+    WHERE tg.tag_category_id = ${tagCategoryId}
+      AND t.status = 'approved' AND COALESCE(t.is_disabled, false) = false
+    ORDER BY t.id, t.is_featured DESC, t.created_at DESC
+  `
+  const tools = (rows as Record<string, unknown>[])
+    .map(rowToTool)
+    .map(publicizeToolImages)
+  if (tools.length === 0) return tools
+  const tagMap = await loadToolTagsForTools(tools.map((x) => x.id))
+  return tools
+    .map((t) => {
+      const tags = tagMap.get(t.id)
+      return tags ? { ...t, tool_tags: tags } : t
+    })
+    .sort((a, b) => {
+      if (a.is_featured !== b.is_featured) return a.is_featured ? -1 : 1
+      return (
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      )
+    })
+}
+
+/** 一级分类 → 旗下标签（按工具数降序），用于 /tag-category/[slug] 与首页卡片 chip */
+export async function neonListTagsForCategoryWithCounts(
+  tagCategoryId: string,
+  limit = 100,
+): Promise<{ id: string; name: string; tool_count: number }[]> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT t.id, t.name,
+           COALESCE((SELECT COUNT(*) FROM tool_tags tt WHERE tt.tag_id = t.id), 0)::int
+             AS tool_count
+    FROM tags t
+    WHERE t.tag_category_id = ${tagCategoryId}
+    ORDER BY tool_count DESC, t.name ASC
+    LIMIT ${limit}
+  `
+  return rows as { id: string; name: string; tool_count: number }[]
 }

@@ -1,13 +1,15 @@
 import type { Metadata } from 'next'
+import Image from 'next/image'
 import { Sidebar } from '@/components/sidebar'
 import { HeaderUser } from '@/components/header-user'
 import { HomeToolSections } from '@/components/home-tool-sections'
 import { HomeScrollToHash } from '@/components/home-scroll-to-hash'
 import { HomeAdSection1 } from '@/components/home-ad-section1'
 import { HomeAdSection2 } from '@/components/home-ad-section2'
-import { Sparkles } from 'lucide-react'
+import { HomeTagCategoriesSection } from '@/components/home-tag-categories'
 import { getHomeToolBundle } from '@/lib/cached-home-data'
 import { getHomeAdsBundle } from '@/lib/cached-home-ads'
+import { getHomeTagCategoryCards } from '@/lib/cached-home-tag-categories'
 import { getNavigationMenuTreeStatic } from '@/lib/navigation-menu'
 import { getSiteUrl } from '@/lib/site-url'
 
@@ -21,10 +23,11 @@ export const metadata: Metadata = {
 }
 
 export default async function HomePage() {
-  const [bundle, navigation, ads] = await Promise.all([
+  const [bundle, navigation, ads, tagCategoryCards] = await Promise.all([
     getHomeToolBundle(),
     getNavigationMenuTreeStatic(),
     getHomeAdsBundle(),
+    getHomeTagCategoryCards(),
   ])
 
   const siteUrl = getSiteUrl()
@@ -60,16 +63,17 @@ export default async function HomePage() {
         <HeaderUser navigation={navigation} enableHomeAnchors />
 
         <main className="px-3 py-4 sm:px-4 md:p-6">
-          <div className="mb-6 text-center md:mb-8">
-            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 md:mb-4 md:h-16 md:w-16">
-              <Sparkles className="h-6 w-6 text-primary md:h-8 md:w-8" />
-            </div>
-            <h1 className="text-xl font-bold text-foreground sm:text-2xl md:text-3xl">
-              AI工具集
-            </h1>
-            <p className="mt-1 text-sm text-muted-foreground md:mt-2 md:text-base">
-              发现全网最好用的AI工具
-            </p>
+          <div className="mb-4 flex flex-col items-center md:mb-6">
+            <Image
+              src="/logo-zhixuanai.png"
+              alt="智选 AI · 打工人、创业老板、自由职业，找 AI 上智选"
+              width={1024}
+              height={1024}
+              priority
+              className="h-auto w-40 md:w-56"
+            />
+            {/* h1 留给 SEO，视觉上不显示，避免与 logo 文字重复 */}
+            <h1 className="sr-only">智选 AI · 发现最适合你的 AI 工具</h1>
           </div>
 
           <div className="mx-auto mb-6 w-full max-w-[min(100%,94rem)] space-y-4 md:mb-8">
@@ -90,6 +94,10 @@ export default async function HomePage() {
                 rotateSeconds={ads.settings.section2_rotate_seconds}
               />
             ) : null}
+          </div>
+
+          <div className="mx-auto w-full max-w-[min(100%,94rem)]">
+            <HomeTagCategoriesSection cards={tagCategoryCards} />
           </div>
 
           <HomeToolSections bundle={bundle} />

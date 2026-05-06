@@ -1,9 +1,12 @@
 import type {
   AdPlacement,
   AdminCommentRow,
+  AdminTagRow,
   Category,
   Favorite,
   Profile,
+  TagCategory,
+  TagRow,
   Tool,
   ToolComment,
   ToolTagLink,
@@ -117,6 +120,62 @@ export function mapAdminCommentRow(r: Record<string, unknown>): AdminCommentRow 
     ...base,
     tool_name: String(r.tool_name ?? ''),
     tool_slug: String(r.tool_slug ?? ''),
+  }
+}
+
+export function mapTagCategoryRow(r: Record<string, unknown>): TagCategory {
+  return {
+    id: String(r.id),
+    name: String(r.name),
+    slug: String(r.slug),
+    icon: r.icon == null ? null : String(r.icon),
+    sort_order: Number(r.sort_order ?? 0),
+    description:
+      r.description == null || String(r.description).trim() === ''
+        ? null
+        : String(r.description),
+    created_at: asIso(r.created_at),
+  }
+}
+
+function parseStringArray(raw: unknown): string[] {
+  if (Array.isArray(raw)) return raw.map((x) => String(x))
+  if (typeof raw === 'string') {
+    try {
+      const v = JSON.parse(raw)
+      if (Array.isArray(v)) return v.map((x) => String(x))
+    } catch {
+      /* ignore */
+    }
+  }
+  return []
+}
+
+export function mapTagRow(r: Record<string, unknown>): TagRow {
+  return {
+    id: String(r.id),
+    name: String(r.name),
+    tag_category_id:
+      r.tag_category_id == null ? null : String(r.tag_category_id),
+    is_curated: r.is_curated === true,
+    aliases: parseStringArray(r.aliases),
+    created_at: asIso(r.created_at),
+  }
+}
+
+export function mapAdminTagRow(r: Record<string, unknown>): AdminTagRow {
+  const base = mapTagRow(r)
+  return {
+    ...base,
+    tool_count: Number(r.tool_count ?? 0),
+    category_name:
+      r.category_name == null || String(r.category_name).trim() === ''
+        ? null
+        : String(r.category_name),
+    category_slug:
+      r.category_slug == null || String(r.category_slug).trim() === ''
+        ? null
+        : String(r.category_slug),
   }
 }
 

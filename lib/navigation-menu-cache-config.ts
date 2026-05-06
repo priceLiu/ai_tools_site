@@ -9,3 +9,6 @@ export const HOME_TOOL_BUNDLE_CACHE_TAG = 'home-tool-bundle'
 
 /** 首页广告位（section1 / section2）数据缓存；写后调用 revalidateTag(...) 立即刷新 */
 export const HOME_ADS_CACHE_TAG = 'home-ads'
+
+/** 首页「按场景找 AI」8 卡片区数据缓存；标签写入 / 合并 / 删除时同步失效 */
+export const HOME_TAG_CATEGORIES_CACHE_TAG = 'home-tag-categories'

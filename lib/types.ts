@@ -48,6 +48,37 @@ export interface ToolTagLink {
   tag: { id: string; name: string }
 }
 
+/** 一级（场景）分类：与 categories（左栏菜单）解耦 */
+export interface TagCategory {
+  id: string
+  name: string
+  slug: string
+  icon: string | null
+  sort_order: number
+  description: string | null
+  created_at: string
+}
+
+/** 标签（含 curated 元信息） */
+export interface TagRow {
+  id: string
+  name: string
+  tag_category_id: string | null
+  is_curated: boolean
+  aliases: string[]
+  created_at: string
+}
+
+/** 管理后台：标签 + 工具数 + 一级分类名 */
+export interface AdminTagRow extends TagRow {
+  /** 关联工具数（COUNT(tool_tags)） */
+  tool_count: number
+  /** 一级分类名（如有） */
+  category_name: string | null
+  /** 一级分类 slug（如有） */
+  category_slug: string | null
+}
+
 
 /**
  * 首页 bundle / 列表卡片展示所需字段（不含 introduction、use_cases 等大列），

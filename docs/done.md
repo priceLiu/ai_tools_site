@@ -71,6 +71,64 @@
    - 列表仅展示未隐藏评论
 
 
+## 2026-05-06
+
+### 标签管理系统改造（按场景找 AI）
+
+**需求背景**：左侧分类菜单覆盖度有限，用户难以快速找到「打工人 / 创业老板 / 自媒体 / 学习者」相关工具；同时需要把官方 217 个细分标签接进来，做一次「场景 → 标签 → 工具」的整体梳理与清洗。
+
+**实现内容**：
+
+1. **数据库**（迁移文件）
+   - `20260506000000_tag_categories_and_curated_tags.sql`：新增 `tag_categories`；`tags` 加列 `tag_category_id` / `is_curated` / `aliases`；`tool_tags.sort_order` 上限 0..5 → 0..19；`set_tool_tags_for_tool` 函数 `EXIT WHEN i >= 20`
+   - `20260506000100_seed_tag_categories_and_curated_tags.sql`：写入 8 个 `tag_categories`（按 `docs/type.txt` 顺序）+ 217 个 curated tags；`ON CONFLICT (slug)` / `ON CONFLICT (lower(trim(name)))` 幂等可重跑
+
+2. **关键词词典 + 自动打标**
+   - `lib/tag-keywords.ts`：217 标签 → 同义关键词数组（中文 + 英文 + 口语词，每标签 5–10 条）
+   - `lib/tool-tags-extract.ts` 重写：标题（5）/ 描述（3）/ 介绍（1）三段加权评分；建议输出默认 ≤ 12，硬上限 20；首位仍兜底分类名（属 217 词表则规整）
+   - `app/actions/tool-tags.ts`：`bulkExtractToolTagsAdminAction` 改为只跑 `status='approved' AND NOT is_disabled` 的工具，并在跑完后失效首页 / 分类详情 / `/tag-category/*` / `/tag/*` / `/role/*` ISR
+
+3. **管理后台 `/admin/tags`**
+   - 数据层：`neonAdminListTagsAll` / `neonAdminListUncuratedTags` / `neonAdminMergeTags` / `neonAdminRenameTag` / `neonAdminDeleteTag` / `neonAdminSetTagCurated`
+   - Server Action：`adminMergeTagsAction` / `adminRenameTagAction` / `adminDeleteTagAction` / `adminSetTagCuratedAction`
+   - UI（`components/admin-tags-manager.tsx`）：统计、视图切换（Curated / 待清理 / 全部）、分类筛选、搜索；行操作支持改一级分类、改 curated、改名、合并到目标、删除（工具数为 0 时）
+   - 侧栏入口：管理后台「标签管理」（`Tag` icon）
+
+4. **公开页**
+   - `/tag-category/[slug]`：8 个一级分类详情（chip + 工具网格 + `CollectionPage` / `ItemList` JSON-LD）
+   - `/tag/[slug]`：单个标签详情（`generateStaticParams` 仅预生 curated）
+   - `/role/[slug]`：4 个角色聚合页（打工人 / 创业老板 / 自由职业自媒体 / 转型学习者）；配置在 `lib/tag-roles.ts`
+   - `lib/tag-slug.ts`：`tagPublicPath` / `tagCategoryPublicPath` / `rolePublicPath` / `decodeTagNameFromSlug`
+   - `app/sitemap.ts`：收录全部 `/tag-category/*`、curated `/tag/*`（`tool_count > 0`）、4 个 `/role/*`
+
+5. **首页腰部「按场景找 AI」**
+   - `components/home-tag-categories.tsx`：8 卡片，每张含场景图标 + 工具数 + 工具数前 5 的标签 chip；点击卡片跳 `/tag-category/<slug>`，点击 chip 跳 `/tag/<name>`
+   - 数据：`lib/cached-home-tag-categories.ts`（`unstable_cache` + `HOME_TAG_CATEGORIES_CACHE_TAG`）
+   - `app/page.tsx` 在广告 Section 1/2 与「最新收录」之间插入；锚点 `home-scenes`
+
+6. **缓存失效串通**
+   - 新增 `HOME_TAG_CATEGORIES_CACHE_TAG`
+   - 后台所有标签写操作 + 批量重打 + `regeneratePublicStaticAction` + `revalidateHomeToolBundleAction` 都同步失效该 tag
+
+7. **部署 / 运维工具**
+   - 新增 `scripts/apply-neon-migration.mjs`：基于项目里 `postgres` 包的迁移执行器，无需 `psql`，从 `.env.local` 读 `DATABASE_URL`
+   - `20260506000000_*.sql` 文件头自包含 `CREATE ROLE IF NOT EXISTS`（覆盖纯 Neon 库无 `anon`/`authenticated` 的情况）
+
+8. **首页区块视觉与角色入口**（同日微调）
+   - 8 张场景卡改为**单行高度**（icon + 名/工具数 左对齐、chip 移到右侧竖排 2 条），高度从 ~94px 降到 ~58px，所有卡片高度一致
+   - 移动端（2 列）隐藏 chip 防止挤爆，桌面（4 列）保留 chip
+   - 「按场景找 AI」标题行右侧新增 4 个**角色 chip**（`/role/office-worker` 等），首页正式打通角色页入口
+
+9. **首页 hero 改版 + 公开页返回入口 + 视觉一致性**（同日二次微调）
+   - 首页 hero 替换为「智选 AI」品牌 logo（`public/logo-zhixuanai.png`），移除原 Sparkles 圆角图标 + `AI工具集` h1 + 副标题；保留 `<h1 sr-only>` 兜底 SEO
+   - `/role/[slug]`、`/tag-category/[slug]`、`/tag/[slug]` 三个公开页顶部加「← 返回首页」入口（与 `/tool/[slug]` 一致）
+   - 修复**场景卡片不可点击**的 bug：内层 `relative z-10` 阻塞了 absolute Link 的点击事件 → 改为 `pointer-events-none` 内层 + `pointer-events-auto` chip 层，整卡可点 + chip 仍能独立跳转
+   - 0 工具的场景一级分类卡片置灰：虚线边框 + `opacity-60` + `cursor-not-allowed` + 文案改「暂无工具」+ 不渲染 Link
+   - 视觉一致性：角色 chip 描边 `border-primary/30 → /60`；搜索框描边加 `border-primary/60 + focus-visible:border-primary`
+
+**进度看板 + `/admin/tags` 操作手册 + 部署指引**：见 [`docs/label.md`](label.md) 八、九、十节。
+
+
 ### 用户管理优化
 
 1. **个人中心 - 修改密码**

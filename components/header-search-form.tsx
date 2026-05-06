@@ -55,7 +55,7 @@ function HeaderSearchFormInner() {
           placeholder={placeholder}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full bg-background pl-10"
+          className="w-full border-primary/60 bg-background pl-10 focus-visible:border-primary focus-visible:ring-primary/30"
         />
       </div>
     </form>

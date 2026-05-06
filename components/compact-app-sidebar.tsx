@@ -18,6 +18,7 @@ import {
   Heart,
   Megaphone,
   MessageSquare,
+  Tag,
   type LucideIcon,
 } from 'lucide-react'
 import { AdminRegenerateStaticButton } from '@/components/admin-regenerate-static-button'
@@ -165,9 +166,11 @@ export function CompactAppSidebarFrame({
   const statsAdminActive = pathname.startsWith('/admin/stats')
   const adsAdminActive = pathname.startsWith('/admin/ads')
   const commentsAdminActive = pathname.startsWith('/admin/comments')
+  const tagsAdminActive = pathname.startsWith('/admin/tags')
   const reviewsAdminActive =
     pathname.startsWith('/admin') &&
     !commentsAdminActive &&
+    !tagsAdminActive &&
     !navigationAdminActive &&
     !usersAdminActive &&
     !importAdminActive &&
@@ -247,6 +250,13 @@ export function CompactAppSidebarFrame({
               label="评论管理"
               Icon={MessageSquare}
               active={commentsAdminActive}
+              onItemSelect={onItemSelect}
+            />
+            <NavRow
+              href="/admin/tags"
+              label="标签管理"
+              Icon={Tag}
+              active={tagsAdminActive}
               onItemSelect={onItemSelect}
             />
 
