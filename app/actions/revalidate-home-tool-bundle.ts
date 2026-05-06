@@ -21,6 +21,9 @@ import {
  * 因此顺序必须是：**先从 Neon 拉齐 bundle → 写入 `app_kv`**，再失效 tag + `/` 的 ISR。
  *
  * 同步失效 `HOME_ADS_CACHE_TAG`：广告位展示关联工具（名称 / logo 等），审核上线或编辑已通过工具后应与首页一致刷新。
+ *
+ * 这里的告警必须在 production 也打出来——之前用 NODE_ENV='development' 门控，
+ * CloudBase Run 上首页快照重建失败时完全静默，要靠点「手动生成静态」才纠正。
  */
 export async function revalidateHomeToolBundleAction(): Promise<{
   scheduled: true
@@ -28,18 +31,29 @@ export async function revalidateHomeToolBundleAction(): Promise<{
   try {
     const bundle = await loadHomeToolBundle()
     const uploaded = await uploadHomeToolBundleSnapshot(bundle)
-    if (!uploaded.ok && process.env.NODE_ENV === 'development') {
-      console.warn('[revalidateHomeToolBundle] snapshot:', uploaded.error)
+    if (!uploaded.ok) {
+      console.warn('[revalidateHomeToolBundle] snapshot upload failed:', uploaded.error)
+    } else {
+      console.info(
+        '[revalidateHomeToolBundle] snapshot ok',
+        `categories=${bundle.categories.length}`,
+        `featured=${bundle.featured.length}`,
+        `latest=${bundle.latest.length}`,
+        `blocks=${bundle.homeCategoryBlocks.length}`,
+      )
     }
   } catch (e) {
-    if (process.env.NODE_ENV === 'development') {
-      console.warn('[revalidateHomeToolBundle] snapshot rebuild failed:', e)
-    }
+    console.warn(
+      '[revalidateHomeToolBundle] snapshot rebuild failed:',
+      e instanceof Error ? e.message : String(e),
+    )
   }
 
   revalidateTag(HOME_TOOL_BUNDLE_CACHE_TAG, { expire: 0 })
   revalidateTag(HOME_ADS_CACHE_TAG, { expire: 0 })
   revalidateTag(HOME_TAG_CATEGORIES_CACHE_TAG, { expire: 0 })
+  /** 与 `regeneratePublicStaticAction` 等价：导航菜单也可能因工具变动需要刷新（隐藏空分类等）。 */
+  revalidateTag(NAVIGATION_MENU_CACHE_TAG, { expire: 0 })
   revalidatePath('/')
 
   return { scheduled: true }

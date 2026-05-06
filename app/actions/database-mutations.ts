@@ -9,13 +9,27 @@ import { setToolTagsAction } from '@/app/actions/tool-tags'
 import { toolPublicPath } from '@/lib/tool-public-path'
 import type { ToolComment } from '@/lib/types'
 
-/** 工具状态/可见性变更后，把首页 + 详情页 + 分类页一齐推 */
+/**
+ * 工具状态/可见性变更后，把首页 + 详情页 + 分类页 + 标签 / 角色 / 场景模板都推一遍。
+ *
+ * 历史上只 revalidate 当前 slug 的 `/tool/<slug>`、`/category/[slug]` + 首页 bundle，
+ * 但工具上线/下线/置顶都会影响 `/tag-category/[slug]` / `/tag/[slug]` / `/role/[slug]`
+ * 的 ISR 缓存（这些页都按 tag 分组聚合工具列表）；如果这里漏了，前台得等 60s ISR
+ * 自然过期或管理员手动「生成静态」才能看到改动。
+ *
+ * 与 `regeneratePublicStaticAction` 保持完全等价的 path 失效集合，避免「自动可用、手动可用，
+ * 但表现不一致」的歧义。
+ */
 async function revalidatePublicAfterToolChange(toolId: string) {
   const meta = await neon.neonGetToolAdminMetaById(toolId)
   if (meta?.slug) {
     revalidatePath(toolPublicPath(meta.slug))
   }
   revalidatePath('/category/[slug]', 'page')
+  revalidatePath('/tool/[slug]', 'page')
+  revalidatePath('/tag-category/[slug]', 'page')
+  revalidatePath('/tag/[slug]', 'page')
+  revalidatePath('/role/[slug]', 'page')
   await revalidateHomeToolBundleAction()
 }
 
