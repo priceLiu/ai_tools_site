@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ExternalLink, Eye, Heart } from 'lucide-react'
@@ -16,7 +17,6 @@ import type { Profile, Tool } from '@/lib/types'
 
 interface ToolDetailPublicViewProps {
   tool: Tool
-  hideComments?: boolean
 }
 
 /**
@@ -24,11 +24,18 @@ interface ToolDetailPublicViewProps {
  * - 服务端已 SSR 渲染工具静态信息（描述、截图、介绍等）。
  * - 这里在客户端拉 session + 收藏状态，挂载时上报一次访问量。
  * - 与服务端渲染共用 `<ToolDetailView>`，只多接管收藏/访问数与登录态。
+ *
+ * `?admin_preview=1` 用于后台预览审核中的工具时隐藏评论区。
+ * 历史上 server-side 通过 `searchParams` 读这个参数，但 `searchParams` 在 ISR 页面
+ * （`revalidate=60` + `dynamicParams=true`）里属动态 API，会在 demand-static 阶段抛
+ * `DYNAMIC_SERVER_USAGE`（CloudBase Run 上 /tool/<slug> 500 的根因）。改成在客户端
+ * 用 `useSearchParams()` 读，既保留 60s ISR，又不影响 admin 预览体验。
  */
 export function ToolDetailPublicView({
   tool,
-  hideComments,
 }: ToolDetailPublicViewProps) {
+  const sp = useSearchParams()
+  const hideComments = sp?.get('admin_preview') === '1'
   const [user, setUser] = useState<AuthUser | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [isFavorited, setIsFavorited] = useState(false)

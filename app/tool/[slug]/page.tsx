@@ -1,4 +1,4 @@
-import { cache } from 'react'
+import { cache, Suspense } from 'react'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
@@ -26,7 +26,6 @@ const getToolBySlugCached = cache((slug: string) =>
 
 interface ToolPageProps {
   params: Promise<{ slug: string }>
-  searchParams: Promise<{ admin_preview?: string }>
 }
 
 export async function generateStaticParams() {
@@ -82,17 +81,10 @@ export async function generateMetadata({
   }
 }
 
-/** TEMP DEBUG: CloudBase Run 上 /tool/<slug> 偶发 500，临时把 SSR 异常渲染到页面便于排查 */
-async function renderToolPageInner({
-  params,
-  searchParams,
-}: ToolPageProps) {
+export default async function ToolPage({ params }: ToolPageProps) {
   const { slug: raw } = await params
   const slug = decodeURIComponent(raw ?? '').trim()
   if (!slug) notFound()
-
-  const sp = await searchParams
-  const hideCommentsForAdminPreview = sp.admin_preview === '1'
 
   const [tool, navigation] = await Promise.all([
     getToolBySlugCached(slug),
@@ -175,10 +167,14 @@ async function renderToolPageInner({
               返回首页
             </Link>
 
-            <ToolDetailPublicView
-              tool={tool}
-              hideComments={hideCommentsForAdminPreview}
-            />
+            {/**
+             * `<ToolDetailPublicView>` 内用 `useSearchParams()` 读 `?admin_preview=1`。
+             * 必须包 `<Suspense>`，否则 Next 会把整页 deopt 成 dynamic 渲染，
+             * 60s ISR 会失效。
+             */}
+            <Suspense fallback={null}>
+              <ToolDetailPublicView tool={tool} />
+            </Suspense>
           </div>
         </main>
       </div>
@@ -193,37 +189,4 @@ async function renderToolPageInner({
       />
     </div>
   )
-}
-
-/** TEMP DEBUG: 包一层 try/catch，CloudBase Run 上拿到详细堆栈后即删 */
-export default async function ToolPage(props: ToolPageProps) {
-  try {
-    return await renderToolPageInner(props)
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    const stack = e instanceof Error ? e.stack ?? '' : ''
-    const causeMsg =
-      e instanceof Error && (e as Error & { cause?: unknown }).cause
-        ? String((e as Error & { cause?: unknown }).cause)
-        : ''
-    console.error('[ToolPage SSR error]', e)
-    return (
-      <pre
-        style={{
-          margin: 0,
-          padding: '24px',
-          background: '#111',
-          color: '#f88',
-          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-          fontSize: '12px',
-          lineHeight: '1.5',
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-all',
-        }}
-      >{`[ToolPage SSR ERROR]
-message: ${msg}
-${causeMsg ? `cause:   ${causeMsg}\n` : ''}stack:
-${stack}`}</pre>
-    )
-  }
 }
