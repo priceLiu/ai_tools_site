@@ -82,7 +82,11 @@ export async function generateMetadata({
   }
 }
 
-export default async function ToolPage({ params, searchParams }: ToolPageProps) {
+/** TEMP DEBUG: CloudBase Run 上 /tool/<slug> 偶发 500，临时把 SSR 异常渲染到页面便于排查 */
+async function renderToolPageInner({
+  params,
+  searchParams,
+}: ToolPageProps) {
   const { slug: raw } = await params
   const slug = decodeURIComponent(raw ?? '').trim()
   if (!slug) notFound()
@@ -189,4 +193,37 @@ export default async function ToolPage({ params, searchParams }: ToolPageProps) 
       />
     </div>
   )
+}
+
+/** TEMP DEBUG: 包一层 try/catch，CloudBase Run 上拿到详细堆栈后即删 */
+export default async function ToolPage(props: ToolPageProps) {
+  try {
+    return await renderToolPageInner(props)
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    const stack = e instanceof Error ? e.stack ?? '' : ''
+    const causeMsg =
+      e instanceof Error && (e as Error & { cause?: unknown }).cause
+        ? String((e as Error & { cause?: unknown }).cause)
+        : ''
+    console.error('[ToolPage SSR error]', e)
+    return (
+      <pre
+        style={{
+          margin: 0,
+          padding: '24px',
+          background: '#111',
+          color: '#f88',
+          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+          fontSize: '12px',
+          lineHeight: '1.5',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-all',
+        }}
+      >{`[ToolPage SSR ERROR]
+message: ${msg}
+${causeMsg ? `cause:   ${causeMsg}\n` : ''}stack:
+${stack}`}</pre>
+    )
+  }
 }
