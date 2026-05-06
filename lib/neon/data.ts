@@ -1514,7 +1514,7 @@ export async function neonSubmitInsertTool(input: {
       ${v.is_disabled != null ? Boolean(v.is_disabled) : false},
       ${(v.rejection_reason as string | null) ?? null},
       ${(v.use_cases as string | null) ?? null},
-      ${v.view_count != null ? Number(v.view_count) : null}
+      ${v.view_count != null ? Number(v.view_count) : 0}
     )
     RETURNING id
   `
