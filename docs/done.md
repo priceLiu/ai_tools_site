@@ -4,9 +4,13 @@
 
 ---
 
-## 2026-05-06（深夜）
+## 2026-05-06（深夜 ~ 5月6日下午全天）
 
-### Neon → 腾讯云 数据迁移完成（阶段 5：实测）
+### Neon → 腾讯云 整站迁移完成（DB + CloudBase Run 双部署）
+
+> **完整事后总结看 [`docs/migration-tencent-postmortem.md`](./migration-tencent-postmortem.md)** —— 含 12 张关键截图、12 个详尽踩坑录、Q&A 速查、以及完整可复用的迁移 checklist。本节只保留里程碑式记录。
+
+### 阶段 5：数据迁移（实测）
 
 **进度**：阶段 5 / 7（数据迁移完成；剩 CloudBase Run 部署 + 收紧安全 + 留档）。
 

@@ -1,7 +1,10 @@
-# Neon → 腾讯云 整站迁移：操作手册 + 进度看板
+# Neon → 腾讯云 整站迁移：操作手册 + 进度看板（迁移**前**计划）
 
-> 本文档既是操作指引，也是进度看板。每完成一步把对应 `- [ ]` 改成 `- [x]` 并补一句结论。
-> 配套计划：`/Users/vic.liu/.cursor/plans/migrate-neon-to-tencent_*.plan.md`。
+> 本文档是迁移**前**的计划与进度看板。
+>
+> **如果你想看迁移完成后实际怎么走的、踩了哪些坑、怎么修，请直接看 [`docs/migration-tencent-postmortem.md`](./migration-tencent-postmortem.md)。**
+>
+> 本文档保留下来作为**计划阶段**的留档；事后总结见 postmortem。
 
 ---
 
