@@ -76,6 +76,31 @@ function mapToolsToListed(rows: Tool[] | null | undefined): HomeListedTool[] {
   return rows.map(toHomeListedTool)
 }
 
+/** 首页列表：快照或脏数据兜底，与 DB 口径一致（已通过且未隐藏）。 */
+function isPublicListedHomeTool(t: HomeListedTool): boolean {
+  return t.status === 'approved' && !Boolean(t.is_disabled)
+}
+
+function filterHomeListedPublic(tools: HomeListedTool[]): HomeListedTool[] {
+  return tools.filter(isPublicListedHomeTool)
+}
+
+function filterHomeBundlePublicTools(bundle: HomeToolBundle): HomeToolBundle {
+  const blocks = bundle.homeCategoryBlocks.map((block) => ({
+    ...block,
+    sections: block.sections.map((s) => ({
+      ...s,
+      tools: filterHomeListedPublic(s.tools),
+    })),
+  }))
+  return {
+    ...bundle,
+    featured: filterHomeListedPublic(bundle.featured),
+    latest: filterHomeListedPublic(bundle.latest),
+    homeCategoryBlocks: blocks,
+  }
+}
+
 function toolsByCategoryMapFromBundle(bundle: HomeToolBundle): Map<
   string,
   HomeListedTool[]
@@ -172,7 +197,7 @@ function fallbackSectionPlanFromDb(categories: Category[]) {
 
 export async function loadHomeToolBundle(): Promise<HomeToolBundle> {
   const [cats, navigation] = await Promise.all([
-    neon.neonListCategoriesAll(),
+    neon.neonListCategoriesEnabled(),
     loadNavigationMenuTree(),
   ])
 
@@ -222,12 +247,12 @@ export async function loadHomeToolBundle(): Promise<HomeToolBundle> {
   const featured = mapToolsToListed(featuredTools)
   const latest = mapToolsToListed(latestTools)
 
-  return {
+  return filterHomeBundlePublicTools({
     categories: cats,
     featured,
     latest,
     homeCategoryBlocks,
-  }
+  })
 }
 
 /** 快照可能比数据库旧（删分类后未点「刷新首页缓存」）；用当前 categories 表去掉幽灵版块与无效关联 */
@@ -265,12 +290,13 @@ function pruneStaleCategoriesFromHomeBundle(
     return t
   }
 
-  return {
+  const merged: HomeToolBundle = {
     categories: currentCategories,
     featured: bundle.featured.map(pruneListedTool),
     latest: bundle.latest.map(pruneListedTool),
     homeCategoryBlocks,
   }
+  return filterHomeBundlePublicTools(merged)
 }
 
 const EMPTY_HOME_BUNDLE: HomeToolBundle = {
@@ -291,7 +317,7 @@ async function loadHomeToolBundleWithSnapshot(): Promise<HomeToolBundle> {
     if (snap) {
       try {
         const [currentCats, navigation] = await Promise.all([
-          neon.neonListCategoriesAll(),
+          neon.neonListCategoriesEnabled(),
           loadNavigationMenuTree(),
         ])
         const pruned = pruneStaleCategoriesFromHomeBundle(snap, currentCats)
@@ -302,11 +328,13 @@ async function loadHomeToolBundleWithSnapshot(): Promise<HomeToolBundle> {
             navPlan,
             toolsByCat,
           )
-          return capHomeLatestBundle({ ...pruned, homeCategoryBlocks })
+          return capHomeLatestBundle(
+            filterHomeBundlePublicTools({ ...pruned, homeCategoryBlocks }),
+          )
         }
-        return capHomeLatestBundle(pruned)
+        return capHomeLatestBundle(filterHomeBundlePublicTools(pruned))
       } catch {
-        return capHomeLatestBundle(snap)
+        return capHomeLatestBundle(filterHomeBundlePublicTools(snap))
       }
     }
 

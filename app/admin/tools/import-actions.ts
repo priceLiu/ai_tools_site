@@ -20,7 +20,10 @@ import {
   excerptForListing,
   INTRO_LIMIT_RICH,
 } from '@/lib/introduction-format'
-import { buildSuggestedToolTagNames } from '@/lib/tool-tags-extract'
+import {
+  buildSuggestedToolTagNames,
+  TOOL_TAGS_MAX,
+} from '@/lib/tool-tags-extract'
 
 export type ImportToolsRowResult = {
   name: string
@@ -28,10 +31,66 @@ export type ImportToolsRowResult = {
   message?: string
 }
 
-export async function importToolsFromDocsJsonAction(input: {
-  rawJson: unknown
+export type ImportTagPreviewRow = {
+  index: number
+  name: string
+  tags: string[]
+}
+
+/** 批量导入：对一段条目预览关键词匹配后的标签（用于前台进度展示）。 */
+export async function batchSuggestTagsForImportAction(input: {
+  items: unknown
+  categoryId: string
+  baseIndex: number
+}): Promise<{
+  ok: boolean
+  error?: string
+  rows?: ImportTagPreviewRow[]
+}> {
+  const user = await getAuthUser()
+  if (!user) return { ok: false, error: '未登录' }
+  const adminOk = await neon.neonGetProfileIsAdmin(user.id)
+  if (!adminOk) return { ok: false, error: '无权限' }
+
+  const categoryId = input.categoryId.trim()
+  if (!categoryId) return { ok: false, error: '请选择分类' }
+
+  const categoryName = await neon.neonGetCategoryNameById(categoryId)
+  if (categoryName == null) return { ok: false, error: '分类不存在' }
+
+  const parsed = parseDocsToolsJson(input.items)
+  if (!parsed.ok) return { ok: false, error: parsed.error }
+
+  const rows: ImportTagPreviewRow[] = []
+  for (let i = 0; i < parsed.items.length; i++) {
+    const item = parsed.items[i]
+    const description = excerptForListing(item.introduction, 'markdown')
+    const tags = buildSuggestedToolTagNames({
+      categoryName,
+      name: toolNameDedupKey(item.name),
+      description,
+      introduction: item.introduction,
+      introductionFormat: 'markdown',
+    })
+    rows.push({
+      index: input.baseIndex + i,
+      name: item.name,
+      tags,
+    })
+  }
+  return { ok: true, rows }
+}
+
+/**
+ * 导入 `DocsToolJsonItem[]` 的一段（可多段串联以实现进度条）。
+ * `tagByRelativeIndex` 的键为相对于本段 items 的下标 `"0".."length-1"`。
+ */
+export async function importDocsToolsItemsAction(input: {
+  items: unknown
   categoryId: string
   initialStatus: 'approved' | 'pending'
+  tagByRelativeIndex?: Record<string, string[]>
+  deferBundleRevalidate?: boolean
 }): Promise<{
   ok: boolean
   error?: string
@@ -50,23 +109,29 @@ export async function importToolsFromDocsJsonAction(input: {
   const categoryName = await neon.neonGetCategoryNameById(categoryId)
   if (categoryName == null) return { ok: false, error: '分类不存在' }
 
-  const parsed = parseDocsToolsJson(input.rawJson)
+  const parsed = parseDocsToolsJson(input.items)
   if (!parsed.ok) return { ok: false, error: parsed.error }
 
   const items = parsed.items
   if (items.length === 0) return { ok: false, error: '没有可导入的条目' }
 
+  const tagMap = input.tagByRelativeIndex ?? {}
+
   const results: ImportToolsRowResult[] = []
   let imported = 0
   let anyApproved = false
 
-  for (const item of items) {
+  for (let i = 0; i < items.length; i++) {
+    const relKey = String(i)
+    const pre =
+      tagMap[relKey] !== undefined ? tagMap[relKey] : undefined
     const rowRes = await importOneTool({
-      item,
+      item: items[i],
       categoryId,
       categoryName,
       userId: user.id,
       status: input.initialStatus,
+      precomputedTags: pre,
     })
     results.push(rowRes)
     if (rowRes.ok) {
@@ -75,7 +140,7 @@ export async function importToolsFromDocsJsonAction(input: {
     }
   }
 
-  if (anyApproved) {
+  if (anyApproved && !input.deferBundleRevalidate) {
     await revalidateHomeToolBundleAction()
     revalidatePath('/category/[slug]', 'page')
   }
@@ -84,12 +149,39 @@ export async function importToolsFromDocsJsonAction(input: {
   return { ok: true, results, imported }
 }
 
+export async function importToolsFromDocsJsonAction(input: {
+  rawJson: unknown
+  categoryId: string
+  initialStatus: 'approved' | 'pending'
+  /** 与完整列表下标对齐：`"0"`…；若省略则导入时每条服务端自动算标签 */
+  tagByRelativeIndex?: Record<string, string[]>
+}): Promise<{
+  ok: boolean
+  error?: string
+  results?: ImportToolsRowResult[]
+  imported?: number
+}> {
+  const parsed = parseDocsToolsJson(input.rawJson)
+  if (!parsed.ok) {
+    return { ok: false, error: parsed.error }
+  }
+  return importDocsToolsItemsAction({
+    items: parsed.items,
+    categoryId: input.categoryId,
+    initialStatus: input.initialStatus,
+    tagByRelativeIndex: input.tagByRelativeIndex,
+    deferBundleRevalidate: false,
+  })
+}
+
 async function importOneTool(opts: {
   item: DocsToolJsonItem
   categoryId: string
   categoryName: string | null
   userId: string
   status: 'approved' | 'pending'
+  /** 若传入数组（可为空）则跳过词典计算，直接写入（上限截断） */
+  precomputedTags?: string[]
 }): Promise<ImportToolsRowResult> {
   const { item, categoryId, categoryName, userId, status } = opts
   const name = item.name
@@ -181,13 +273,17 @@ async function importOneTool(opts: {
     }
   }
 
-  const tagNames = buildSuggestedToolTagNames({
-    categoryName,
-    name: toolNameDedupKey(item.name),
-    description,
-    introduction: item.introduction,
-    introductionFormat: 'markdown',
-  })
+  const tagNames =
+    opts.precomputedTags !== undefined
+      ? opts.precomputedTags.slice(0, TOOL_TAGS_MAX)
+      : buildSuggestedToolTagNames({
+          categoryName,
+          name: toolNameDedupKey(item.name),
+          description,
+          introduction: item.introduction,
+          introductionFormat: 'markdown',
+        })
+
   let tagNote = ''
   const tagRes = await neon.neonSetToolTagsForTool({
     actorUserId: userId,

@@ -37,6 +37,23 @@ export function parseCategoryJson(raw: unknown): Category | undefined {
         ? null
         : String(r.parent_id),
     created_at: asIso(r.created_at),
+    is_disabled: r.is_disabled === true,
+  }
+}
+
+export function mapCategoryRow(r: Record<string, unknown>): Category {
+  return {
+    id: String(r.id),
+    name: String(r.name),
+    slug: String(r.slug),
+    icon: r.icon == null ? null : String(r.icon),
+    sort_order: Number(r.sort_order ?? 0),
+    parent_id:
+      r.parent_id == null || String(r.parent_id).trim() === ''
+        ? null
+        : String(r.parent_id),
+    created_at: asIso(r.created_at),
+    is_disabled: r.is_disabled === true,
   }
 }
 
@@ -184,6 +201,7 @@ export function mapTagRow(r: Record<string, unknown>): TagRow {
     is_curated: r.is_curated === true,
     aliases: parseStringArray(r.aliases),
     created_at: asIso(r.created_at),
+    is_disabled: r.is_disabled === true,
   }
 }
 

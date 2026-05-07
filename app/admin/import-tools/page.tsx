@@ -28,8 +28,9 @@ export default async function AdminImportToolsPage() {
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
           用于从 <code className="rounded bg-muted px-1">docs/data.json</code>{' '}
-          同类结构批量写入数据库。可<strong className="text-foreground">上传本地 JSON 文件</strong>
-          或粘贴内容；图标链接会在服务端下载并转为 data URL（base64）后存入{' '}
+          同类结构批量写入数据库。请先<strong className="text-foreground">校验 JSON 结构</strong>
+          ，按需<strong className="text-foreground">预览标签匹配</strong>
+          后再开始导入；可上传本地 JSON 或粘贴内容。图标链接会在服务端下载并转为 data URL（base64）后存入{' '}
           <code className="rounded bg-muted px-1">logo_url</code>。
         </p>
 

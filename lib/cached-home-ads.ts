@@ -20,7 +20,7 @@ const EMPTY_BUNDLE: HomeAdsBundle = {
   settings: {
     enabled_section1: false,
     enabled_section2: false,
-    section1_tab_a_label: '热门工具',
+    section1_tab_a_label: '编辑推荐',
     section1_tab_b_label: '新晋推荐',
     section1_tab_c_label: '精选推荐',
     section2_rotate_seconds: 10,

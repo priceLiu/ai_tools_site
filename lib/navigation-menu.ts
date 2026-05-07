@@ -1,8 +1,14 @@
 import { unstable_cache } from 'next/cache'
 import { headers } from 'next/headers'
-import { neonListNavigationMenuVisible } from '@/lib/neon/data'
+import {
+  neonListDisabledMenuCategorySlugs,
+  neonListNavigationMenuVisible,
+} from '@/lib/neon/data'
 import type { NavigationMenuItemRow, NavigationMenuTreeNode } from '@/lib/types'
-import { buildNavigationTree } from '@/lib/navigation-tree'
+import {
+  buildNavigationTree,
+  pruneNavigationTreeDisabledCategoryLinks,
+} from '@/lib/navigation-tree'
 import {
   NAVIGATION_MENU_CACHE_REVALIDATE_SECONDS,
   NAVIGATION_MENU_CACHE_TAG,
@@ -19,7 +25,15 @@ export async function loadNavigationMenuTree(): Promise<
 > {
   const data = await neonListNavigationMenuVisible()
   if (!data?.length) return []
-  return buildNavigationTree(data as NavigationMenuItemRow[])
+  let disabledSlugs: string[] = []
+  try {
+    disabledSlugs = await neonListDisabledMenuCategorySlugs()
+  } catch {
+    disabledSlugs = []
+  }
+  const tree = buildNavigationTree(data as NavigationMenuItemRow[])
+  if (!disabledSlugs.length) return tree
+  return pruneNavigationTreeDisabledCategoryLinks(tree, new Set(disabledSlugs))
 }
 
 const getNavigationMenuCached = unstable_cache(loadNavigationMenuTree, [

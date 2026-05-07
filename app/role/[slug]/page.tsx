@@ -210,7 +210,7 @@ export default async function RolePage({ params }: PageProps) {
                   暂无工具
                 </h2>
                 <p className="mt-2 text-muted-foreground">
-                  请在本站后台「角色管理」为本品关联标签，或为工具打上对应标签。
+                  请在本站后台「角色分类管理」为本品关联标签，或为工具打上对应标签。
                 </p>
               </div>
             )}

@@ -4,6 +4,10 @@
 >
 > **历史上下文**：场景与导入管线详见 [`docs/label.md`](./label.md)。
 
+> **里程碑状态（2026-05-07）**：本节第五、六部分的 **Phase 0–5 已全部勾选完成**。下文 **§1.2** 保留的是「立项前核对」结论，不是当前缺口；若只看「有没有做完」，以 **§五 / §六** 为准。
+
+> **与现状代码对齐**：`/category` 工具列表已以 **`tool_categories`** junction 为主（辅以 `tools.category_id` 作展示主分类等）；下文个别段落仍写「仅靠 category_id」处请以 **`neonListToolsForCategoryIds`** 与迁移 **`20260507160000_tool_categories.sql`** 为准，并逐步收敛正文。**Cursor 强制流程**：开发前先读 [`.cursor/rules/taxonomy-tags-tools-categories.mdc`](../.cursor/rules/taxonomy-tags-tools-categories.mdc)。
+
 ---
 
 ## 一、原始需求与先前结论（整理）
@@ -20,15 +24,17 @@
    - 角色 → 标签 → 工具  
    - 工具 → 标签 → 场景 / 角色（通过详情页的跳转）
 
-### 1.2 先前核对结论（与现状对照）
+### 1.2 立项前核对结论（归档，非「当前待办」）
 
-| 设定项 | 与当前代码/库表是否一致 | 说明 |
-|--------|-------------------------|------|
-| 场景 ↔ 标签 | **基本一致** | `tags.tag_category_id` → `tag_categories`，可为 NULL；后台可迁入/迁出。 |
-| 角色 ↔ 标签 | **基本一致** | `role_category_tags` 多对多；角色页工具列表按联结标签 OR 聚合。 |
-| 工具 ↔ 标签 | **一致** | `tool_tags`，最多 20；可清空。 |
-| 左侧菜单 ↔ 标签 | **此前不一致（需在计划中补齐）** | 前台 `/category/[slug]` **仅按 `tools.category_id`**（含子树），历史上 **没有**「菜单分类 ↔ 标签」联结表；需在后台能力与文档上与场景管理 **对齐**，并把关系说清楚。 |
-| 详情页「工具 → 标签 → 场景/角色」 | **未完成（延后）** | 详情页 `ToolTagsBar` 当前为纯展示，无跳转链接；列为 **待办**，本轮先做前四项对齐与后台能力。 |
+> 下表是 **写本计划当时** 的结论快照，用于说明为什么要做 Phase 1–5。**不代表现在仍未完成**——菜单↔标签联结、禁用逻辑等已在代码与迁移中落地（见 `docs/done.md` 2026-05-07）。
+
+| 设定项 | 当时结论 | 说明 |
+|--------|----------|------|
+| 场景 ↔ 标签 | 基本一致 | `tags.tag_category_id` → `tag_categories` |
+| 角色 ↔ 标签 | 基本一致 | `role_category_tags` |
+| 工具 ↔ 标签 | 一致 | `tool_tags`，最多 20 |
+| 左侧菜单 ↔ 标签 | **当时缺联结与后台** | 已通过 `category_tags` + `/admin/menu-categories` 补齐；`/category` 列表仍按 `category_id`（未改并集策略）。 |
+| 详情页「工具 → 标签 → 场景/角色」 | **刻意延后** | 仍为 **§四 FR-TAXO-01**，未在本里程碑验收。 |
 
 ### 1.3 本轮硬性约束（你补充的规则）
 
@@ -54,9 +60,9 @@
 │ tag_categories │ │ role_categories│ │ categories（菜单/产品线）│
 │    （场景）     │ │    （角色）     │ │                        │
 └───────┬────────┘ └───────┬────────┘ └───────────┬────────────┘
-        │ via               │ via                  │ via（计划）
-        │ tag_category_id   │ role_category_tags   │ category_tags（新建）
-        │ （已有）          │ （已有）              │
+        │ via               │ via                  │ via（已落地）
+        │ tag_category_id   │ role_category_tags   │ category_tags
+        │ （已有）          │ （已有）              │ 已落地（见 §七）
         ▼                   ▼                      ▼
       tool_tags ───────── tool_tags ─────────── tool_tags
         （同一套工具标签边）
@@ -65,11 +71,13 @@
 - **工具主归属（菜单维度）**：`tools.category_id` → `categories`（用于 `/category/...`、面包屑、提交表单主分类），与标签 **正交**。
 - **场景维度**：`tag_categories` + `tags.tag_category_id`（与 [`docs/label.md`](./label.md) 一致）。
 - **角色维度**：`role_categories` + `role_category_tags`。
-- **菜单维度（对齐后）**：`categories` + **`category_tags`（新建）**，表达「该菜单分类在运营上关联哪些标签」；**不改变**「工具挂在哪个菜单分类」仍以 `category_id` 为准，除非你我在后续步骤明确升级列表算法。
+- **菜单维度（对齐后）**：`categories` + **`category_tags`**（已建表），表达「该菜单分类在运营上关联哪些标签」；**不改变**「工具挂在哪个菜单分类」仍以 `category_id` 为准，除非你我在后续步骤明确升级列表算法。
 
 ---
 
 ## 三、管理后台 — 目标功能清单（验收口径）
+
+**本轮验收**：下列 1–6 项已在代码中实现；数据库需已执行 **§七** 迁移。
 
 完成本轮后应满足：
 
@@ -102,61 +110,63 @@
 
 ### Phase 0：文档冻结（无代码）
 
-- [ ] 评审本文档第二节「四条轴线」是否与产品文案一致；如需 `/category` 列表合并标签命中规则，在 Phase 3 前单独拍板。
+- [x] 评审本文档第二节「四条轴线」是否与产品文案一致；如需 `/category` 列表合并标签命中规则，在 Phase 3 前单独拍板。
 
 ### Phase 1：数据库 — 标签禁用 + 菜单分类禁用 + 菜单↔标签联结
 
-- [ ] 迁移：`tags.is_disabled boolean NOT NULL DEFAULT false` + 注释（禁用后前台过滤）。
-- [ ] 迁移：`categories.is_disabled boolean NOT NULL DEFAULT false`（默认 false，**线上行为与加列前一致**）。
-- [ ] 迁移：新建 `category_tags`（`category_id` → `categories`、`tag_id` → `tags`，`PRIMARY KEY (category_id, tag_id)`，`sort_order` 可选），索引 `tag_id`。
-- [ ] Neon / Supabase RLS：与 `role_category_tags` 策略对齐（只读给 anon/auth；写入仅服务端）。
-- [ ] `lib/neon/data.ts`：`neonAdmin*` 系列 — 设置标签禁用、分类禁用、`category_tags` link/unlink；公开列表查询统一 **过滤禁用标签**（含首页 chip、sitemap、标签页等，逐项清单在 PR 中自检）。
-- [ ] `lib/types.ts`：`Category`、`TagRow` / `AdminTagRow` 补 `is_disabled`（若适用）。
+- [x] 迁移：`tags.is_disabled boolean NOT NULL DEFAULT false` + 注释（禁用后前台过滤）。
+- [x] 迁移：`categories.is_disabled boolean NOT NULL DEFAULT false`（默认 false，**线上行为与加列前一致**）。
+- [x] 迁移：新建 `category_tags`（`category_id` → `categories`、`tag_id` → `tags`，`PRIMARY KEY (category_id, tag_id)`，`sort_order` 可选），索引 `tag_id`。
+- [x] Neon / Supabase RLS：与 `role_category_tags` 策略对齐（只读给 anon/auth；写入仅服务端）。
+- [x] `lib/neon/data.ts`：`neonAdmin*` 系列 — 设置标签禁用、分类禁用、`category_tags` link/unlink；公开列表查询统一 **过滤禁用标签**（含首页 chip、sitemap、标签页等，逐项清单在 PR 中自检）。
+- [x] `lib/types.ts`：`Category`、`TagRow` / `AdminTagRow` 补 `is_disabled`（若适用）。
 
 ### Phase 2：管理后台 — 标签库「禁用」与创建口径
 
-- [ ] `/admin/tags`：禁用开关、列表筛选「已禁用」；禁用标签不可在前台路由与聚合中出现（与 Phase 1 查询一致）。
-- [ ] 新建标签入口（若仅在清洗页可用则文档说明）；与 `is_curated`、场景迁入逻辑无冲突。
+- [x] `/admin/tags`：禁用开关、列表筛选「已禁用」；禁用标签不可在前台路由与聚合中出现（与 Phase 1 查询一致）。
+- [x] 新建标签入口（若仅在清洗页可用则文档说明）；与 `is_curated`、场景迁入逻辑无冲突。
 
 ### Phase 3：管理后台 — 「菜单分类管理」页面（对齐场景管理 UX）
 
-- [ ] 新页面：例如 `/admin/menu-categories`（名称可与侧栏中文统一）。
-- [ ] 组件：复用或抽取与 `admin-scene-category-manager` 相同的区块模式（禁用 Switch、Popover 迁入标签、行内移除）。
-- [ ] Server Actions：`app/admin/menu-categories/actions.ts`（命名待定）调用 neon。
-- [ ] 侧栏：`compact-app-sidebar.tsx` 增加入口，与「场景分类管理」同级或分组合理。
+- [x] 新页面：例如 `/admin/menu-categories`（名称可与侧栏中文统一）。
+- [x] 组件：复用或抽取与 `admin-scene-category-manager` 相同的区块模式（禁用 Switch、Popover 迁入标签、行内移除）。
+- [x] Server Actions：`app/admin/menu-categories/actions.ts`（命名待定）调用 neon。
+- [x] 侧栏：`compact-app-sidebar.tsx` 增加入口，与「场景分类管理」同级或分组合理。
 
 ### Phase 4：行为一致性自检（前台）
 
-- [ ] **默认**：`/category/[slug]` 仍仅按 `category_id` 子树（与现状一致）。
-- [ ] **禁用菜单分类**：导航树、`generateStaticParams`、分类页返回 notFound 或过滤策略与 `tag_categories.is_disabled` 行为对齐（文档写明）。
-- [ ] **回归**：提交表单分类下拉、热门 hot、`neonListToolsForCategoryIds` 等路径不测回归。
+- [x] **默认**：`/category/[slug]` 仍仅按 `category_id` 子树（与现状一致）。
+- [x] **禁用菜单分类**：导航树、`generateStaticParams`、分类页返回 notFound 或过滤策略与 `tag_categories.is_disabled` 行为对齐（文档写明）。
+- [x] **回归**：提交表单分类下拉、热门 hot、`neonListToolsForCategoryIds` 等路径不测回归。
 
 ### Phase 5：收尾
 
-- [ ] 更新 [`docs/done.md`](./done.md) 当日条目：本里程碑的需求背景、迁移文件名、实现要点。
-- [ ] 若 `docs/label.md` 与本文冲突，以 **本文第二节为准** 修订 `label.md` 左侧菜单描述一节（简短指向即可）。
+- [x] 更新 [`docs/done.md`](./done.md) 当日条目：本里程碑的需求背景、迁移文件名、实现要点。
+- [x] 若 `docs/label.md` 与本文冲突，以 **本文第二节为准** 修订 `label.md` 左侧菜单描述一节（简短指向即可）。
 
 ---
 
-## 六、进度总览（勾选摘要）
+## 六、进度总览
 
 | 序号 | 内容 | 状态 |
 |------|------|------|
-| P0 | 文档评审 | ☐ |
-| P1 | 迁移 + Neon 数据层 | ☐ |
-| P2 | 标签库禁用后台 | ☐ |
-| P3 | 菜单分类管理后台 | ☐ |
-| P4 | 前台一致性自检 | ☐ |
-| P5 | done.md / label.md 收口 | ☐ |
-| — | FR-TAXO-01 详情标签链接 | **延后** |
-| — | FR-TAXO-02 收藏场景/角色 | **预留** |
+| P0 | 文档评审 | **已完成** |
+| P1 | 迁移 + Neon 数据层 | **已完成** |
+| P2 | 标签库禁用后台 | **已完成** |
+| P3 | 菜单分类管理后台 | **已完成** |
+| P4 | 前台一致性自检 | **已完成** |
+| P5 | done.md / label.md 收口 | **已完成** |
+| — | FR-TAXO-01 详情标签链接 | **未做（刻意延后）** |
+| — | FR-TAXO-02 收藏场景/角色 | **未做（预留）** |
 
 ---
 
-## 七、迁移文件命名建议（待 Phase 1 落地时创建）
+## 七、迁移文件（已落地）
 
-- `YYYYMMDDHHMMSS_tags_categories_disabled_and_category_tags.sql`（单次迁移内含：`tags.is_disabled`、`categories.is_disabled`、`category_tags` 表）。
+本次里程碑使用的迁移文件：
+
+- [`supabase/migrations/20260507140000_tags_categories_disabled_category_tags.sql`](../supabase/migrations/20260507140000_tags_categories_disabled_category_tags.sql)：`tags.is_disabled`、`categories.is_disabled`、`category_tags` 表及 RLS。
 
 ---
 
-*文档版本：初稿随讨论落地；后续仅在里程碑完成或口径变更时更新勾选与章节。*
+*文档版本：2026-05-07 里程碑（Phase 0–5）已完成勾选；§四两项仍为后续迭代范围。*

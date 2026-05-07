@@ -33,7 +33,7 @@ export async function generateStaticParams() {
   try {
     const tags = await neon.neonAdminListTagsAll()
     return tags
-      .filter((t) => t.is_curated)
+      .filter((t) => t.is_curated && !t.is_disabled)
       .map((t) => ({ slug: encodeURIComponent(t.name) }))
   } catch (e) {
     if (process.env.NODE_ENV === 'development') {

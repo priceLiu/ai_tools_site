@@ -51,7 +51,7 @@
 
 ### 2.1 `app/sitemap.ts`
 
-读 `neonListApprovedToolSlugs` + `neonListCategoriesAll` 自动生成。
+读 `neonListApprovedToolSlugs` + `neonListCategoriesEnabled` 自动生成（已禁用产品线不进站地图）。
 
 - 域名从 `process.env.SITE_URL` 取，构建期注入；缺省回退 `https://ai-tools-site-xi.vercel.app`。
 - 1 小时 revalidate；后台审核完工具会通过 `revalidatePath` 推首页/详情，不需要手动重建 sitemap。

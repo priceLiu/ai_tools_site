@@ -25,6 +25,8 @@
 | 清洗策略 | 官方词表 `is_curated = true` 受保护；非官方支持合并/改名/删除 |
 | 首页布局 | 候选 A：腰部 8 卡片区 |
 
+**产品线（左侧菜单 `categories`）与标签**：详见 [`docs/tag-taxonomy-admin-alignment.md`](./tag-taxonomy-admin-alignment.md)。摘要：`categories.is_disabled`、`tags.is_disabled`、`category_tags`（菜单↔标签联结）与 `tools.category_id` 正交；`/category` 列表逻辑仍以 `category_id` 为准。
+
 ## 三、数据模型
 
 ```sql

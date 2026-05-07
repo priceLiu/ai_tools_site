@@ -8,6 +8,7 @@ import {
   adminMergeTagsAction,
   adminRenameTagAction,
   adminSetTagCuratedAction,
+  adminSetTagDisabledAction,
 } from '@/app/admin/tags/actions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -30,13 +31,14 @@ import {
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Spinner } from '@/components/ui/spinner'
+import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { compareAdminTagRowByDisplayName } from '@/lib/tag-name-sort'
 import type { AdminTagRow, TagCategory } from '@/lib/types'
 import { Edit3, Merge, Star, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-type Mode = 'curated' | 'uncurated' | 'all'
+type Mode = 'curated' | 'uncurated' | 'all' | 'disabled'
 
 export function AdminTagsManager({
   tagCategories,
@@ -55,6 +57,7 @@ export function AdminTagsManager({
     return tags.filter((t) => {
       if (mode === 'curated' && !t.is_curated) return false
       if (mode === 'uncurated' && t.is_curated) return false
+      if (mode === 'disabled' && !t.is_disabled) return false
       if (kw) {
         const blob = `${t.name} ${(t.aliases ?? []).join(' ')}`.toLowerCase()
         if (!blob.includes(kw)) return false
@@ -99,6 +102,7 @@ export function AdminTagsManager({
 
   const totalCurated = tags.filter((t) => t.is_curated).length
   const totalUncurated = tags.length - totalCurated
+  const totalDisabled = tags.filter((t) => t.is_disabled).length
 
   return (
     <div className="space-y-6">
@@ -110,6 +114,7 @@ export function AdminTagsManager({
               [
                 ['curated', `Curated (${totalCurated})`],
                 ['uncurated', `待清理 (${totalUncurated})`],
+                ['disabled', `已禁用 (${totalDisabled})`],
                 ['all', `全部 (${tags.length})`],
               ] as const
             ).map(([v, label]) => (
@@ -131,7 +136,8 @@ export function AdminTagsManager({
         </div>
 
         <p className="w-full basis-full text-xs text-muted-foreground">
-          使用下方 <strong>场景分类 Tab</strong> 切换表格；视图（Curated / 待清理 / 全部）与搜索对全库生效，仅有匹配结果的分类会出现 Tab。
+          使用下方 <strong>场景分类 Tab</strong> 切换表格；视图（Curated / 待清理 /{' '}
+          <strong>已禁用</strong> / 全部）与搜索对全库生效，仅有匹配结果的分类会出现 Tab。
         </p>
 
         <div className="min-w-[220px] flex-1">
@@ -269,6 +275,7 @@ function CategorySection({
               <TableHead>名称</TableHead>
               <TableHead className="w-[80px] text-right">工具数</TableHead>
               <TableHead className="w-[100px]">状态</TableHead>
+              <TableHead className="w-[72px] text-center">前台</TableHead>
               <TableHead>别名</TableHead>
               <TableHead className="w-[280px] text-right">操作</TableHead>
             </TableRow>
@@ -340,6 +347,23 @@ function TagRowView({
     })
   }
 
+  const toggleTagDisabled = (isDisabled: boolean) => {
+    setPending(true)
+    startTransition(async () => {
+      const r = await adminSetTagDisabledAction({
+        tagId: row.id,
+        isDisabled,
+      })
+      setPending(false)
+      if (!r.ok) {
+        toast.error(r.error ?? '失败')
+        return
+      }
+      toast.success(isDisabled ? '已禁用：前台不再展示该标签' : '已重新启用标签')
+      onChanged()
+    })
+  }
+
   const remove = () => {
     if (!confirm(`确认删除标签「${row.name}」？删除前需保证工具数为 0`)) return
     setPending(true)
@@ -367,6 +391,14 @@ function TagRowView({
         ) : (
           <Badge variant="outline">待清理</Badge>
         )}
+      </TableCell>
+      <TableCell className="text-center">
+        <Switch
+          checked={row.is_disabled !== true}
+          disabled={pending}
+          onCheckedChange={(checked) => toggleTagDisabled(!checked)}
+          aria-label={`前台展示标签「${row.name}」`}
+        />
       </TableCell>
       <TableCell className="max-w-[260px] truncate text-xs text-muted-foreground">
         {row.aliases.length > 0 ? row.aliases.join('、') : '—'}

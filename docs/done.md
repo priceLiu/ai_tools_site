@@ -4,6 +4,68 @@
 
 ---
 
+## 2026-05-07
+
+### 标签 / 工具 / 分类 — Cursor 强制流程规则
+
+**需求背景**：巩固今日梳理的标签 · 工具 · 左侧产品线分类关系，避免后续开发与 junction、`is_featured`、`category_tags` 等口径冲突。
+
+**实现内容**：新增 [`.cursor/rules/taxonomy-tags-tools-categories.mdc`](./.cursor/rules/taxonomy-tags-tools-categories.mdc)，**alwaysApply**；规定动工前先读本规则及 [`docs/tag-taxonomy-admin-alignment.md`](./docs/tag-taxonomy-admin-alignment.md)、[`docs/label.md`](./docs/label.md)，写明触点与口径后再出实施方案并编码。
+
+### 管理后台侧栏分组 & 批量导入（校验 JSON → 可选标签预览 → 分段导入）
+
+**需求背景**：标签相关菜单与运营区块分组更清晰；批量导入需先校验文件结构，大批量标签匹配与写入要有进度与明细，并与前台「手动生成标签」心智一致（预览后再导入）。
+
+**实现内容**：
+
+1. [`components/compact-app-sidebar.tsx`](./compact-app-sidebar.tsx)：在「标签管理」上方增加分隔线；分隔线与「发布与维护」区块收紧纵向间距（`my-1` 横线、`mt-1.5` 卡片顶距）。
+2. **批量导入**：[`components/admin-import-tools-form.tsx`](./admin-import-tools-form.tsx)、[`app/admin/tools/import-actions.ts`](./app/admin/tools/import-actions.ts)、[`app/admin/import-tools/page.tsx`](./app/admin/import-tools/page.tsx)——校验 JSON →「自动匹配标签」开关与分批预览（进度条 + 工具名与匹配结果日志）→ 完成后解锁「开始导入」；导入按批展示进度与逐条结果摘要。**详细说明见 [`docs/admin-batch-import.md`](./admin-batch-import.md)**（JSON 字段、流程、Server Actions、分批常量与相关文件索引）。
+
+### 角色 / 菜单后台「新建标签」下拉
+
+**需求背景**：`/admin/role-categories`、`/admin/menu-categories` 顶栏新建标签误用「场景分类」下拉。
+
+**实现内容**：[`components/admin-tag-create-card.tsx`](./components/admin-tag-create-card.tsx) 按页传入 `variant`（scene / role / menu）；[`neonAdminInsertTag`](./lib/neon/data.ts) 允许 `tag_category_id` 为空；[`adminCreateTagAction`](./app/admin/tags/actions.ts) 在 role/menu 分支写入 `role_category_tags` / `category_tags` 弱联结。
+
+### 首页热门 vs 广告 Tab / 隐藏工具过滤 / 侧栏顺序
+
+**需求背景**：首页广告 Section1 Tab A 曾默认也叫「热门工具」，旁数字为广告条数，易与下方 `#home-hot` 区块（`is_featured`）混淆；快照 bundle 可能残留已隐藏工具；菜单分类入口宜归属菜单管理下。
+
+**实现内容**：
+
+1. [`lib/ad-settings.ts`](./lib/ad-settings.ts)、[`lib/cached-home-ads.ts`](./lib/cached-home-ads.ts)：Section1 Tab A 默认文案改为「编辑推荐」，与首页工具区块「热门工具」区分。
+2. [`lib/cached-home-data.ts`](./lib/cached-home-data.ts)：组装与快照恢复后对 `featured` / `latest` / 各分类版块工具再筛一层「已通过且未隐藏」，避免脏快照带出隐藏工具。
+3. [`lib/neon/data.ts`](./lib/neon/data.ts)：`neonListToolsForCategoryIds` 仅保留挂载在**未禁用**分类上的 junction；公开柱状图 `neonGetAdminStatsPublicToolCountsByCategory` 同步排除已禁用分类上的挂载。
+4. [`components/compact-app-sidebar.tsx`](./components/compact-app-sidebar.tsx)：`菜单分类管理` 移至 `菜单管理` 下方并缩进；修正审核列表高亮以免误激活菜单分类页。
+5. **菜单分类管理数字口径**：[`neonListAdminToolCountsByCategory`](./lib/neon/data.ts) 仅计已通过且未隐藏；Tab「热门工具」按 [`neonCountFeaturedToolsPublicListed`](./lib/neon/data.ts)（`is_featured`）对齐首页；顶部统计卡拆分「前台计入」与「库内总行」。**热门 Tab 下列表**改为拉取 `neonListToolsFeaturedHome` 与首页一致；挂载/移除调用 [`adminAddToolToHotFeaturedAction`](./app/admin/menu-categories/actions.ts) / [`adminRemoveToolFromHotFeaturedAction`](./app/admin/menu-categories/actions.ts) 同步 `is_featured` 与 hot junction。
+
+### 菜单分类管理：统计头 + 工具多挂载（tool_categories）
+
+**需求背景**：同一工具应可同时挂在多条左侧产品线（如既可编程又可产品）；从菜单移除仅解除本条挂载，不删工具。
+
+**实现内容**：
+
+1. **迁移** [`supabase/migrations/20260507160000_tool_categories.sql`](./supabase/migrations/20260507160000_tool_categories.sql)：表 `tool_categories`（`tool_id`、`category_id`、排序）、从既有 `tools.category_id` 回填、RLS 只读策略。
+2. **数据层** [`lib/neon/data.ts`](./lib/neon/data.ts)：`neonListToolsForCategoryIds` 经 junction 聚合、`DISTINCT ON` 去重；提交/后台改主分类时 `neonEnsureToolMenuCategoryLink` 保证主分类对应边存在；统计与柱状图按 junction 去重工具；`neonFindDuplicateTool` 在任一共用分类下命中即判重。
+3. **后台** [`components/admin-menu-category-manager.tsx`](./components/admin-menu-category-manager.tsx)、[`app/admin/menu-categories/actions.ts`](./app/admin/menu-categories/actions.ts)、[`app/admin/menu-categories/page.tsx`](./app/admin/menu-categories/page.tsx)、[`components/admin-menu-stats-cards.tsx`](./components/admin-menu-stats-cards.tsx)：Tab 展示本条挂载工具数，支持搜索挂载/仅本条移除；统计头增加挂载条数与去重工具数，并保留 `category_tags` 运营指标说明。
+
+### 标签 / 场景 / 角色 / 菜单分类对齐（禁用 + 联结后台）
+
+**需求背景**：四条轴线（标签库、场景 `tag_categories`、角色 `role_categories`、左侧产品线 `categories`）要在语义与后台能力上对齐；产品线需与「场景分类管理」同构的联结维护页；标签与菜单分类支持禁用且前台过滤。
+
+**实现内容**：
+
+1. **迁移** [`supabase/migrations/20260507140000_tags_categories_disabled_category_tags.sql`](./supabase/migrations/20260507140000_tags_categories_disabled_category_tags.sql)：`tags.is_disabled`、`categories.is_disabled`、表 `category_tags` + RLS 只读策略。
+2. **数据层** [`lib/neon/data.ts`](./lib/neon/data.ts)：公开查询过滤禁用标签（含 `loadToolTagsForTools`、`neonGetTagByName`、场景/角色列表 SQL、`neonListTagsSuggestDictionary`）；前台 JOIN `categories` 时过滤 `is_disabled`（工具仍可按 `category_id` 归属，卡片上不展示已禁用分类名片）；`neonListCategoriesEnabled`、`neonListDisabledMenuCategorySlugs`；菜单分类 Admin CRUD / `category_tags` 联结。
+3. **导航** [`lib/navigation-menu.ts`](./lib/navigation-menu.ts)、[`lib/navigation-tree.ts`](./lib/navigation-tree.ts)、[`lib/nav-category-href.ts`](./lib/nav-category-href.ts)：剔除指向已禁用分类 slug 的 `/category/...` 菜单项（迁移未就绪时降级为空集合）。
+4. **前台**：[`app/submit/page.tsx`](./app/submit/page.tsx)、[`lib/cached-home-data.ts`](./lib/cached-home-data.ts)、[`app/category/[slug]/page.tsx`](./app/category/[slug]/page.tsx)、[`app/sitemap.ts`](./app/sitemap.ts)、[`app/tag/[slug]/page.tsx`](./app/tag/[slug]/page.tsx) 使用启用分类列表或过滤禁用标签。
+5. **后台**：`/admin/tags` 增加「已禁用」视图与行内前台开关；`/admin/menu-categories`（`app/admin/menu-categories/page.tsx`）与 `components/admin-menu-category-manager.tsx`；侧栏 `components/compact-app-sidebar.tsx`。
+6. **文档**：[`docs/tag-taxonomy-admin-alignment.md`](./tag-taxonomy-admin-alignment.md) 勾选完成；[`docs/label.md`](./docs/label.md)、[`docs/seo.md`](./docs/seo.md) 补充口径。
+
+**部署**：上线前务必执行上述迁移（Neon / 自建 PG）。
+
+---
+
 ## 2026-05-06（深夜 ~ 5月6日下午全天）
 
 ### Neon → 腾讯云 整站迁移完成（DB + CloudBase Run 双部署）
@@ -350,7 +412,7 @@
 
 ---
 
-## 2026-05-06：角色管理（首页「按角色」+ `/role/[slug]` DB 化）
+## 2026-05-06：角色分类管理（首页「按角色」+ `/role/[slug]` DB 化）
 
 **需求背景**：与「场景分类管理」对齐，首页「按角色」条带与角色落地页应由后台维护；支持禁用某角色分类、为本品关联或移出标签，并控制前台 / sitemap 曝光。
 
@@ -360,7 +422,7 @@
 2. **数据**：`neonListRoleCategories*` / `neonGetRoleCategoryBySlug` / `neonListToolsByRoleCategoryId` / `neonListTagsForRolePage` / Admin CRUD（创建、禁用、`neonAdminLinkTagToRoleCategory` / Unlink）。
 3. **前台缓存**：`lib/cached-home-role-strip.ts`、`HOME_ROLE_CATEGORIES_CACHE_TAG`；与标签 / 场景 / 工具写入一同 `revalidateTag`。
 4. **页面**：`app/page.tsx` 传入 `getHomeRoleStrip()`；`components/home-tag-categories.tsx` 接收 `rolesStrip`；`lib/role-lucide-icons.ts` 映射 `icon` 字符串。
-5. **后台**：`/admin/role-categories` — 布局与「场景分类管理」对齐：`AdminRoleStatsCards`、`AdminRoleLinkBreakdown`（各角色关联标签数表）、说明卡、`AdminTagCreateCard`、`AdminRoleCategoryManager`（Tabs + 限高列表 + 迁入/移出 + 禁用）；侧栏「角色管理」。
+5. **后台**：`/admin/role-categories` — 布局与「场景分类管理」对齐：`AdminRoleStatsCards`、`AdminRoleLinkBreakdown`（各角色关联标签数表）、说明卡、`AdminTagCreateCard`、`AdminRoleCategoryManager`（Tabs + 限高列表 + 迁入/移出 + 禁用）；侧栏「角色分类管理」。
 6. **移除**：静态 `lib/tag-roles.ts`（避免与库内配置双源）。
 
 ---

@@ -15,15 +15,14 @@ import {
 import { ArrowLeft } from 'lucide-react'
 
 export const metadata = {
-  title: '角色管理 - 管理后台',
+  title: '角色分类管理 - 管理后台',
 }
 
 export const dynamic = 'force-dynamic'
 
 export default async function AdminRoleCategoriesPage() {
-  const [roleCategories, tagCategories, tags, links] = await Promise.all([
+  const [roleCategories, tags, links] = await Promise.all([
     neon.neonListRoleCategoriesAll(),
-    neon.neonListTagCategoriesAll(),
     neon.neonAdminListTagsAll(),
     neon.neonListRoleCategoryTagLinks(),
   ])
@@ -42,7 +41,7 @@ export default async function AdminRoleCategoriesPage() {
               返回管理后台
             </Link>
           </Button>
-          <h1 className="mt-1 text-2xl font-bold">角色管理</h1>
+          <h1 className="mt-1 text-2xl font-bold">角色分类管理</h1>
           <p className="text-sm text-muted-foreground">
             管理首页「按角色」条带与{' '}
             <code className="rounded bg-muted px-1">/role/[slug]</code>{' '}
@@ -83,8 +82,8 @@ export default async function AdminRoleCategoriesPage() {
               · 「将标签加入本品」仅增加 role↔tag 联结；要改标签所属场景请在「标签管理」或「场景分类管理」操作。
             </p>
             <p>
-              · 角色页的展示工具集 = 已审核工具 ∩ 任一关联标签；
-              「新建标签」与场景分类管理页共用同一组件。
+              · 角色页的展示工具集 = 已审核工具 ∩ 任一关联标签。
+              页顶「新建标签」下拉为<strong>角色分类</strong>：写入词表并自动挂上所选角色的弱联结（不写 tags.tag_category_id）。
             </p>
             <p>
               · 图标 `icon` / 标语 `tagline` / 描述字段可按种子或通过 SQL 维护；需在后台表单编辑时再迭代即可。
@@ -95,7 +94,7 @@ export default async function AdminRoleCategoriesPage() {
       </Card>
 
       <div className="mb-6">
-        <AdminTagCreateCard tagCategories={tagCategories} />
+        <AdminTagCreateCard variant="role" roleCategories={roleCategories} />
       </div>
 
       <AdminRoleCategoryManager

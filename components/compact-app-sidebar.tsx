@@ -21,6 +21,7 @@ import {
   Tag,
   FolderTree,
   UserSquare,
+  Layers,
   type LucideIcon,
 } from 'lucide-react'
 import { AdminRegenerateStaticButton } from '@/components/admin-regenerate-static-button'
@@ -170,8 +171,13 @@ export function CompactAppSidebarFrame({
   const tagSceneAdminActive = pathname.startsWith('/admin/tag-categories')
   const tagsListAdminActive = pathname.startsWith('/admin/tags')
   const tagRoleAdminActive = pathname.startsWith('/admin/role-categories')
+  const menuCategoriesAdminActive = pathname.startsWith(
+    '/admin/menu-categories',
+  )
   const tagAdminSubtreeActive =
-    tagsListAdminActive || tagSceneAdminActive || tagRoleAdminActive
+    tagsListAdminActive ||
+    tagSceneAdminActive ||
+    tagRoleAdminActive
   const usersAdminActive = pathname.startsWith('/admin/users')
   const importAdminActive = pathname.startsWith('/admin/import-tools')
   const statsAdminActive = pathname.startsWith('/admin/stats')
@@ -182,6 +188,7 @@ export function CompactAppSidebarFrame({
     !commentsAdminActive &&
     !tagAdminSubtreeActive &&
     !navigationAdminActive &&
+    !menuCategoriesAdminActive &&
     !usersAdminActive &&
     !importAdminActive &&
     !statsAdminActive &&
@@ -225,7 +232,7 @@ export function CompactAppSidebarFrame({
 
         {isAdmin && (
           <>
-            <div className="my-3 h-px w-full bg-border" role="presentation" />
+            <div className="my-1 h-px w-full shrink-0 bg-border" role="presentation" />
 
             <NavRow
               href="/admin"
@@ -236,7 +243,7 @@ export function CompactAppSidebarFrame({
             />
             <NavRow
               href="/admin/stats"
-              label="统计模块"
+              label="工具统计"
               Icon={BarChart3}
               active={statsAdminActive}
               onItemSelect={onItemSelect}
@@ -262,6 +269,9 @@ export function CompactAppSidebarFrame({
               active={commentsAdminActive}
               onItemSelect={onItemSelect}
             />
+
+            <div className="my-1 h-px w-full shrink-0 bg-border" role="presentation" />
+
             <NavRow
               href="/admin/tags"
               label="标签管理"
@@ -278,13 +288,13 @@ export function CompactAppSidebarFrame({
             />
             <NavRow
               href="/admin/role-categories"
-              label="角色管理"
+              label="角色分类管理"
               Icon={UserSquare}
               active={tagRoleAdminActive}
               onItemSelect={onItemSelect}
             />
 
-            <div className="my-3 h-px w-full bg-border" role="presentation" />
+            <div className="my-1 h-px w-full shrink-0 bg-border" role="presentation" />
 
             <NavRow
               href="/admin/navigation"
@@ -294,6 +304,14 @@ export function CompactAppSidebarFrame({
               onItemSelect={onItemSelect}
             />
             <NavRow
+              href="/admin/menu-categories"
+              label="菜单分类管理"
+              Icon={Layers}
+              active={menuCategoriesAdminActive}
+              onItemSelect={onItemSelect}
+              className="pl-8 opacity-[0.92]"
+            />
+            <NavRow
               href="/admin/users"
               label="用户管理"
               Icon={Users}
@@ -301,7 +319,7 @@ export function CompactAppSidebarFrame({
               onItemSelect={onItemSelect}
             />
 
-            <div className="mt-3 rounded-xl border border-sidebar-border/60 bg-sidebar-accent/30 p-2">
+            <div className="mt-1.5 rounded-xl border border-sidebar-border/60 bg-sidebar-accent/30 p-2">
               <p className="mb-1.5 px-1 text-[11px] font-medium uppercase tracking-wide text-sidebar-foreground/60">
                 发布与维护
               </p>

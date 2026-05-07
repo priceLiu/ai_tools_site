@@ -134,7 +134,9 @@ export function AdminStatsPanel({
             <CardTitle className="text-3xl tabular-nums">{totalTools}</CardTitle>
           </CardHeader>
           <CardContent className="text-xs text-muted-foreground">
-            含待审核、已拒绝、已隐藏等。前台可见（
+            数据库{' '}
+            <code className="rounded bg-muted px-1">COUNT(*) FROM tools</code>
+            ，含待审核、已拒绝、已隐藏等。前台可见（
             <code className="rounded bg-muted px-1">已通过</code>
             且未
             <code className="rounded bg-muted px-1">隐藏</code>

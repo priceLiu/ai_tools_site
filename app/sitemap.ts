@@ -70,7 +70,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   try {
     const [slugs, cats] = await Promise.all([
       neon.neonListApprovedToolSlugs(),
-      neon.neonListCategoriesAll(),
+      neon.neonListCategoriesEnabled(),
     ])
 
     categoryEntries = cats
@@ -115,7 +115,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       }))
 
     tagEntries = tagsAll
-      .filter((t) => t.is_curated && t.tool_count > 0)
+      .filter((t) => t.is_curated && !t.is_disabled && t.tool_count > 0)
       .map((t) => ({
         url: `${base}/tag/${encodeURIComponent(t.name)}`,
         lastModified: now,

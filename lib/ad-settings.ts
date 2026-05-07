@@ -7,7 +7,8 @@ export const AD_SETTINGS_KEY = 'ad:settings' as const
 export const DEFAULT_AD_SETTINGS: AdSettings = {
   enabled_section1: false,
   enabled_section2: false,
-  section1_tab_a_label: '热门工具',
+  /** 与首页锚点区块「热门工具」（is_featured）区分；此处为广告 Section1 Tab A */
+  section1_tab_a_label: '编辑推荐',
   section1_tab_b_label: '新晋推荐',
   section1_tab_c_label: '精选推荐',
   section2_rotate_seconds: 10,

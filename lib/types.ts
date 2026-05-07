@@ -9,6 +9,8 @@ export interface Category {
   /** 父分类 id；null 为一级分类 */
   parent_id?: string | null
   created_at: string
+  /** 禁用后前台分类页与导航入口隐藏；工具仍可挂在 category_id（展示时不带出分类 JOIN） */
+  is_disabled?: boolean
 }
 
 export interface Tool {
@@ -83,6 +85,8 @@ export interface TagRow {
   is_curated: boolean
   aliases: string[]
   created_at: string
+  /** 禁用后前台不展示该标签（聚合页 / chip / 工具上标签栏） */
+  is_disabled?: boolean
 }
 
 /** 管理后台：标签 + 工具数 + 一级分类名 */

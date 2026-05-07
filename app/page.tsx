@@ -78,7 +78,7 @@ export default async function HomePage() {
              * 原图在 git 历史里：`git show HEAD~:public/logo-zhixuanai.png` 可恢复。
              */}
             <Image
-              src="/logo-zhixuanai.webp"
+              src="/logo-zhixuanai.png"
               alt="智选 AI · 打工人、创业老板、自由职业，找 AI 上智选"
               width={512}
               height={512}

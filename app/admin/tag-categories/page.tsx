@@ -82,7 +82,7 @@ export default async function AdminTagCategoriesPage() {
       </Card>
 
       <div className="mb-6">
-        <AdminTagCreateCard tagCategories={tagCategories} />
+        <AdminTagCreateCard variant="scene" tagCategories={tagCategories} />
       </div>
 
       <AdminSceneCategoryManager tagCategories={tagCategories} tags={tags} />

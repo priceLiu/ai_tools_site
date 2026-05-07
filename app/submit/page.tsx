@@ -38,7 +38,7 @@ export default async function SubmitPage({ searchParams }: SubmitPageProps) {
   const profile = await getSessionProfile(user.id)
 
   const [categories, navigation] = await Promise.all([
-    neon.neonListCategoriesAll(),
+    neon.neonListCategoriesEnabled(),
     getNavigationMenuTree(),
   ])
   const cats = categories

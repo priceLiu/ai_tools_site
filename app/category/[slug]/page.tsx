@@ -55,7 +55,7 @@ interface CategoryPageProps {
 
 export async function generateStaticParams() {
   try {
-    const cats = await neon.neonListCategoriesAll()
+    const cats = await neon.neonListCategoriesEnabled()
     return cats
       .map((c) => (c.slug ?? '').trim())
       .filter((s) => s.length > 0)
