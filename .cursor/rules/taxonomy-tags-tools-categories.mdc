@@ -1,5 +1,5 @@
 ---
-description: 标签 / 工具 / 分类（菜单产品线）关系与开发流程——新功能前必读并对照再实施方案
+description: 标签 / 工具 / 分类关系与开发流程；开发前须通读 tool-tag-taxonomy-counting.md（计数与四者关系）并对照本规则
 alwaysApply: true
 ---
 
@@ -7,11 +7,13 @@ alwaysApply: true
 
 凡改动 **标签（tags）、工具（tools）、左侧产品线分类（categories）、场景（tag_categories）、角色（role_categories）、导航菜单、首页/分类列表**，或新增依赖上述数据的特性时，**必须先完成下列流程，再写代码**。
 
+> **硬性要求**：涉及 **`tool_tags`**、**场景/角色收录与计数**、**挂载或移除挂载**、**`tags.tag_category_id` / `role_category_tags`**、或 **`neonCountPublicListedTools*`** 同类逻辑的改动，开发前 **必须完整仔细阅读** [`docs/tool-tag-taxonomy-counting.md`](docs/tool-tag-taxonomy-counting.md)（含置顶「⭐ 重要说明」与各节对照），**不得**仅凭本节摘要开工。
+
 ## 一、强制流程（顺序不可省略）
 
-1. **读本规则全文**（本节 + 第二节关系表）。
-2. **打开并对照 canonical 文档**（以仓库最新代码为准；文档与代码冲突时以代码与迁移为准，并应顺手修正文档）：
-   - [`docs/tool-tag-taxonomy-counting.md`](docs/tool-tag-taxonomy-counting.md) — **工具 / 标签 / 场景 / 角色**：联结关系、**计数口径**、后台操作语义与重要边界。
+1. **读本规则全文**（本节 + 第二节关系表 + 第三节自检清单）。
+2. **通读计数与关系权威文档**（与代码冲突时以迁移与 `lib/neon/data.ts` 为准，并应顺手修正文档）：
+   - **[`docs/tool-tag-taxonomy-counting.md`](docs/tool-tag-taxonomy-counting.md)** — **开发前必读**：工具 / 标签 / 场景分类 / 角色的联结、**前台与后台计数口径**、挂载 vs 关联 vs 移除、选人 SQL 与计数差异；**须从头到尾读过**，尤其对「⭐ 重要说明」与 §5 易混项。
    - [`docs/tag-taxonomy-admin-alignment.md`](docs/tag-taxonomy-admin-alignment.md) — 四条轴线、后台能力、历史决策。
    - [`docs/label.md`](docs/label.md) — 场景 / 标签 / 角色与 URL。
 3. **用一两句话写清**：本次改动触碰哪几条「轴线」、是否改变前台列表/计数口径、是否需要缓存与 `revalidate`。
@@ -53,6 +55,7 @@ alwaysApply: true
 
 ## 三、自检清单（动手前快速打勾）
 
+- [ ] **已通读** [`docs/tool-tag-taxonomy-counting.md`](docs/tool-tag-taxonomy-counting.md)（凡触碰工具↔标签↔场景/角色或计数者 **必选**）。
 - [ ] 本次改动是否修改「用户在 `/category` 能看到哪些工具」？若是，是否只动 **`tool_categories` / 查询**，还是误用了 **`category_tags`**？
 - [ ] 是否影响首页 bundle、ISR、`HOME_TOOL_BUNDLE_CACHE_TAG` 或快照？是否需要 **`revalidateHomeToolBundleAction`** 同类失效？
 - [ ] 是否新增「第四套轴线」或把两套表合成一套查询？— **禁止无声合并**，须在方案里写明语义。
