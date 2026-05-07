@@ -6,6 +6,59 @@
 
 ## 2026-05-07
 
+### 工具管理聚合页 & 工具与标签后台
+
+**需求背景**：侧栏「工具统计」改为「工具管理」入口并聚合常用模块；新增按工具维护标签（海量标签走搜索选用，场景/角色下拉辅助），写入仍为 `tool_tags`；搜索接口控制返回列与条数以保持可接受延迟。
+
+**实现内容**：
+
+1. [`lib/neon/data.ts`](./lib/neon/data.ts)：`neonAdminSearchTagsForPicker`、`neonAdminSearchToolsForTagging`、`neonAdminGetToolTagsForEditor`、`neonSetToolTagsForTool`（`tagCategoryHints`）、`neonAdminListTagsForRoleCategoryPicklist`。
+2. [`app/admin/tools-tagging/actions.ts`](./app/admin/tools-tagging/actions.ts)、[`components/admin-tool-tagging-panel.tsx`](./components/admin-tool-tagging-panel.tsx)：管理员校验与打标签 UI。
+3. [`app/admin/tools-management/page.tsx`](./app/admin/tools-management/page.tsx)（重定向至 `/admin/stats`）、[`app/admin/tools-tagging/page.tsx`](./app/admin/tools-tagging/page.tsx)：路由。
+4. [`components/compact-app-sidebar.tsx`](./components/compact-app-sidebar.tsx)：「工具管理」→ `/admin/stats`，缩进子项「工具与标签」→ `/admin/tools-tagging`；审核列表高亮排除上述路径。
+5. [`app/actions/tool-tags.ts`](./app/actions/tool-tags.ts)：管理员可选 `tagCategoryHints` 回填 `tags.tag_category_id`（修复新建标签无场景导致首页「按场景」不收录）；成功时失效 `HOME_TAG_CATEGORIES`、`/tag`、`/tag-category`、对应工具详情路径。
+6. [`app/admin/stats/page.tsx`](./app/admin/stats/page.tsx)：顶部链至「工具与标签」与「审核列表」。
+7. 说明文档 [`docs/tools-management-and-tagging.md`](./tools-management-and-tagging.md)。
+
+### 场景统计口径与详情页「场景分类」展示
+
+**需求背景**：后台 Tab「数据与编程 (37)」与标签页「(33)」等与首页收录工具数含义不一致，易误判；工具归入场景后详情只见词条标签、不见场景名。
+
+**实现内容**：
+
+1. [`lib/neon/data.ts`](./lib/neon/data.ts)：`neonCountPublicListedToolsByTagCategoriesBulk`（与各列表同源）；`neonListPublicSceneSummariesForTool`（详情场景 chips）。
+2. [`lib/cached-home-tag-categories.ts`](./lib/cached-home-tag-categories.ts)：首页卡片工具数改走批量 COUNT，与聚合列表口径一致。
+3. [`components/admin-scene-category-manager.tsx`](./components/admin-scene-category-manager.tsx)、[`components/admin-tags-manager.tsx`](./components/admin-tags-manager.tsx)、[`app/admin/tag-categories/page.tsx`](./app/admin/tag-categories/page.tsx)、[`app/admin/tags/page.tsx`](./app/admin/tags/page.tsx)：Tab 主数字统一为收录工具数，词条数分列展示并补充文案。
+4. [`components/tool-detail-view.tsx`](./components/tool-detail-view.tsx) 等：详情展示「场景分类」跳转卡片。
+5. [`docs/tools-management-and-tagging.md`](./tools-management-and-tagging.md)：记录统计口径。
+
+### 工具打标签：场景下拉与详情「场景分类」不一致
+
+**需求背景**：后台「工具与标签」选了具体场景并保存成功，`tool_tags` 与词条标签在前台可见，但详情页「场景分类」仍不出现；根因为草稿/库里词条已有非空的 `tags.tag_category_id` 时，保存既不覆盖 hint，服务端也只对 `tag_category_id IS NULL` 的标签回填。
+
+**实现内容**：
+
+1. [`components/admin-tool-tagging-panel.tsx`](./components/admin-tool-tagging-panel.tsx)：场景下拉为具体 UUID 时，`tagCategoryHints` 对每个词条一律传当前场景 id。
+2. [`lib/neon/data.ts`](./lib/neon/data.ts)：`neonSetToolTagsForTool` 在管理员 hint 为非 null 时对已有标签行无条件更新 `tags.tag_category_id`（词条全局一条，会影响其它挂载该标签的工具）。
+
+### 工具打标签：草稿预览对齐前台详情 & 场景 Tab 数字说明
+
+**需求背景**：后台「当前标签」单列表不易对照前台详情上的「场景分类 / 标签」分区；场景分类管理 Tab 上两组数字含义不直观。
+
+**实现内容**：
+
+1. [`components/admin-tool-tagging-panel.tsx`](./components/admin-tool-tagging-panel.tsx)：`3. 当前标签` 分区预览场景 chips（与 [`neonListPublicSceneSummariesForTool`](./lib/neon/data.ts) 同源推导）+ 标签 chips；选定具体场景时对未写 `tag_category_id` 的草稿行按保存语义预览归入该场景。
+2. [`components/admin-scene-category-manager.tsx`](./components/admin-scene-category-manager.tsx)：Tabs 上方说明文案 + `title` 提示：加粗数为收录工具数，「N词」为词条数。
+
+### 工具与标签：选人列表排除未通过与隐藏 & 辅助筛选对齐
+
+**需求背景**：未通过 / 待审核或已隐藏的工具不应出现在「工具与标签」选人列表；「辅助筛选」里长提示与「场景」同列导致 flex `items-end` 把「角色」下拉拽到块底部。
+
+**实现内容**：
+
+1. [`lib/neon/data.ts`](./lib/neon/data.ts)：`neonAdminSearchToolsForTagging` 仅 `status = approved` 且未 `is_disabled`。
+2. [`components/admin-tool-tagging-panel.tsx`](./components/admin-tool-tagging-panel.tsx)：场景说明独占下行；场景 / 角色两列仅含标签+控件并排，`items-start`。
+
 ### 标签 / 工具 / 分类 — Cursor 强制流程规则
 
 **需求背景**：巩固今日梳理的标签 · 工具 · 左侧产品线分类关系，避免后续开发与 junction、`is_featured`、`category_tags` 等口径冲突。

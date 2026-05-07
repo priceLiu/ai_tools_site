@@ -5,6 +5,7 @@ import { getAuthUser } from '@/lib/auth/session'
 import {
   neonGetCategoryNameById,
   neonGetProfileIsAdmin,
+  neonGetToolAdminMetaById,
   neonGetToolNameDescriptionById,
   neonListToolsIdIntroFormatCategoryName,
   neonSetToolTagsForTool,
@@ -40,6 +41,20 @@ function normalizeTagNames(raw: string[]): string[] {
     if (out.length >= TOOL_TAGS_MAX) break
   }
   return out
+}
+
+/** 与标签名作同名键的小写规整（须与 `normalizeTagNames` 一致） */
+function normalizeTagCategoryHintKeys(
+  raw: Record<string, string | null> | undefined,
+): Record<string, string | null> | undefined {
+  if (!raw) return undefined
+  const out: Record<string, string | null> = {}
+  for (const [k, v] of Object.entries(raw)) {
+    const nk = k.normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase()
+    if (!nk) continue
+    out[nk] = v
+  }
+  return Object.keys(out).length ? out : undefined
 }
 
 async function suggestNamesFromLibraryOrLegacy(
@@ -102,22 +117,39 @@ export async function suggestToolTagNamesAction(input: {
 export async function setToolTagsAction(input: {
   toolId: string
   tagNames: string[]
+  /**
+   * 仅管理员生效：`neonSetToolTagsForTool` 据此回填 `tags.tag_category_id`，
+   * 否则首页「按场景」无法聚合到新创建的裸露标签。
+   */
+  tagCategoryHints?: Record<string, string | null>
 }): Promise<{ error?: string }> {
   const user = await getAuthUser()
   if (!user) return { error: '未登录' }
 
   const names = normalizeTagNames(input.tagNames)
   const isAdmin = await neonGetProfileIsAdmin(user.id)
+  const hints =
+    isAdmin && input.tagCategoryHints
+      ? normalizeTagCategoryHintKeys(input.tagCategoryHints)
+      : undefined
   const res = await neonSetToolTagsForTool({
     actorUserId: user.id,
     actorIsAdmin: isAdmin,
     toolId: input.toolId,
     names,
+    tagCategoryHints: hints,
   })
   if (!res.error) {
     revalidateTag(TAG_SUGGEST_DICTIONARY_CACHE_TAG, { expire: 0 })
     revalidateTag(HOME_ROLE_CATEGORIES_CACHE_TAG, { expire: 0 })
+    revalidateTag(HOME_TAG_CATEGORIES_CACHE_TAG, { expire: 0 })
     revalidatePath('/role/[slug]', 'page')
+    revalidatePath('/tag-category/[slug]', 'page')
+    revalidatePath('/tag/[slug]', 'page')
+    const meta = await neonGetToolAdminMetaById(input.toolId.trim())
+    if (meta?.slug) {
+      revalidatePath(`/tool/${meta.slug}`)
+    }
   }
   return res
 }

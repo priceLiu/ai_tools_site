@@ -60,12 +60,20 @@ export default async function AdminStatsPage() {
             分类规模与工具分布概览（ECharts 柱状图）
           </p>
         </div>
-        <Link
-          href="/admin"
-          className="text-sm font-medium text-primary hover:underline"
-        >
-          ← 返回审核列表
-        </Link>
+        <div className="flex flex-wrap gap-x-4 gap-y-2">
+          <Link
+            href="/admin/tools-tagging"
+            className="text-sm font-medium text-primary hover:underline"
+          >
+            工具与标签
+          </Link>
+          <Link
+            href="/admin"
+            className="text-sm font-medium text-muted-foreground hover:text-primary hover:underline"
+          >
+            审核列表
+          </Link>
+        </div>
       </div>
 
       <AdminStatsPanel

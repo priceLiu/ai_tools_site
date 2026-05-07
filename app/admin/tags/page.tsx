@@ -18,10 +18,13 @@ export const metadata = {
 export const dynamic = 'force-dynamic'
 
 export default async function AdminTagsPage() {
-  const [tagCategories, tags] = await Promise.all([
+  const [tagCategories, tags, listedBulk] = await Promise.all([
     neon.neonListTagCategoriesAll(),
     neon.neonAdminListTagsAll(),
+    neon.neonCountPublicListedToolsByTagCategoriesBulk(),
   ])
+
+  const publicListedToolsByTagCategoryId = Object.fromEntries(listedBulk)
 
   return (
     <div className="container mx-auto px-4 py-6">
@@ -67,7 +70,11 @@ export default async function AdminTagsPage() {
         <CardContent />
       </Card>
 
-      <AdminTagsManager tagCategories={tagCategories} tags={tags} />
+      <AdminTagsManager
+        tagCategories={tagCategories}
+        tags={tags}
+        publicListedToolsByTagCategoryId={publicListedToolsByTagCategoryId}
+      />
     </div>
   )
 }

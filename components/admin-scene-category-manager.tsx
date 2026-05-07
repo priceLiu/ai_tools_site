@@ -32,10 +32,15 @@ import { compareAdminTagRowByDisplayName } from '@/lib/tag-name-sort'
 import type { AdminTagRow, TagCategory } from '@/lib/types'
 import { ChevronsUpDown, Trash2 } from 'lucide-react'
 
+function canonSceneCatKey(id: string): string {
+  return String(id).trim().toLowerCase()
+}
+
 function CategoryBlock({
   cat,
   tagsInCat,
   pickerTags,
+  listedTools,
   pending,
   onToggleDisabled,
   onAssignInto,
@@ -44,6 +49,8 @@ function CategoryBlock({
   cat: TagCategory
   tagsInCat: AdminTagRow[]
   pickerTags: AdminTagRow[]
+  /** 已通过且未隐藏、挂载本场景下启用标签的去重工具数（与首页一致） */
+  listedTools: number
   pending: boolean
   onToggleDisabled: (disabled: boolean) => void
   onAssignInto: (tagId: string) => void
@@ -77,7 +84,10 @@ function CategoryBlock({
             slug: {cat.slug}
           </p>
           <p className="text-xs text-muted-foreground">
-            本分类下 {sortedIn.length} 个标签
+            词条 {sortedIn.length} · 首页同款收录工具{' '}
+            <span className="font-medium text-foreground tabular-nums">
+              {listedTools}
+            </span>
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -174,9 +184,12 @@ function CategoryBlock({
 export function AdminSceneCategoryManager({
   tagCategories,
   tags,
+  publicListedToolsByTagCategoryId,
 }: {
   tagCategories: TagCategory[]
   tags: AdminTagRow[]
+  /** `tag_categories.id`（小写）→ 收录工具数，与首页「按场景」卡片一致 */
+  publicListedToolsByTagCategoryId: Record<string, number>
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
@@ -290,19 +303,33 @@ export function AdminSceneCategoryManager({
           暂无场景分类。可先使用上方表单新建，或由数据库迁移写入种子分类。
         </p>
       ) : (
-        <Tabs
+        <>
+          <p className="rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-[11px] leading-snug text-muted-foreground">
+            <span className="font-medium text-foreground">Tab 数字：</span>
+            加粗为<strong className="text-foreground">收录工具数</strong>
+            （已通过、未隐藏、至少挂载一条归属本场景且未禁用标签的去重工具数，与首页「按场景找
+            AI」一致）；后方
+            <span className="text-muted-foreground">「N词」</span>
+            为本场景标签库中的<strong className="text-foreground">词条数</strong>（
+            <code className="rounded bg-muted px-0.5">tags.tag_category_id</code>
+            指向本场景的标签行数）。
+          </p>
+          <Tabs
           defaultValue={sortedCats[0]?.id}
           className="w-full gap-3"
         >
           <TabsList className="h-auto min-h-9 w-full min-w-0 flex-wrap justify-start gap-1 p-1 sm:justify-start">
             {sortedCats.map((cat) => {
-              const n = tags.filter((t) => t.tag_category_id === cat.id).length
+              const tagRows = tags.filter((t) => t.tag_category_id === cat.id)
+                .length
+              const listed =
+                publicListedToolsByTagCategoryId[canonSceneCatKey(cat.id)] ?? 0
               return (
                 <TabsTrigger
                   key={cat.id}
                   value={cat.id}
                   className="flex-none basis-auto max-w-[min(100%,240px)] shrink-0 px-2.5 py-1.5 text-left text-xs sm:text-sm"
-                  title={cat.name}
+                  title={`收录工具 ${listed}（首页「按场景」同款口径）· 词条 ${tagRows}（本场景标签库词条数）`}
                 >
                   <span className="truncate">
                     {cat.name}
@@ -310,8 +337,10 @@ export function AdminSceneCategoryManager({
                       <span className="ml-1 text-muted-foreground">·停</span>
                     ) : null}
                   </span>
-                  <span className="ml-1 shrink-0 tabular-nums text-[11px] text-muted-foreground">
-                    ({n})
+                  <span className="ml-1 shrink-0 tabular-nums text-[10px] sm:text-[11px]">
+                    <span className="font-semibold text-foreground">{listed}</span>
+                    <span className="text-muted-foreground"> · </span>
+                    <span className="text-muted-foreground">{tagRows}词</span>
                   </span>
                 </TabsTrigger>
               )
@@ -323,6 +352,10 @@ export function AdminSceneCategoryManager({
                 cat={cat}
                 tagsInCat={tags.filter((t) => t.tag_category_id === cat.id)}
                 pickerTags={tags.filter((t) => t.tag_category_id !== cat.id)}
+                listedTools={
+                  publicListedToolsByTagCategoryId[canonSceneCatKey(cat.id)] ??
+                  0
+                }
                 pending={pending}
                 onToggleDisabled={(v) => toggleDisabled(cat.id, v)}
                 onAssignInto={(tagId) => assignInto(tagId, cat.id)}
@@ -331,6 +364,7 @@ export function AdminSceneCategoryManager({
             </TabsContent>
           ))}
         </Tabs>
+        </>
       )}
     </div>
   )

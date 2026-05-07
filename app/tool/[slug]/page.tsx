@@ -86,12 +86,13 @@ export default async function ToolPage({ params }: ToolPageProps) {
   const slug = decodeURIComponent(raw ?? '').trim()
   if (!slug) notFound()
 
-  const [tool, navigation] = await Promise.all([
-    getToolBySlugCached(slug),
-    getNavigationMenuTreeStatic(),
-  ])
-
+  const tool = await getToolBySlugCached(slug)
   if (!tool) notFound()
+
+  const [navigation, sceneSummaries] = await Promise.all([
+    getNavigationMenuTreeStatic(),
+    neon.neonListPublicSceneSummariesForTool(tool.id),
+  ])
 
   const siteUrl = getSiteUrl()
   const toolUrl = `${siteUrl}${toolPublicPath(slug)}`
@@ -173,7 +174,7 @@ export default async function ToolPage({ params }: ToolPageProps) {
              * 60s ISR 会失效。
              */}
             <Suspense fallback={null}>
-              <ToolDetailPublicView tool={tool} />
+              <ToolDetailPublicView tool={tool} sceneSummaries={sceneSummaries} />
             </Suspense>
           </div>
         </main>

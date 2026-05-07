@@ -20,10 +20,13 @@ export const metadata = {
 export const dynamic = 'force-dynamic'
 
 export default async function AdminTagCategoriesPage() {
-  const [tagCategories, tags] = await Promise.all([
+  const [tagCategories, tags, listedBulk] = await Promise.all([
     neon.neonListTagCategoriesAll(),
     neon.neonAdminListTagsAll(),
+    neon.neonCountPublicListedToolsByTagCategoriesBulk(),
   ])
+
+  const publicListedToolsByTagCategoryId = Object.fromEntries(listedBulk)
 
   const totalCurated = tags.filter((t) => t.is_curated).length
   const totalUncurated = tags.length - totalCurated
@@ -71,6 +74,9 @@ export default async function AdminTagCategoriesPage() {
               隐去，标签数据不删，可再启用或迁出。
             </p>
             <p>
+              · Tab 上<strong>加粗数字</strong>为与首页「按场景找 AI」一致的<strong>收录工具数</strong>；「· N词」为该场景下词条（标签行）总数。
+            </p>
+            <p>
               · 「将已有标签加入」会修改该标签的归属分类；「移出分类」仅清空归属，不删除标签与工具关联。
             </p>
             <p>
@@ -85,7 +91,11 @@ export default async function AdminTagCategoriesPage() {
         <AdminTagCreateCard variant="scene" tagCategories={tagCategories} />
       </div>
 
-      <AdminSceneCategoryManager tagCategories={tagCategories} tags={tags} />
+      <AdminSceneCategoryManager
+        tagCategories={tagCategories}
+        tags={tags}
+        publicListedToolsByTagCategoryId={publicListedToolsByTagCategoryId}
+      />
     </div>
   )
 }

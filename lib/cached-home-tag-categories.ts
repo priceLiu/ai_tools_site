@@ -31,17 +31,18 @@ async function loadHomeTagCategoryCards(): Promise<HomeTagCategoryCard[]> {
   }
   if (cats.length === 0) return []
 
+  const bulkListedTools = await neon.neonCountPublicListedToolsByTagCategoriesBulk()
+
   const cards: HomeTagCategoryCard[] = []
   for (const cat of cats) {
     try {
-      const [topTags, tools] = await Promise.all([
-        neon.neonListTagsForCategoryWithCounts(cat.id, 5),
-        neon.neonListToolsByTagCategoryId(cat.id),
-      ])
+      const topTags = await neon.neonListTagsForCategoryWithCounts(cat.id, 5)
+      const toolCount =
+        bulkListedTools.get(String(cat.id).trim().toLowerCase()) ?? 0
       cards.push({
         category: cat,
         topTags: topTags.filter((t) => t.tool_count > 0),
-        toolCount: tools.length,
+        toolCount,
       })
     } catch (e) {
       if (process.env.NODE_ENV === 'development') {

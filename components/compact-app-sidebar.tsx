@@ -14,11 +14,12 @@ import {
   LayoutGrid,
   Users,
   Upload,
-  BarChart3,
+  Boxes,
   Heart,
   Megaphone,
   MessageSquare,
   Tag,
+  Tags,
   FolderTree,
   UserSquare,
   Layers,
@@ -180,7 +181,10 @@ export function CompactAppSidebarFrame({
     tagRoleAdminActive
   const usersAdminActive = pathname.startsWith('/admin/users')
   const importAdminActive = pathname.startsWith('/admin/import-tools')
-  const statsAdminActive = pathname.startsWith('/admin/stats')
+  const toolsStatsAdminActive = pathname.startsWith('/admin/stats')
+  const toolsTaggingAdminActive = pathname.startsWith(
+    '/admin/tools-tagging',
+  )
   const adsAdminActive = pathname.startsWith('/admin/ads')
   const commentsAdminActive = pathname.startsWith('/admin/comments')
   const reviewsAdminActive =
@@ -191,7 +195,8 @@ export function CompactAppSidebarFrame({
     !menuCategoriesAdminActive &&
     !usersAdminActive &&
     !importAdminActive &&
-    !statsAdminActive &&
+    !toolsStatsAdminActive &&
+    !toolsTaggingAdminActive &&
     !adsAdminActive
 
   return (
@@ -243,10 +248,18 @@ export function CompactAppSidebarFrame({
             />
             <NavRow
               href="/admin/stats"
-              label="工具统计"
-              Icon={BarChart3}
-              active={statsAdminActive}
+              label="工具管理"
+              Icon={Boxes}
+              active={toolsStatsAdminActive}
               onItemSelect={onItemSelect}
+            />
+            <NavRow
+              href="/admin/tools-tagging"
+              label="工具与标签"
+              Icon={Tags}
+              active={toolsTaggingAdminActive}
+              onItemSelect={onItemSelect}
+              className="pl-8 opacity-[0.92]"
             />
             <NavRow
               href="/admin/import-tools"

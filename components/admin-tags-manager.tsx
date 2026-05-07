@@ -38,14 +38,20 @@ import type { AdminTagRow, TagCategory } from '@/lib/types'
 import { Edit3, Merge, Star, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
+function canonSceneCatKey(id: string): string {
+  return String(id).trim().toLowerCase()
+}
+
 type Mode = 'curated' | 'uncurated' | 'all' | 'disabled'
 
 export function AdminTagsManager({
   tagCategories,
   tags,
+  publicListedToolsByTagCategoryId,
 }: {
   tagCategories: TagCategory[]
   tags: AdminTagRow[]
+  publicListedToolsByTagCategoryId: Record<string, number>
 }) {
   const router = useRouter()
   const [mode, setMode] = useState<Mode>('curated')
@@ -136,8 +142,9 @@ export function AdminTagsManager({
         </div>
 
         <p className="w-full basis-full text-xs text-muted-foreground">
-          使用下方 <strong>场景分类 Tab</strong> 切换表格；视图（Curated / 待清理 /{' '}
-          <strong>已禁用</strong> / 全部）与搜索对全库生效，仅有匹配结果的分类会出现 Tab。
+          场景 Tab：<strong className="text-foreground">加粗</strong>
+          为与首页一致的<strong>收录工具数</strong>；「· N词」为该场景词条总数；若与表内条数不一致，表示当前视图（Curated
+          / 待清理 / 搜索）过滤了列表。
         </p>
 
         <div className="min-w-[220px] flex-1">
@@ -171,18 +178,27 @@ export function AdminTagsManager({
           >
             <TabsList className="h-auto min-h-9 w-full min-w-0 flex-wrap justify-start gap-1 p-1">
               {sortedCats.map((cat) => {
-                const n = grouped.get(cat.id)?.length ?? 0
-                if (n === 0) return null
+                const filteredN = grouped.get(cat.id)?.length ?? 0
+                if (filteredN === 0) return null
+                const totalTags = tags.filter(
+                  (t) => t.tag_category_id === cat.id,
+                ).length
+                const listed =
+                  publicListedToolsByTagCategoryId[canonSceneCatKey(cat.id)] ?? 0
                 return (
                   <TabsTrigger
                     key={cat.id}
                     value={cat.id}
                     className="flex-none basis-auto max-w-[min(100%,240px)] shrink-0 px-2.5 py-1.5 text-left text-xs sm:text-sm"
-                    title={cat.name}
+                    title={`收录工具 ${listed}（首页一致）· 词条 ${totalTags} · 当前表 ${filteredN}`}
                   >
                     <span className="truncate">{cat.name}</span>
-                    <span className="ml-1 shrink-0 tabular-nums text-[11px] text-muted-foreground">
-                      ({n})
+                    <span className="ml-1 shrink-0 tabular-nums text-[10px] sm:text-[11px]">
+                      <span className="font-semibold text-foreground">{listed}</span>
+                      <span className="text-muted-foreground"> · {totalTags}词</span>
+                      {filteredN !== totalTags ? (
+                        <span className="text-muted-foreground"> · {filteredN}</span>
+                      ) : null}
                     </span>
                   </TabsTrigger>
                 )
@@ -213,6 +229,13 @@ export function AdminTagsManager({
                   mergeTargetPool={tags}
                   tagCategories={tagCategories}
                   router={router}
+                  publicListedToolsInScene={
+                    publicListedToolsByTagCategoryId[canonSceneCatKey(cat.id)] ??
+                    0
+                  }
+                  tagsTotalInCategory={
+                    tags.filter((t) => t.tag_category_id === cat.id).length
+                  }
                 />
               </TabsContent>
             ))}
@@ -243,6 +266,8 @@ function CategorySection({
   mergeTargetPool,
   tagCategories,
   router,
+  publicListedToolsInScene,
+  tagsTotalInCategory,
 }: {
   categoryName: string
   categorySlug: string | null
@@ -251,6 +276,8 @@ function CategorySection({
   mergeTargetPool: AdminTagRow[]
   tagCategories: TagCategory[]
   router: ReturnType<typeof useRouter>
+  publicListedToolsInScene?: number
+  tagsTotalInCategory?: number
 }) {
   const sortedTags = useMemo(
     () => [...tags].sort(compareAdminTagRowByDisplayName),
@@ -262,7 +289,18 @@ function CategorySection({
       <div className="flex items-baseline gap-2">
         <h2 className="text-base font-semibold">{categoryName}</h2>
         <span className="text-xs text-muted-foreground">
-          {sortedTags.length} 个标签
+          表内 {sortedTags.length} 条
+          {typeof publicListedToolsInScene === 'number' &&
+          typeof tagsTotalInCategory === 'number' ? (
+            <>
+              {' '}
+              · 收录工具{' '}
+              <span className="tabular-nums font-medium text-foreground">
+                {publicListedToolsInScene}
+              </span>{' '}
+              · 词条 {tagsTotalInCategory}
+            </>
+          ) : null}
         </span>
         {categorySlug && (
           <span className="text-xs text-muted-foreground">/ {categorySlug}</span>

@@ -3,8 +3,9 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { ExternalLink, Sparkles, BookOpen } from 'lucide-react'
+import { ExternalLink, Sparkles, BookOpen, FolderTree } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { ToolIntroductionDisplay } from '@/components/tool-introduction-display'
 import { ToolTagsBar } from '@/components/tool-tags-bar'
 import { normalizeIntroductionFormat } from '@/lib/introduction-format'
@@ -14,6 +15,7 @@ import { toolTagLabelsFromTool } from '@/lib/tool-tags-extract'
 import type { Tool } from '@/lib/types'
 import { trimOrNull, trimOrNullImageSrc } from '@/lib/trim-or-null'
 import type { AuthUser } from '@/lib/auth/session'
+import { tagCategoryPublicPath } from '@/lib/tag-slug'
 
 export {
   toolDetailPageGutterClass,
@@ -22,6 +24,8 @@ export {
 
 interface ToolDetailViewProps {
   tool: Tool
+  /** 由挂载标签推导的场景分类（与首页「按场景」一致） */
+  sceneSummaries?: { name: string; slug: string }[]
   /** 工具头像外层链接；传 null/false 则不包裹链接 */
   logoHref?: string | null | false
   /** 标题下方一行：分类、状态、数据等 */
@@ -42,6 +46,7 @@ interface ToolDetailViewProps {
 
 export function ToolDetailView({
   tool,
+  sceneSummaries,
   logoHref,
   badges,
   headerActions,
@@ -182,6 +187,37 @@ export function ToolDetailView({
           {panelFooter ? <div className="mt-4">{panelFooter}</div> : null}
         </CardContent>
       </Card>
+
+      {sceneSummaries && sceneSummaries.length > 0 ? (
+        <section
+          className="mb-4 rounded-xl border border-border bg-gradient-to-br from-muted/40 via-card to-muted/25 px-4 py-3.5 shadow-sm md:mb-6"
+          aria-label="所属场景"
+        >
+          <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+            <FolderTree className="h-3.5 w-3.5 shrink-0 text-primary/80" aria-hidden />
+            <span>场景分类</span>
+            <span className="font-normal text-[11px] text-muted-foreground/90">
+              （首页「按场景找 AI」聚合口径）
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {sceneSummaries.map((s) => (
+              <Link
+                key={s.slug}
+                href={tagCategoryPublicPath(s.slug)}
+                className="inline-flex"
+              >
+                <Badge
+                  variant="outline"
+                  className="border-primary/25 bg-primary/5 px-3 py-1 text-xs font-medium hover:bg-primary/10"
+                >
+                  {s.name}
+                </Badge>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {detailTags.length > 0 ? (
         <ToolTagsBar labels={detailTags} className="mb-4 md:mb-6" />
