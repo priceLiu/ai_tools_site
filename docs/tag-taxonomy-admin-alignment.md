@@ -6,7 +6,7 @@
 
 > **里程碑状态（2026-05-07）**：本节第五、六部分的 **Phase 0–5 已全部勾选完成**。下文 **§1.2** 保留的是「立项前核对」结论，不是当前缺口；若只看「有没有做完」，以 **§五 / §六** 为准。
 
-> **与现状代码对齐**：`/category` 工具列表已以 **`tool_categories`** junction 为主（辅以 `tools.category_id` 作展示主分类等）；下文个别段落仍写「仅靠 category_id」处请以 **`neonListToolsForCategoryIds`** 与迁移 **`20260507160000_tool_categories.sql`** 为准，并逐步收敛正文。**Cursor 强制流程**：开发前先读 [`.cursor/rules/taxonomy-tags-tools-categories.mdc`](../.cursor/rules/taxonomy-tags-tools-categories.mdc)。
+> **与现状代码对齐**：`/category` 工具列表已以 **`tool_categories`** junction 为主（辅以 `tools.category_id` 作展示主分类等）；下文个别段落仍写「仅靠 category_id」处请以 **`neonListToolsForCategoryIds`** 与迁移 **`20260507160000_tool_categories.sql`** 为准，并逐步收敛正文。**Cursor 强制流程**：开发前先读 [`.cursor/rules/taxonomy-tags-tools-categories.mdc`](../.cursor/rules/taxonomy-tags-tools-categories.mdc)。**工具 / 标签 / 场景 / 角色的联结与计数口径**（收录工具数、Tab 双数字、挂载 vs 关联）：见 **[`docs/tool-tag-taxonomy-counting.md`](./tool-tag-taxonomy-counting.md)**。
 
 ---
 

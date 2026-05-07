@@ -21,6 +21,17 @@ export function asIso(v: unknown): string {
   return String(v)
 }
 
+/** Postgres UUID / JS 侧字符串统一为小写，避免 `tag_category_id === cat.id` 严格相等失败 */
+function pgUuidString(raw: unknown): string {
+  return String(raw ?? '').trim().toLowerCase()
+}
+
+function pgUuidNullable(raw: unknown): string | null {
+  if (raw == null) return null
+  const s = String(raw).trim().toLowerCase()
+  return s === '' ? null : s
+}
+
 export function parseCategoryJson(raw: unknown): Category | undefined {
   if (raw == null) return undefined
   if (typeof raw !== 'object') return undefined
@@ -143,7 +154,7 @@ export function mapAdminCommentRow(r: Record<string, unknown>): AdminCommentRow 
 
 export function mapTagCategoryRow(r: Record<string, unknown>): TagCategory {
   return {
-    id: String(r.id),
+    id: pgUuidString(r.id),
     name: String(r.name),
     slug: String(r.slug),
     icon: r.icon == null ? null : String(r.icon),
@@ -167,7 +178,7 @@ export function mapRoleCategoryRow(r: Record<string, unknown>): RoleCategory {
       ? null
       : String(r.description).trim()
   return {
-    id: String(r.id),
+    id: pgUuidString(r.id),
     name: String(r.name),
     slug: String(r.slug),
     icon: r.icon == null ? null : String(r.icon),
@@ -194,10 +205,14 @@ function parseStringArray(raw: unknown): string[] {
 
 export function mapTagRow(r: Record<string, unknown>): TagRow {
   return {
-    id: String(r.id),
+    id: pgUuidString(r.id),
     name: String(r.name),
-    tag_category_id:
-      r.tag_category_id == null ? null : String(r.tag_category_id),
+    tag_category_id: pgUuidNullable(r.tag_category_id),
+    tag_category_linked_at:
+      r.tag_category_linked_at == null ||
+      String(r.tag_category_linked_at).trim() === ''
+        ? null
+        : asIso(r.tag_category_linked_at),
     is_curated: r.is_curated === true,
     aliases: parseStringArray(r.aliases),
     created_at: asIso(r.created_at),

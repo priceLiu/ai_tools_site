@@ -82,6 +82,8 @@ export interface TagRow {
   id: string
   name: string
   tag_category_id: string | null
+  /** 最近一次变更场景归属的时间；后台场景下列表按此倒序（缺列迁移前可为空） */
+  tag_category_linked_at?: string | null
   is_curated: boolean
   aliases: string[]
   created_at: string

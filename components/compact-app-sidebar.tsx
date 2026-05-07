@@ -23,6 +23,7 @@ import {
   FolderTree,
   UserSquare,
   Layers,
+  BellRing,
   type LucideIcon,
 } from 'lucide-react'
 import { AdminRegenerateStaticButton } from '@/components/admin-regenerate-static-button'
@@ -165,6 +166,7 @@ export function CompactAppSidebarFrame({
     { href: '/submit', label: 'AI 工具提交', icon: Plus },
     { href: '/account/history', label: '工具提交历史', icon: History },
     { href: '/favorites', label: '我的收藏', icon: Heart },
+    { href: '/account/follows', label: '我的关注', icon: BellRing },
     { href: '/account/profile', label: '个人信息', icon: User },
   ] as const
 
@@ -287,7 +289,7 @@ export function CompactAppSidebarFrame({
 
             <NavRow
               href="/admin/tags"
-              label="标签管理"
+              label="标签清理"
               Icon={Tag}
               active={tagsListAdminActive}
               onItemSelect={onItemSelect}

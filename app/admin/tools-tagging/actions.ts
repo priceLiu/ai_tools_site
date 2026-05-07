@@ -34,14 +34,52 @@ function parseSceneFilter(scene: string): AdminTagSceneFilter | null {
 
 export async function adminSearchToolsForTaggingAction(input: {
   query: string
+  /** 场景分类挂载工具：排除已挂上该场景词条的工具 */
+  excludeListedInTagCategoryId?: string | null
+  /** 角色分类挂载工具：排除已挂上该角色词条的工具 */
+  excludeListedInRoleCategoryId?: string | null
+  /** 场景移除挂载：仅列出至少有一条归属该场景词条的工具 */
+  onlyListedInTagCategoryId?: string | null
+  /** 角色移除挂载：仅列出至少挂载本品关联词条的工具 */
+  onlyListedInRoleCategoryId?: string | null
 }): Promise<
   | { ok: true; tools: { id: string; name: string; slug: string; status: string }[] }
   | { ok: false; error: string }
 > {
   const gate = await requireAdmin()
   if (!gate.ok) return { ok: false, error: gate.error }
+
+  let excludeListedInTaxonomy:
+    | { kind: 'scene'; tagCategoryId: string }
+    | { kind: 'role'; roleCategoryId: string }
+    | undefined
+
+  let onlyListedInTaxonomy:
+    | { kind: 'scene'; tagCategoryId: string }
+    | { kind: 'role'; roleCategoryId: string }
+    | undefined
+
+  const onlySid = (input.onlyListedInTagCategoryId ?? '').trim().toLowerCase()
+  const onlyRid = (input.onlyListedInRoleCategoryId ?? '').trim().toLowerCase()
+
+  if (onlySid && UUID_RE.test(onlySid)) {
+    onlyListedInTaxonomy = { kind: 'scene', tagCategoryId: onlySid }
+  } else if (onlyRid && UUID_RE.test(onlyRid)) {
+    onlyListedInTaxonomy = { kind: 'role', roleCategoryId: onlyRid }
+  } else {
+    const sid = (input.excludeListedInTagCategoryId ?? '').trim().toLowerCase()
+    const rid = (input.excludeListedInRoleCategoryId ?? '').trim().toLowerCase()
+    if (sid && UUID_RE.test(sid)) {
+      excludeListedInTaxonomy = { kind: 'scene', tagCategoryId: sid }
+    } else if (rid && UUID_RE.test(rid)) {
+      excludeListedInTaxonomy = { kind: 'role', roleCategoryId: rid }
+    }
+  }
+
   const tools = await neonAdminSearchToolsForTagging({
     query: input.query ?? '',
+    excludeListedInTaxonomy,
+    onlyListedInTaxonomy,
   })
   return { ok: true, tools }
 }

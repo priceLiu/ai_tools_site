@@ -18,7 +18,8 @@ import { Sparkles, Bot, Eye, Heart } from 'lucide-react'
  * `hidden md:inline-flex` 让移动端整段 Tooltip 不进 DOM，进一步省事件监听。
  */
 
-const TOOL_TIP_CONTENT_CLASS =
+/** 与首页工具卡片 hover 概述一致；其它列表（如「我的关注」紧凑格）可复用 */
+export const TOOL_TIP_CONTENT_CLASS =
   'z-50 max-w-[340px] rounded-lg border-0 bg-neutral-950 px-4 py-3 text-xs text-white shadow-xl'
 
 interface ToolCardProps {

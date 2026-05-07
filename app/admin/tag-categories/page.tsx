@@ -80,7 +80,7 @@ export default async function AdminTagCategoriesPage() {
               · 「将已有标签加入」会修改该标签的归属分类；「移出分类」仅清空归属，不删除标签与工具关联。
             </p>
             <p>
-              · 清洗（合并 / 改名 / 删除）仍在「标签管理」页完成。
+              · 清洗（合并 / 改名 / 删除）仍在「标签清理」页完成。
             </p>
           </CardDescription>
         </CardHeader>

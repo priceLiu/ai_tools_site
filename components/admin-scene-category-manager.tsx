@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import {
@@ -8,6 +8,8 @@ import {
   adminCreateSceneCategoryAction,
   adminSetSceneCategoryDisabledAction,
 } from '@/app/admin/tag-categories/actions'
+import { AdminTaxonomyAddToolPanel } from '@/components/admin-taxonomy-add-tool-panel'
+import { AdminTaxonomyRemoveToolPanel } from '@/components/admin-taxonomy-remove-tool-panel'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -36,6 +38,42 @@ function canonSceneCatKey(id: string): string {
   return String(id).trim().toLowerCase()
 }
 
+function tagsCatKey(tc: string | null | undefined): string {
+  if (tc == null || String(tc).trim() === '') return ''
+  return canonSceneCatKey(tc)
+}
+
+function parseIsoMs(iso: string | null | undefined): number {
+  if (iso == null || String(iso).trim() === '') return NaN
+  const ms = Date.parse(iso)
+  return Number.isNaN(ms) ? NaN : ms
+}
+
+function rowSceneSortMs(t: AdminTagRow): number {
+  const linked = parseIsoMs(t.tag_category_linked_at)
+  if (!Number.isNaN(linked)) return linked
+  const created = parseIsoMs(t.created_at)
+  return Number.isNaN(created) ? 0 : created
+}
+
+function compareSceneCategoryTagsNewestFirst(a: AdminTagRow, b: AdminTagRow): number {
+  const tb = rowSceneSortMs(b)
+  const ta = rowSceneSortMs(a)
+  if (tb !== ta) return tb - ta
+  return compareAdminTagRowByDisplayName(a, b)
+}
+
+function listedToolCountsEq(
+  a: Record<string, number>,
+  b: Record<string, number>,
+): boolean {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)])
+  for (const k of keys) {
+    if ((a[k] ?? 0) !== (b[k] ?? 0)) return false
+  }
+  return true
+}
+
 function CategoryBlock({
   cat,
   tagsInCat,
@@ -45,6 +83,7 @@ function CategoryBlock({
   onToggleDisabled,
   onAssignInto,
   onRemoveFromCat,
+  onToolListedBulk,
 }: {
   cat: TagCategory
   tagsInCat: AdminTagRow[]
@@ -55,10 +94,11 @@ function CategoryBlock({
   onToggleDisabled: (disabled: boolean) => void
   onAssignInto: (tagId: string) => void
   onRemoveFromCat: (tagId: string) => void
+  onToolListedBulk: (m: Record<string, number>) => void
 }) {
   const [pickOpen, setPickOpen] = useState(false)
   const sortedIn = useMemo(
-    () => [...tagsInCat].sort(compareAdminTagRowByDisplayName),
+    () => [...tagsInCat].sort(compareSceneCategoryTagsNewestFirst),
     [tagsInCat],
   )
   const sortedPick = useMemo(
@@ -101,82 +141,112 @@ function CategoryBlock({
         </div>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <Popover open={pickOpen} onOpenChange={setPickOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={pending}
-              className="h-9 justify-between gap-2"
-            >
-              将已有标签加入本分类…
-              <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-[min(420px,calc(100vw-3rem))] p-0" align="start">
-            <Command>
-              <CommandInput placeholder="搜索标签名称…" />
-              <CommandList>
-                <CommandEmpty>暂无可迁入的标签（可能已全部在本分类或未建标签）</CommandEmpty>
-                <CommandGroup heading="迁入到本分类">
-                  {sortedPick.map((t) => (
-                    <CommandItem
-                      key={t.id}
-                      value={t.name}
-                      onSelect={() => {
-                        setPickOpen(false)
-                        onAssignInto(t.id)
-                      }}
-                    >
-                      <span>{t.name}</span>
-                      {t.category_name ? (
-                        <span className="ml-auto text-[10px] text-muted-foreground">
-                          {t.category_name}
-                        </span>
-                      ) : null}
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
-      </div>
-
-      {sortedIn.length === 0 ? (
-        <p className="mt-3 text-sm text-muted-foreground">
-          尚无标签挂载；可使用上方选择器迁入，或通过「新建标签」挂到本分类。
-        </p>
-      ) : (
-        <ul className="mt-3 max-h-[min(520px,55vh)] divide-y divide-border overflow-y-auto rounded-md border overscroll-contain">
-          {sortedIn.map((t) => (
-            <li
-              key={t.id}
-              className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
-            >
-              <span className="font-medium">{t.name}</span>
-              <div className="flex items-center gap-2">
-                <span className="tabular-nums text-xs text-muted-foreground">
-                  工具数 {t.tool_count}
-                </span>
+      <Tabs defaultValue="tags" className="mt-3 w-full gap-2">
+        <TabsList className="h-auto min-h-9 w-full min-w-0 flex-wrap justify-start gap-1">
+          <TabsTrigger value="tags" className="px-2.5 text-[11px] sm:text-xs">
+            关联标签
+          </TabsTrigger>
+          <TabsTrigger value="tools" className="px-2.5 text-[11px] sm:text-xs">
+            挂载工具
+          </TabsTrigger>
+          <TabsTrigger value="unmount" className="px-2.5 text-[11px] sm:text-xs">
+            移除挂载
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="tags" className="mt-3 focus-visible:outline-none">
+          <div className="flex flex-wrap items-center gap-2">
+            <Popover open={pickOpen} onOpenChange={setPickOpen}>
+              <PopoverTrigger asChild>
                 <Button
                   type="button"
-                  variant="ghost"
-                  size="icon"
+                  variant="outline"
+                  size="sm"
                   disabled={pending}
-                  className="h-8 w-8 shrink-0 text-destructive"
-                  title="移出分类（不写库删标签）"
-                  onClick={() => onRemoveFromCat(t.id)}
+                  className="h-9 justify-between gap-2"
                 >
-                  <Trash2 className="h-4 w-4" />
+                  将已有标签加入本分类…
+                  <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
                 </Button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+              </PopoverTrigger>
+              <PopoverContent className="w-[min(420px,calc(100vw-3rem))] p-0" align="start">
+                <Command>
+                  <CommandInput placeholder="搜索标签名称…" />
+                  <CommandList>
+                    <CommandEmpty>暂无可迁入的标签（可能已全部在本分类或未建标签）</CommandEmpty>
+                    <CommandGroup heading="迁入到本分类">
+                      {sortedPick.map((t) => (
+                        <CommandItem
+                          key={t.id}
+                          value={`${t.name} ${t.id}`}
+                          onSelect={() => {
+                            setPickOpen(false)
+                            onAssignInto(t.id)
+                          }}
+                        >
+                          <span>{t.name}</span>
+                          {t.category_name ? (
+                            <span className="ml-auto text-[10px] text-muted-foreground">
+                              {t.category_name}
+                            </span>
+                          ) : null}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          {sortedIn.length === 0 ? (
+            <p className="mt-3 text-sm text-muted-foreground">
+              尚无标签挂载；可使用上方选择器迁入，或通过「新建标签」挂到本分类。
+            </p>
+          ) : (
+            <ul className="mt-3 max-h-[min(520px,55vh)] divide-y divide-border overflow-y-auto rounded-md border overscroll-contain">
+              {sortedIn.map((t) => (
+                <li
+                  key={t.id}
+                  className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
+                >
+                  <span className="font-medium">{t.name}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="tabular-nums text-xs text-muted-foreground">
+                      工具数 {t.tool_count}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      disabled={pending}
+                      className="h-8 w-8 shrink-0 text-destructive"
+                      title="移出分类（不写库删标签）"
+                      onClick={() => onRemoveFromCat(t.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </TabsContent>
+        <TabsContent value="tools" className="mt-3 focus-visible:outline-none">
+          <AdminTaxonomyAddToolPanel
+            variant="scene"
+            taxonomyId={cat.id}
+            tagsInTaxonomy={tagsInCat}
+            onListedBulk={onToolListedBulk}
+          />
+        </TabsContent>
+        <TabsContent value="unmount" className="mt-3 focus-visible:outline-none">
+          <AdminTaxonomyRemoveToolPanel
+            variant="scene"
+            taxonomyId={cat.id}
+            onListedBulk={onToolListedBulk}
+          />
+        </TabsContent>
+      </Tabs>
     </section>
   )
 }
@@ -194,6 +264,52 @@ export function AdminSceneCategoryManager({
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [newName, setNewName] = useState('')
+  /** Server Action 已写入但 RSC refresh 尚未带上新列表时，用返回行覆盖展示 */
+  const [tagRowPatchById, setTagRowPatchById] = useState<
+    Record<string, AdminTagRow>
+  >({})
+  /** 迁入/迁出后立即套用服务端重算的收录工具数（整表），避免 Tab 加粗数落后于列表 */
+  const [listedSnapshot, setListedSnapshot] = useState<Record<
+    string,
+    number
+  > | null>(null)
+
+  const tagsDisplay = useMemo(
+    () => tags.map((t) => tagRowPatchById[t.id] ?? t),
+    [tags, tagRowPatchById],
+  )
+
+  const listedEffective =
+    listedSnapshot ?? publicListedToolsByTagCategoryId
+
+  useEffect(() => {
+    if (!listedSnapshot) return
+    if (
+      listedToolCountsEq(listedSnapshot, publicListedToolsByTagCategoryId)
+    ) {
+      setListedSnapshot(null)
+    }
+  }, [publicListedToolsByTagCategoryId, listedSnapshot])
+
+  useEffect(() => {
+    setTagRowPatchById((prev) => {
+      if (Object.keys(prev).length === 0) return prev
+      const next = { ...prev }
+      let changed = false
+      for (const id of Object.keys(next)) {
+        const srv = tags.find((x) => x.id === id)
+        const want = next[id]
+        if (
+          srv &&
+          tagsCatKey(srv.tag_category_id) === tagsCatKey(want.tag_category_id)
+        ) {
+          delete next[id]
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [tags])
 
   const sortedCats = useMemo(
     () => [...tagCategories].sort((a, b) => a.sort_order - b.sort_order),
@@ -214,7 +330,7 @@ export function AdminSceneCategoryManager({
       }
       toast.success('已新建场景分类')
       setNewName('')
-      router.refresh()
+      await router.refresh()
     })
   }
 
@@ -229,7 +345,7 @@ export function AdminSceneCategoryManager({
         return
       }
       toast.success(next ? '已禁用：首页与子页将不再展示该分类' : '已重新启用')
-      router.refresh()
+      await router.refresh()
     })
   }
 
@@ -243,8 +359,10 @@ export function AdminSceneCategoryManager({
         toast.error(r.error ?? '失败')
         return
       }
+      setTagRowPatchById((p) => ({ ...p, [r.tag.id]: r.tag }))
+      setListedSnapshot(r.publicListedToolsByTagCategoryId)
       toast.success('标签已归入该场景分类')
-      router.refresh()
+      await router.refresh()
     })
   }
 
@@ -258,8 +376,10 @@ export function AdminSceneCategoryManager({
         toast.error(r.error ?? '失败')
         return
       }
+      setTagRowPatchById((p) => ({ ...p, [r.tag.id]: r.tag }))
+      setListedSnapshot(r.publicListedToolsByTagCategoryId)
       toast.success('已移出该场景分类（标签仍保留）')
-      router.refresh()
+      await router.refresh()
     })
   }
 
@@ -312,7 +432,9 @@ export function AdminSceneCategoryManager({
             <span className="text-muted-foreground">「N词」</span>
             为本场景标签库中的<strong className="text-foreground">词条数</strong>（
             <code className="rounded bg-muted px-0.5">tags.tag_category_id</code>
-            指向本场景的标签行数）。
+            指向本场景的标签行数）。详情区「挂载工具 / 移除挂载」读写{' '}
+            <code className="rounded bg-muted px-0.5 text-[11px]">tool_tags</code>
+            ：挂载并入本分类启用词条；移除仅摘掉归属本场景的词条行。
           </p>
           <Tabs
           defaultValue={sortedCats[0]?.id}
@@ -320,10 +442,14 @@ export function AdminSceneCategoryManager({
         >
           <TabsList className="h-auto min-h-9 w-full min-w-0 flex-wrap justify-start gap-1 p-1 sm:justify-start">
             {sortedCats.map((cat) => {
-              const tagRows = tags.filter((t) => t.tag_category_id === cat.id)
-                .length
+              const tagRows = tagsDisplay.filter(
+                (t) =>
+                  t.tag_category_id != null &&
+                  canonSceneCatKey(t.tag_category_id) ===
+                    canonSceneCatKey(cat.id),
+              ).length
               const listed =
-                publicListedToolsByTagCategoryId[canonSceneCatKey(cat.id)] ?? 0
+                listedEffective[canonSceneCatKey(cat.id)] ?? 0
               return (
                 <TabsTrigger
                   key={cat.id}
@@ -350,16 +476,26 @@ export function AdminSceneCategoryManager({
             <TabsContent key={cat.id} value={cat.id} className="mt-0 focus-visible:outline-none">
               <CategoryBlock
                 cat={cat}
-                tagsInCat={tags.filter((t) => t.tag_category_id === cat.id)}
-                pickerTags={tags.filter((t) => t.tag_category_id !== cat.id)}
+                tagsInCat={tagsDisplay.filter(
+                  (t) =>
+                    t.tag_category_id != null &&
+                    canonSceneCatKey(t.tag_category_id) ===
+                      canonSceneCatKey(cat.id),
+                )}
+                pickerTags={tagsDisplay.filter(
+                  (t) =>
+                    t.tag_category_id == null ||
+                    canonSceneCatKey(t.tag_category_id) !==
+                      canonSceneCatKey(cat.id),
+                )}
                 listedTools={
-                  publicListedToolsByTagCategoryId[canonSceneCatKey(cat.id)] ??
-                  0
+                  listedEffective[canonSceneCatKey(cat.id)] ?? 0
                 }
                 pending={pending}
                 onToggleDisabled={(v) => toggleDisabled(cat.id, v)}
                 onAssignInto={(tagId) => assignInto(tagId, cat.id)}
                 onRemoveFromCat={(tagId) => removeFromCat(tagId)}
+                onToolListedBulk={(m) => setListedSnapshot(m)}
               />
             </TabsContent>
           ))}

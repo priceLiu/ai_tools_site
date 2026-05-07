@@ -11,6 +11,7 @@ alwaysApply: true
 
 1. **读本规则全文**（本节 + 第二节关系表）。
 2. **打开并对照 canonical 文档**（以仓库最新代码为准；文档与代码冲突时以代码与迁移为准，并应顺手修正文档）：
+   - [`docs/tool-tag-taxonomy-counting.md`](docs/tool-tag-taxonomy-counting.md) — **工具 / 标签 / 场景 / 角色**：联结关系、**计数口径**、后台操作语义与重要边界。
    - [`docs/tag-taxonomy-admin-alignment.md`](docs/tag-taxonomy-admin-alignment.md) — 四条轴线、后台能力、历史决策。
    - [`docs/label.md`](docs/label.md) — 场景 / 标签 / 角色与 URL。
 3. **用一两句话写清**：本次改动触碰哪几条「轴线」、是否改变前台列表/计数口径、是否需要缓存与 `revalidate`。
@@ -59,4 +60,4 @@ alwaysApply: true
 
 ## 四、文档维护
 
-若代码层面更改了上述任一关系（例如列表改为并集策略、热门改为纯 junction），须同步更新 **`docs/tag-taxonomy-admin-alignment.md`** 或 **`docs/label.md`** 相应段落，避免后续 agent 误读旧段落。
+若代码层面更改了上述任一关系（例如列表改为并集策略、热门改为纯 junction）、或变更 **场景/角色收录计数 JOIN**，须同步更新 **`docs/tool-tag-taxonomy-counting.md`**（计数与关系口径）、**`docs/tag-taxonomy-admin-alignment.md`** 或 **`docs/label.md`** 相应段落，避免后续 agent 误读旧段落。

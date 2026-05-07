@@ -114,7 +114,7 @@ export function AdminTagCreateCard(props: AdminTagCreateCardProps) {
     variant === 'scene'
       ? '访客提交工具时仅能使用「自动提取标签」，词表自此入口与清洗流程扩展；名称库内唯一。此处选择的「场景分类」写入 tags.tag_category_id，用于 /tag-category 运营编排。'
       : variant === 'role'
-        ? '自动提取与词典匹配仍可读到此标签。此处仅选择「角色分类」：创建后会写入 role_category_tags，不修改 tags.tag_category_id；场景归属可在「场景分类管理」或「标签管理」另选。'
+        ? '自动提取与词典匹配仍可读到此标签。此处仅选择「角色分类」：创建后会写入 role_category_tags，不修改 tags.tag_category_id；场景归属可在「场景分类管理」或「标签清理」另选。'
         : '自动提取与词典匹配仍可读到此标签。此处仅选择「菜单分类」（左侧产品线 categories）：创建后会写入 category_tags，不改变工具的 category_id，也不写入标签的场景归属；后者可在「场景分类管理」维护。'
 
   return (

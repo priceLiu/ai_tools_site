@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import {
@@ -9,6 +9,8 @@ import {
   adminSetRoleCategoryDisabledAction,
   adminUnlinkTagFromRoleCategoryAction,
 } from '@/app/admin/role-categories/actions'
+import { AdminTaxonomyAddToolPanel } from '@/components/admin-taxonomy-add-tool-panel'
+import { AdminTaxonomyRemoveToolPanel } from '@/components/admin-taxonomy-remove-tool-panel'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -33,22 +35,41 @@ import { compareAdminTagRowByDisplayName } from '@/lib/tag-name-sort'
 import type { AdminTagRow, RoleCategory } from '@/lib/types'
 import { ChevronsUpDown, Trash2 } from 'lucide-react'
 
+function canonRoleKey(id: string): string {
+  return String(id).trim().toLowerCase()
+}
+
+function listedToolCountsEq(
+  a: Record<string, number>,
+  b: Record<string, number>,
+): boolean {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)])
+  for (const k of keys) {
+    if ((a[k] ?? 0) !== (b[k] ?? 0)) return false
+  }
+  return true
+}
+
 function RoleBlock({
   rc,
   tagsInRole,
   pickerTags,
+  listedTools,
   pending,
   onToggleDisabled,
   onAssignInto,
   onRemoveLink,
+  onToolListedBulk,
 }: {
   rc: RoleCategory
   tagsInRole: AdminTagRow[]
   pickerTags: AdminTagRow[]
+  listedTools: number
   pending: boolean
   onToggleDisabled: (disabled: boolean) => void
   onAssignInto: (tagId: string) => void
   onRemoveLink: (tagId: string) => void
+  onToolListedBulk: (m: Record<string, number>) => void
 }) {
   const [pickOpen, setPickOpen] = useState(false)
   const sortedIn = useMemo(
@@ -78,7 +99,11 @@ function RoleBlock({
             slug: {rc.slug}
           </p>
           <p className="text-xs text-muted-foreground">
-            本品通过 {sortedIn.length} 个关联标签聚合工具（不改标签的场景归属）
+            词条 {sortedIn.length} · 首页同款收录工具{' '}
+            <span className="font-medium text-foreground tabular-nums">
+              {listedTools}
+            </span>
+            <span className="text-muted-foreground">（role_category_tags → tool_tags）</span>
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -92,82 +117,112 @@ function RoleBlock({
         </div>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <Popover open={pickOpen} onOpenChange={setPickOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={pending}
-              className="h-9 justify-between gap-2"
-            >
-              将标签加入本品…
-              <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-[min(420px,calc(100vw-3rem))] p-0" align="start">
-            <Command>
-              <CommandInput placeholder="搜索标签名称…" />
-              <CommandList>
-                <CommandEmpty>暂无未关联标签</CommandEmpty>
-                <CommandGroup heading="勾选加入本品">
-                  {sortedPick.map((t) => (
-                    <CommandItem
-                      key={t.id}
-                      value={t.name}
-                      onSelect={() => {
-                        setPickOpen(false)
-                        onAssignInto(t.id)
-                      }}
-                    >
-                      <span>{t.name}</span>
-                      {t.category_name ? (
-                        <span className="ml-auto text-[10px] text-muted-foreground">
-                          {t.category_name}
-                        </span>
-                      ) : null}
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
-      </div>
-
-      {sortedIn.length === 0 ? (
-        <p className="mt-3 text-sm text-muted-foreground">
-          尚无关联标签；本角色页的推荐标签与聚合工具均由关联标签推导。
-        </p>
-      ) : (
-        <ul className="mt-3 max-h-[min(520px,55vh)] divide-y divide-border overflow-y-auto rounded-md border overscroll-contain">
-          {sortedIn.map((t) => (
-            <li
-              key={t.id}
-              className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
-            >
-              <span className="font-medium">{t.name}</span>
-              <div className="flex items-center gap-2">
-                <span className="tabular-nums text-xs text-muted-foreground">
-                  工具数 {t.tool_count}
-                </span>
+      <Tabs defaultValue="tags" className="mt-3 w-full gap-2">
+        <TabsList className="h-auto min-h-9 w-full min-w-0 flex-wrap justify-start gap-1">
+          <TabsTrigger value="tags" className="px-2.5 text-[11px] sm:text-xs">
+            关联标签
+          </TabsTrigger>
+          <TabsTrigger value="tools" className="px-2.5 text-[11px] sm:text-xs">
+            挂载工具
+          </TabsTrigger>
+          <TabsTrigger value="unmount" className="px-2.5 text-[11px] sm:text-xs">
+            移除挂载
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="tags" className="mt-3 focus-visible:outline-none">
+          <div className="flex flex-wrap items-center gap-2">
+            <Popover open={pickOpen} onOpenChange={setPickOpen}>
+              <PopoverTrigger asChild>
                 <Button
                   type="button"
-                  variant="ghost"
-                  size="icon"
+                  variant="outline"
+                  size="sm"
                   disabled={pending}
-                  className="h-8 w-8 shrink-0 text-destructive"
-                  title="移出本品（不写库删标签）"
-                  onClick={() => onRemoveLink(t.id)}
+                  className="h-9 justify-between gap-2"
                 >
-                  <Trash2 className="h-4 w-4" />
+                  将已有标签加入本品…
+                  <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
                 </Button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+              </PopoverTrigger>
+              <PopoverContent className="w-[min(420px,calc(100vw-3rem))] p-0" align="start">
+                <Command>
+                  <CommandInput placeholder="搜索标签名称…" />
+                  <CommandList>
+                    <CommandEmpty>暂无未关联标签</CommandEmpty>
+                    <CommandGroup heading="加入本品（role_category_tags）">
+                      {sortedPick.map((t) => (
+                        <CommandItem
+                          key={t.id}
+                          value={`${t.name} ${t.id}`}
+                          onSelect={() => {
+                            setPickOpen(false)
+                            onAssignInto(t.id)
+                          }}
+                        >
+                          <span>{t.name}</span>
+                          {t.category_name ? (
+                            <span className="ml-auto text-[10px] text-muted-foreground">
+                              {t.category_name}
+                            </span>
+                          ) : null}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          {sortedIn.length === 0 ? (
+            <p className="mt-3 text-sm text-muted-foreground">
+              尚无关联标签；本角色页的推荐标签与聚合工具均由关联标签推导。
+            </p>
+          ) : (
+            <ul className="mt-3 max-h-[min(520px,55vh)] divide-y divide-border overflow-y-auto rounded-md border overscroll-contain">
+              {sortedIn.map((t) => (
+                <li
+                  key={t.id}
+                  className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
+                >
+                  <span className="font-medium">{t.name}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="tabular-nums text-xs text-muted-foreground">
+                      工具数 {t.tool_count}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      disabled={pending}
+                      className="h-8 w-8 shrink-0 text-destructive"
+                      title="移出本品（不写库删标签）"
+                      onClick={() => onRemoveLink(t.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </TabsContent>
+        <TabsContent value="tools" className="mt-3 focus-visible:outline-none">
+          <AdminTaxonomyAddToolPanel
+            variant="role"
+            taxonomyId={rc.id}
+            tagsInTaxonomy={tagsInRole}
+            onListedBulk={onToolListedBulk}
+          />
+        </TabsContent>
+        <TabsContent value="unmount" className="mt-3 focus-visible:outline-none">
+          <AdminTaxonomyRemoveToolPanel
+            variant="role"
+            taxonomyId={rc.id}
+            onListedBulk={onToolListedBulk}
+          />
+        </TabsContent>
+      </Tabs>
     </section>
   )
 }
@@ -176,22 +231,41 @@ export function AdminRoleCategoryManager({
   roleCategories,
   tags,
   links,
+  publicListedToolsByRoleCategoryId,
 }: {
   roleCategories: RoleCategory[]
   tags: AdminTagRow[]
   links: { role_category_id: string; tag_id: string }[]
+  /** `role_categories.id`（小写）→ 收录工具数，与首页「按角色」同源 */
+  publicListedToolsByRoleCategoryId: Record<string, number>
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [newName, setNewName] = useState('')
+  const [listedSnapshot, setListedSnapshot] = useState<Record<
+    string,
+    number
+  > | null>(null)
+
+  const listedEffective =
+    listedSnapshot ?? publicListedToolsByRoleCategoryId
+
+  useEffect(() => {
+    if (!listedSnapshot) return
+    if (
+      listedToolCountsEq(listedSnapshot, publicListedToolsByRoleCategoryId)
+    ) {
+      setListedSnapshot(null)
+    }
+  }, [publicListedToolsByRoleCategoryId, listedSnapshot])
 
   const tagIdsByRoleId = useMemo(() => {
     const m = new Map<string, Set<string>>()
     for (const l of links) {
-      if (!m.has(l.role_category_id)) {
-        m.set(l.role_category_id, new Set())
-      }
-      m.get(l.role_category_id)!.add(l.tag_id)
+      const rid = canonRoleKey(l.role_category_id)
+      const tid = canonRoleKey(l.tag_id)
+      if (!m.has(rid)) m.set(rid, new Set())
+      m.get(rid)!.add(tid)
     }
     return m
   }, [links])
@@ -215,7 +289,7 @@ export function AdminRoleCategoryManager({
       }
       toast.success('已新建角色分类')
       setNewName('')
-      router.refresh()
+      await router.refresh()
     })
   }
 
@@ -230,7 +304,7 @@ export function AdminRoleCategoryManager({
         return
       }
       toast.success(next ? '已禁用：前台条带与子页将不再展示本品' : '已重新启用')
-      router.refresh()
+      await router.refresh()
     })
   }
 
@@ -245,7 +319,7 @@ export function AdminRoleCategoryManager({
         return
       }
       toast.success('标签已关联到该角色')
-      router.refresh()
+      await router.refresh()
     })
   }
 
@@ -260,18 +334,38 @@ export function AdminRoleCategoryManager({
         return
       }
       toast.success('已移出关联（标签仍保留）')
-      router.refresh()
+      await router.refresh()
     })
   }
 
   return (
     <div className="space-y-6">
+      <p className="rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-[11px] leading-snug text-muted-foreground">
+        <span className="font-medium text-foreground">Tab 数字：</span>
+        加粗为<strong className="text-foreground">收录工具数</strong>
+        （已通过、未隐藏、经本品关联标签命中
+        <code className="mx-0.5 rounded bg-muted px-0.5 text-[10px]">tool_tags</code>
+        的去重工具数，与首页「按角色」一致）；后方
+        <span className="text-muted-foreground">「N词」</span>
+        为本品在
+        <code className="mx-0.5 rounded bg-muted px-0.5 text-[10px]">
+          role_category_tags
+        </code>
+        中的<strong className="text-foreground">关联标签数</strong>。详情区「挂载工具 / 移除挂载」读写
+        <code className="mx-0.5 rounded bg-muted px-0.5 text-[10px]">tool_tags</code>
+        ：挂载并入本品启用词条；移除仅摘掉本品在{' '}
+        <code className="mx-0.5 rounded bg-muted px-0.5 text-[10px]">
+          role_category_tags
+        </code>{' '}
+        下的词条链接。
+      </p>
+
       <section className="rounded-lg border border-dashed border-border bg-muted/20 p-4">
         <Label htmlFor="new-role-cat-name" className="text-sm font-medium">
           新建角色分类
         </Label>
         <p className="mt-1 text-xs text-muted-foreground">
-          名称站内唯一；URL slug 自动生成。新建后在下方切换标签页关联标签或禁用前台展示。
+          名称站内唯一；URL slug 自动生成。新建后在下方切换标签页维护本品。
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           <Input
@@ -318,13 +412,15 @@ export function AdminRoleCategoryManager({
         <Tabs defaultValue={sortedRoles[0]?.id} className="w-full gap-3">
           <TabsList className="h-auto min-h-9 w-full min-w-0 flex-wrap justify-start gap-1 p-1 sm:justify-start">
             {sortedRoles.map((rc) => {
-              const n = tagIdsByRoleId.get(rc.id)?.size ?? 0
+              const tagRows = tagIdsByRoleId.get(canonRoleKey(rc.id))?.size ?? 0
+              const listed =
+                listedEffective[canonRoleKey(rc.id)] ?? 0
               return (
                 <TabsTrigger
                   key={rc.id}
                   value={rc.id}
-                  className="max-w-[min(100%,240px)] shrink-0 basis-auto flex-none px-2.5 py-1.5 text-left text-xs sm:text-sm"
-                  title={rc.name}
+                  className="flex-none basis-auto max-w-[min(100%,240px)] shrink-0 px-2.5 py-1.5 text-left text-xs sm:text-sm"
+                  title={`收录工具 ${listed} · 关联标签 ${tagRows}`}
                 >
                   <span className="truncate">
                     {rc.name}
@@ -332,17 +428,21 @@ export function AdminRoleCategoryManager({
                       <span className="ml-1 text-muted-foreground">·停</span>
                     ) : null}
                   </span>
-                  <span className="ml-1 shrink-0 tabular-nums text-[11px] text-muted-foreground">
-                    ({n})
+                  <span className="ml-1 shrink-0 tabular-nums text-[10px] sm:text-[11px]">
+                    <span className="font-semibold text-foreground">{listed}</span>
+                    <span className="text-muted-foreground"> · </span>
+                    <span className="text-muted-foreground">{tagRows}词</span>
                   </span>
                 </TabsTrigger>
               )
             })}
           </TabsList>
           {sortedRoles.map((rc) => {
-            const inSet = tagIdsByRoleId.get(rc.id) ?? new Set<string>()
+            const inSet = tagIdsByRoleId.get(canonRoleKey(rc.id)) ?? new Set<string>()
             const tagsInRole = tags.filter((t) => inSet.has(t.id))
             const pickerTags = tags.filter((t) => !inSet.has(t.id))
+            const listed =
+              listedEffective[canonRoleKey(rc.id)] ?? 0
             return (
               <TabsContent
                 key={rc.id}
@@ -353,10 +453,12 @@ export function AdminRoleCategoryManager({
                   rc={rc}
                   tagsInRole={tagsInRole}
                   pickerTags={pickerTags}
+                  listedTools={listed}
                   pending={pending}
                   onToggleDisabled={(v) => toggleDisabled(rc.id, v)}
                   onAssignInto={(tagId) => assignInto(tagId, rc.id)}
                   onRemoveLink={(tagId) => removeLink(tagId, rc.id)}
+                  onToolListedBulk={(m) => setListedSnapshot(m)}
                 />
               </TabsContent>
             )

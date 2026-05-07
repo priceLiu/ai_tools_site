@@ -147,7 +147,7 @@ export default async function AdminMenuCategoriesPage() {
             </p>
             <p>
               · <code className="rounded bg-muted px-1">category_tags</code>{' '}
-              仍为菜单↔标签的运营联结（与工具挂载无关）；标签新建与清洗请在「标签管理」等页面操作。
+              仍为菜单↔标签的运营联结（与工具挂载无关）；标签新建与清洗请在「标签清理」等页面操作。
             </p>
             <p>
               · 侧栏<strong>菜单链接</strong>请在「菜单管理」维护。

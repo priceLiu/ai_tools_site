@@ -27,6 +27,15 @@ import type { IntroductionFormat } from '@/lib/introduction-format'
 import { toolIntroductionPreviewDedup } from '@/lib/tool-dedup'
 import { publicizeToolImages, publicizeToolLogoUrl } from '@/lib/public-tool-image-url'
 import { slugifyTagCategoryName } from '@/lib/tag-category-slug'
+import {
+  ACCOUNT_FOLLOW_TOOLS_MAX,
+  type UserFollowCategoryJoined,
+  type UserFollowToolEntry,
+} from '@/lib/account-follows-types'
+import { neonTagsHasTagCategoryLinkedAtColumn } from '@/lib/neon/tags-linked-at-column'
+
+export type { UserFollowCategoryJoined, UserFollowToolEntry }
+export { ACCOUNT_FOLLOW_TOOLS_MAX }
 
 /** 与首页「最新收录」limit 一致 */
 export const HOME_LATEST_MAX = 15
@@ -876,6 +885,7 @@ export async function neonSetToolTagsForTool(params: {
 
   const hints = params.tagCategoryHints
   if (hints && Object.keys(hints).length > 0) {
+    const linkedAtCol = await neonTagsHasTagCategoryLinkedAtColumn()
     for (const n of orderedNames) {
       const lname = n.toLowerCase()
       if (!Object.prototype.hasOwnProperty.call(hints, lname)) continue
@@ -893,8 +903,20 @@ export async function neonSetToolTagsForTool(params: {
       const isNewRow = insertedLowerNames.has(lname)
       if (isNewRow) {
         if (catUuid === null) {
+          if (linkedAtCol) {
+            await sql`
+              UPDATE tags SET tag_category_id = NULL, tag_category_linked_at = now()
+              WHERE id = ${tagId}
+            `
+          } else {
+            await sql`
+              UPDATE tags SET tag_category_id = NULL WHERE id = ${tagId}
+            `
+          }
+        } else if (linkedAtCol) {
           await sql`
-            UPDATE tags SET tag_category_id = NULL WHERE id = ${tagId}
+            UPDATE tags SET tag_category_id = ${catUuid}, tag_category_linked_at = now()
+            WHERE id = ${tagId}
           `
         } else {
           await sql`
@@ -902,9 +924,16 @@ export async function neonSetToolTagsForTool(params: {
           `
         }
       } else if (catUuid !== null) {
-        await sql`
-          UPDATE tags SET tag_category_id = ${catUuid} WHERE id = ${tagId}
-        `
+        if (linkedAtCol) {
+          await sql`
+            UPDATE tags SET tag_category_id = ${catUuid}, tag_category_linked_at = now()
+            WHERE id = ${tagId}
+          `
+        } else {
+          await sql`
+            UPDATE tags SET tag_category_id = ${catUuid} WHERE id = ${tagId}
+          `
+        }
       }
     }
   }
@@ -937,6 +966,294 @@ export async function neonSetToolTagsForTool(params: {
   }
 
   return {}
+}
+
+const ADMIN_LISTED_TOOL_MAX_TAGS = 20
+
+/**
+ * 在已通过且未隐藏的工具上追加标签（不改动 tags 表）。
+ * - `tagIdsToAppend` **非空**：仅追加这些 id，且必须 ⊆ allowedTagIds；合并后超过 20 枚则失败。
+ * - `tagIdsToAppend` **为空**：按分类挂载——在保留原有顺序的前提下，依次并入 allowedTagIds（顺序见列表查询），直到单工具 20 枚上限。
+ */
+export async function neonAdminAppendListedToolTags(params: {
+  toolId: string
+  tagIdsToAppend: string[]
+  allowedTagIds: string[]
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const sql = getNeonSql()
+  const toolId = String(params.toolId).trim().toLowerCase()
+  const norm = (x: string) => String(x).trim().toLowerCase()
+  const allowedOrdered = params.allowedTagIds.map(norm).filter(Boolean)
+  const allowed = new Set(allowedOrdered)
+
+  const explicitAppend = [
+    ...new Set(
+      params.tagIdsToAppend
+        .map(norm)
+        .filter(Boolean)
+        .filter((id) => allowed.has(id)),
+    ),
+  ]
+
+  const categoryWideMount = explicitAppend.length === 0
+  const appendIds = categoryWideMount ? allowedOrdered : explicitAppend
+
+  if (appendIds.length === 0) {
+    return {
+      ok: false,
+      error: '本分类下没有可用的启用标签，请先到「关联标签」维护词条',
+    }
+  }
+
+  const toolRows = await sql`
+    SELECT id FROM tools
+    WHERE id = ${toolId}
+      AND status = 'approved'
+      AND COALESCE(is_disabled, false) = false
+    LIMIT 1
+  `
+  if (!toolRows[0]) {
+    return { ok: false, error: '工具不存在、未审核通过或已隐藏，无法挂载' }
+  }
+
+  if (!categoryWideMount) {
+    const alive = await sql`
+      SELECT id FROM tags
+      WHERE id = ANY(${appendIds}::uuid[])
+        AND COALESCE(is_disabled, false) = false
+    `
+    if (alive.length !== appendIds.length) {
+      return { ok: false, error: '包含无效或已禁用的标签' }
+    }
+  }
+
+  const existingRows = await sql`
+    SELECT tag_id FROM tool_tags WHERE tool_id = ${toolId} ORDER BY sort_order ASC
+  `
+  const existing = (existingRows as { tag_id: string }[]).map((r) =>
+    String(r.tag_id).trim().toLowerCase(),
+  )
+
+  const merged: string[] = [...existing]
+  if (categoryWideMount) {
+    for (const id of appendIds) {
+      if (merged.includes(id)) continue
+      if (merged.length >= ADMIN_LISTED_TOOL_MAX_TAGS) break
+      merged.push(id)
+    }
+  } else {
+    for (const id of appendIds) {
+      if (!merged.includes(id)) merged.push(id)
+    }
+    if (merged.length > ADMIN_LISTED_TOOL_MAX_TAGS) {
+      return {
+        ok: false,
+        error: `单工具最多 ${ADMIN_LISTED_TOOL_MAX_TAGS} 个标签，合并后将超限，请先到「工具与标签」精简`,
+      }
+    }
+  }
+
+  if (merged.length > 0) {
+    const aliveMerged = await sql`
+      SELECT id FROM tags
+      WHERE id = ANY(${merged}::uuid[])
+        AND COALESCE(is_disabled, false) = false
+    `
+    if (aliveMerged.length !== merged.length) {
+      return { ok: false, error: '包含无效或已禁用的标签' }
+    }
+  }
+
+  const needWrite =
+    merged.length !== existing.length ||
+    merged.some((id, i) => id !== existing[i])
+
+  if (!needWrite) return { ok: true }
+
+  await sql`DELETE FROM tool_tags WHERE tool_id = ${toolId}`
+  const toolIdsArr = merged.map(() => toolId)
+  const ordersArr = merged.map((_, i) => i)
+  await sql`
+    INSERT INTO tool_tags (tool_id, tag_id, sort_order)
+    SELECT * FROM unnest(
+      ${toolIdsArr}::uuid[],
+      ${merged}::uuid[],
+      ${ordersArr}::int[]
+    )
+  `
+  return { ok: true }
+}
+
+/** 从工具的 tool_tags 中移除归属指定场景的词条（`tags.tag_category_id`，含禁用词条）；不改 tags 表。 */
+export async function neonAdminStripSceneTagsFromListedTool(params: {
+  toolId: string
+  tagCategoryId: string
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const sql = getNeonSql()
+  const toolId = String(params.toolId).trim().toLowerCase()
+  const cid = String(params.tagCategoryId).trim().toLowerCase()
+
+  const toolRows = await sql`
+    SELECT id FROM tools
+    WHERE id = ${toolId}
+      AND status = 'approved'
+      AND COALESCE(is_disabled, false) = false
+    LIMIT 1
+  `
+  if (!toolRows[0]) {
+    return { ok: false, error: '工具不存在、未审核通过或已隐藏，无法操作' }
+  }
+
+  const removableRows = await sql`
+    SELECT id::text AS id FROM tags WHERE tag_category_id = ${cid}
+  `
+  const removable = new Set(
+    (removableRows as { id: string }[]).map((r) =>
+      String(r.id).trim().toLowerCase(),
+    ),
+  )
+
+  const existingRows = await sql`
+    SELECT tag_id FROM tool_tags WHERE tool_id = ${toolId} ORDER BY sort_order ASC
+  `
+  const existing = (existingRows as { tag_id: string }[]).map((r) =>
+    String(r.tag_id).trim().toLowerCase(),
+  )
+
+  const merged = existing.filter((id) => !removable.has(id))
+
+  const needWrite =
+    merged.length !== existing.length ||
+    merged.some((id, i) => id !== existing[i])
+  if (!needWrite) return { ok: true }
+
+  if (merged.length > 0) {
+    const cntRows = await sql`
+      SELECT COUNT(*)::int AS n FROM tags WHERE id = ANY(${merged}::uuid[])
+    `
+    const n = Number((cntRows[0] as { n: number })?.n ?? 0)
+    if (n !== merged.length) {
+      return { ok: false, error: '包含无效标签' }
+    }
+  }
+
+  await sql`DELETE FROM tool_tags WHERE tool_id = ${toolId}`
+  if (merged.length === 0) return { ok: true }
+
+  const toolIdsArr = merged.map(() => toolId)
+  const ordersArr = merged.map((_, i) => i)
+  await sql`
+    INSERT INTO tool_tags (tool_id, tag_id, sort_order)
+    SELECT * FROM unnest(
+      ${toolIdsArr}::uuid[],
+      ${merged}::uuid[],
+      ${ordersArr}::int[]
+    )
+  `
+  return { ok: true }
+}
+
+/** 从工具的 tool_tags 中移除本品在 role_category_tags 中的词条链接；不改联结表与 tags。 */
+export async function neonAdminStripRoleTagsFromListedTool(params: {
+  toolId: string
+  roleCategoryId: string
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const sql = getNeonSql()
+  const toolId = String(params.toolId).trim().toLowerCase()
+  const rid = String(params.roleCategoryId).trim().toLowerCase()
+
+  const toolRows = await sql`
+    SELECT id FROM tools
+    WHERE id = ${toolId}
+      AND status = 'approved'
+      AND COALESCE(is_disabled, false) = false
+    LIMIT 1
+  `
+  if (!toolRows[0]) {
+    return { ok: false, error: '工具不存在、未审核通过或已隐藏，无法操作' }
+  }
+
+  const removableRows = await sql`
+    SELECT tag_id::text AS id
+    FROM role_category_tags
+    WHERE role_category_id = ${rid}
+  `
+  const removable = new Set(
+    (removableRows as { id: string }[]).map((r) =>
+      String(r.id).trim().toLowerCase(),
+    ),
+  )
+
+  const existingRows = await sql`
+    SELECT tag_id FROM tool_tags WHERE tool_id = ${toolId} ORDER BY sort_order ASC
+  `
+  const existing = (existingRows as { tag_id: string }[]).map((r) =>
+    String(r.tag_id).trim().toLowerCase(),
+  )
+
+  const merged = existing.filter((id) => !removable.has(id))
+
+  const needWrite =
+    merged.length !== existing.length ||
+    merged.some((id, i) => id !== existing[i])
+  if (!needWrite) return { ok: true }
+
+  if (merged.length > 0) {
+    const cntRows = await sql`
+      SELECT COUNT(*)::int AS n FROM tags WHERE id = ANY(${merged}::uuid[])
+    `
+    const n = Number((cntRows[0] as { n: number })?.n ?? 0)
+    if (n !== merged.length) {
+      return { ok: false, error: '包含无效标签' }
+    }
+  }
+
+  await sql`DELETE FROM tool_tags WHERE tool_id = ${toolId}`
+  if (merged.length === 0) return { ok: true }
+
+  const toolIdsArr = merged.map(() => toolId)
+  const ordersArr = merged.map((_, i) => i)
+  await sql`
+    INSERT INTO tool_tags (tool_id, tag_id, sort_order)
+    SELECT * FROM unnest(
+      ${toolIdsArr}::uuid[],
+      ${merged}::uuid[],
+      ${ordersArr}::int[]
+    )
+  `
+  return { ok: true }
+}
+
+/** 场景分类下未禁用标签 id（挂载工具时的白名单顺序：按词条名） */
+export async function neonAdminListEnabledTagIdsInSceneCategory(
+  tagCategoryId: string,
+): Promise<string[]> {
+  const sql = getNeonSql()
+  const cid = String(tagCategoryId).trim().toLowerCase()
+  const rows = await sql`
+    SELECT id::text AS id FROM tags
+    WHERE tag_category_id = ${cid}
+      AND COALESCE(is_disabled, false) = false
+    ORDER BY lower(trim(name)) ASC
+  `
+  return (rows as { id: string }[]).map((r) => String(r.id).trim().toLowerCase())
+}
+
+/** 角色分类已关联的未禁用标签 id（白名单顺序：按词条名） */
+export async function neonAdminListEnabledTagIdsLinkedToRoleCategory(
+  roleCategoryId: string,
+): Promise<string[]> {
+  const sql = getNeonSql()
+  const rid = String(roleCategoryId).trim().toLowerCase()
+  const rows = await sql`
+    SELECT tg.id::text AS id
+    FROM role_category_tags rct
+    INNER JOIN tags tg ON tg.id = rct.tag_id
+      AND COALESCE(tg.is_disabled, false) = false
+    WHERE rct.role_category_id = ${rid}
+    ORDER BY lower(trim(tg.name)) ASC
+  `
+  return (rows as { id: string }[]).map((r) => String(r.id).trim().toLowerCase())
 }
 
 export async function neonFindDuplicateTool(
@@ -2105,10 +2422,175 @@ export async function neonAdminSearchTagsForPicker(params: {
 export async function neonAdminSearchToolsForTagging(params: {
   query: string
   limit?: number
+  /**
+   * 挂载工具选人：排除「已挂上本分类词条」的工具（NOT EXISTS 不计 tag 是否禁用，含失效词条）。
+   * 场景：`tags.tag_category_id = 该场景`
+   * 角色：`role_category_tags` 联结（词条禁用仍算已关联本品）
+   */
+  excludeListedInTaxonomy?:
+    | { kind: 'scene'; tagCategoryId: string }
+    | { kind: 'role'; roleCategoryId: string }
+  /**
+   * 移除挂载选人：仅保留「至少挂有一条本分类词条」的工具（与 exclude 互斥，优先 only）。
+   */
+  onlyListedInTaxonomy?:
+    | { kind: 'scene'; tagCategoryId: string }
+    | { kind: 'role'; roleCategoryId: string }
 }): Promise<{ id: string; name: string; slug: string; status: string }[]> {
   const sql = getNeonSql()
   const lim = Math.min(Math.max(params.limit ?? 30, 1), 50)
   const q = params.query.normalize('NFKC').trim()
+  const only = params.onlyListedInTaxonomy
+  const ex = params.excludeListedInTaxonomy
+
+  const mapRows = (rows: Record<string, unknown>[]) =>
+    rows.map((r) => ({
+      id: String(r.id ?? ''),
+      name: String(r.name ?? ''),
+      slug: String(r.slug ?? ''),
+      status: String(r.status ?? ''),
+    }))
+
+  if (only) {
+    if (only.kind === 'scene') {
+      const cid = String(only.tagCategoryId).trim().toLowerCase()
+      const rows =
+        q.length === 0
+          ? await sql`
+              SELECT t.id::text AS id, t.name, t.slug, t.status::text AS status
+              FROM tools t
+              WHERE t.status = 'approved'
+                AND COALESCE(t.is_disabled, false) = false
+                AND EXISTS (
+                  SELECT 1
+                  FROM tool_tags tt
+                  INNER JOIN tags tg ON tg.id = tt.tag_id
+                    AND tg.tag_category_id = ${cid}
+                  WHERE tt.tool_id = t.id
+                )
+              ORDER BY t.updated_at DESC NULLS LAST
+              LIMIT ${lim}
+            `
+          : await sql`
+              SELECT t.id::text AS id, t.name, t.slug, t.status::text AS status
+              FROM tools t
+              WHERE t.status = 'approved'
+                AND COALESCE(t.is_disabled, false) = false
+                AND (t.name ILIKE ${'%' + q + '%'} OR t.slug ILIKE ${'%' + q + '%'})
+                AND EXISTS (
+                  SELECT 1
+                  FROM tool_tags tt
+                  INNER JOIN tags tg ON tg.id = tt.tag_id
+                    AND tg.tag_category_id = ${cid}
+                  WHERE tt.tool_id = t.id
+                )
+              ORDER BY t.updated_at DESC NULLS LAST
+              LIMIT ${lim}
+            `
+      return mapRows(rows as Record<string, unknown>[])
+    }
+
+    const rid = String(only.roleCategoryId).trim().toLowerCase()
+    const rows =
+      q.length === 0
+        ? await sql`
+            SELECT t.id::text AS id, t.name, t.slug, t.status::text AS status
+            FROM tools t
+            WHERE t.status = 'approved'
+              AND COALESCE(t.is_disabled, false) = false
+              AND EXISTS (
+                SELECT 1
+                FROM tool_tags tt
+                INNER JOIN tags tg ON tg.id = tt.tag_id
+                INNER JOIN role_category_tags rct ON rct.tag_id = tg.id
+                  AND rct.role_category_id = ${rid}
+                WHERE tt.tool_id = t.id
+              )
+            ORDER BY t.updated_at DESC NULLS LAST
+            LIMIT ${lim}
+          `
+        : await sql`
+            SELECT t.id::text AS id, t.name, t.slug, t.status::text AS status
+            FROM tools t
+            WHERE t.status = 'approved'
+              AND COALESCE(t.is_disabled, false) = false
+              AND (t.name ILIKE ${'%' + q + '%'} OR t.slug ILIKE ${'%' + q + '%'})
+              AND EXISTS (
+                SELECT 1
+                FROM tool_tags tt
+                INNER JOIN tags tg ON tg.id = tt.tag_id
+                INNER JOIN role_category_tags rct ON rct.tag_id = tg.id
+                  AND rct.role_category_id = ${rid}
+                WHERE tt.tool_id = t.id
+              )
+            ORDER BY t.updated_at DESC NULLS LAST
+            LIMIT ${lim}
+          `
+    return mapRows(rows as Record<string, unknown>[])
+  }
+
+  if (!ex) {
+    const rows =
+      q.length === 0
+        ? await sql`
+            SELECT t.id::text AS id, t.name, t.slug, t.status::text AS status
+            FROM tools t
+            WHERE t.status = 'approved'
+              AND COALESCE(t.is_disabled, false) = false
+            ORDER BY t.updated_at DESC NULLS LAST
+            LIMIT ${lim}
+          `
+        : await sql`
+            SELECT t.id::text AS id, t.name, t.slug, t.status::text AS status
+            FROM tools t
+            WHERE t.status = 'approved'
+              AND COALESCE(t.is_disabled, false) = false
+              AND (t.name ILIKE ${'%' + q + '%'} OR t.slug ILIKE ${'%' + q + '%'})
+            ORDER BY t.updated_at DESC NULLS LAST
+            LIMIT ${lim}
+          `
+    return mapRows(rows as Record<string, unknown>[])
+  }
+
+  if (ex.kind === 'scene') {
+    const cid = String(ex.tagCategoryId).trim().toLowerCase()
+    const rows =
+      q.length === 0
+        ? await sql`
+            SELECT t.id::text AS id, t.name, t.slug, t.status::text AS status
+            FROM tools t
+            WHERE t.status = 'approved'
+              AND COALESCE(t.is_disabled, false) = false
+              AND NOT EXISTS (
+                SELECT 1
+                FROM tool_tags tt
+                INNER JOIN tags tg ON tg.id = tt.tag_id
+                  AND tg.tag_category_id = ${cid}
+                WHERE tt.tool_id = t.id
+              )
+            ORDER BY t.updated_at DESC NULLS LAST
+            LIMIT ${lim}
+          `
+        : await sql`
+            SELECT t.id::text AS id, t.name, t.slug, t.status::text AS status
+            FROM tools t
+            WHERE t.status = 'approved'
+              AND COALESCE(t.is_disabled, false) = false
+              AND (t.name ILIKE ${'%' + q + '%'} OR t.slug ILIKE ${'%' + q + '%'})
+              AND NOT EXISTS (
+                SELECT 1
+                FROM tool_tags tt
+                INNER JOIN tags tg ON tg.id = tt.tag_id
+                  AND tg.tag_category_id = ${cid}
+                WHERE tt.tool_id = t.id
+              )
+            ORDER BY t.updated_at DESC NULLS LAST
+            LIMIT ${lim}
+          `
+    return mapRows(rows as Record<string, unknown>[])
+  }
+
+  const rid = String(ex.roleCategoryId).trim().toLowerCase()
   const rows =
     q.length === 0
       ? await sql`
@@ -2116,6 +2598,14 @@ export async function neonAdminSearchToolsForTagging(params: {
           FROM tools t
           WHERE t.status = 'approved'
             AND COALESCE(t.is_disabled, false) = false
+            AND NOT EXISTS (
+              SELECT 1
+              FROM tool_tags tt
+              INNER JOIN tags tg ON tg.id = tt.tag_id
+              INNER JOIN role_category_tags rct ON rct.tag_id = tg.id
+              WHERE tt.tool_id = t.id
+                AND rct.role_category_id = ${rid}
+            )
           ORDER BY t.updated_at DESC NULLS LAST
           LIMIT ${lim}
         `
@@ -2125,15 +2615,56 @@ export async function neonAdminSearchToolsForTagging(params: {
           WHERE t.status = 'approved'
             AND COALESCE(t.is_disabled, false) = false
             AND (t.name ILIKE ${'%' + q + '%'} OR t.slug ILIKE ${'%' + q + '%'})
+            AND NOT EXISTS (
+              SELECT 1
+              FROM tool_tags tt
+              INNER JOIN tags tg ON tg.id = tt.tag_id
+              INNER JOIN role_category_tags rct ON rct.tag_id = tg.id
+              WHERE tt.tool_id = t.id
+                AND rct.role_category_id = ${rid}
+            )
           ORDER BY t.updated_at DESC NULLS LAST
           LIMIT ${lim}
         `
-  return (rows as Record<string, unknown>[]).map((r) => ({
-    id: String(r.id ?? ''),
-    name: String(r.name ?? ''),
-    slug: String(r.slug ?? ''),
-    status: String(r.status ?? ''),
-  }))
+  return mapRows(rows as Record<string, unknown>[])
+}
+
+/** 个人中心「我的关注」搜索可加关注的工具（已通过且未隐藏；返回完整 `Tool` 供卡片/hover） */
+export async function neonAccountSearchListedToolsForFollows(params: {
+  query: string
+  limit?: number
+}): Promise<Tool[]> {
+  const sql = getNeonSql()
+  const lim = Math.min(Math.max(params.limit ?? 24, 1), 40)
+  const q = params.query.normalize('NFKC').trim()
+  const rows =
+    q.length === 0
+      ? await sql`
+          SELECT t.*, row_to_json(c.*) AS category
+          FROM tools t
+          LEFT JOIN categories c ON c.id = t.category_id
+            AND COALESCE(c.is_disabled, false) = false
+          WHERE t.status = 'approved'
+            AND COALESCE(t.is_disabled, false) = false
+          ORDER BY t.updated_at DESC NULLS LAST
+          LIMIT ${lim}
+        `
+      : await sql`
+          SELECT t.*, row_to_json(c.*) AS category
+          FROM tools t
+          LEFT JOIN categories c ON c.id = t.category_id
+            AND COALESCE(c.is_disabled, false) = false
+          WHERE t.status = 'approved'
+            AND COALESCE(t.is_disabled, false) = false
+            AND (t.name ILIKE ${'%' + q + '%'} OR t.slug ILIKE ${'%' + q + '%'})
+          ORDER BY t.updated_at DESC NULLS LAST
+          LIMIT ${lim}
+        `
+  return (rows as Record<string, unknown>[]).map((row) => {
+    const cat = parseCategoryJson(row.category)
+    const { category: _drop, ...rest } = row
+    return publicizeToolImages(mapToolRow(rest as Record<string, unknown>, cat))
+  })
 }
 
 /** 管理后台工具标签编辑：含 `tags.tag_category_id`，便于保存时回传场景挂载提示 */
@@ -3049,7 +3580,7 @@ export async function neonCountActiveAdsByPlacement(): Promise<{
 }
 
 // =====================================================================
-// 标签管理（/admin/tags）
+// 标签清理（/admin/tags）
 // =====================================================================
 
 export async function neonListTagCategoriesAll(): Promise<TagCategory[]> {
@@ -3120,25 +3651,47 @@ export async function neonGetTagCategoryById(
  */
 export async function neonAdminListTagsAll(): Promise<AdminTagRow[]> {
   const sql = getNeonSql()
-  const rows = await sql`
-    SELECT t.id,
-           t.name,
-           t.tag_category_id,
-           t.is_curated,
-           t.aliases,
-           t.created_at,
-           COALESCE(t.is_disabled, false) AS is_disabled,
-           tc.name AS category_name,
-           tc.slug AS category_slug,
-           COALESCE((SELECT COUNT(*) FROM tool_tags tt WHERE tt.tag_id = t.id), 0)::int
-             AS tool_count
-    FROM tags t
-    LEFT JOIN tag_categories tc ON tc.id = t.tag_category_id
-    ORDER BY t.is_curated DESC,
-             COALESCE(tc.sort_order, 999) ASC,
-             tc.name NULLS LAST,
-             t.name ASC
-  `
+  const linked = await neonTagsHasTagCategoryLinkedAtColumn()
+  const rows = linked
+    ? await sql`
+        SELECT t.id,
+               t.name,
+               t.tag_category_id,
+               t.tag_category_linked_at,
+               t.is_curated,
+               t.aliases,
+               t.created_at,
+               COALESCE(t.is_disabled, false) AS is_disabled,
+               tc.name AS category_name,
+               tc.slug AS category_slug,
+               COALESCE((SELECT COUNT(*) FROM tool_tags tt WHERE tt.tag_id = t.id), 0)::int
+                 AS tool_count
+        FROM tags t
+        LEFT JOIN tag_categories tc ON tc.id = t.tag_category_id
+        ORDER BY t.is_curated DESC,
+                 COALESCE(tc.sort_order, 999) ASC,
+                 tc.name NULLS LAST,
+                 t.name ASC
+      `
+    : await sql`
+        SELECT t.id,
+               t.name,
+               t.tag_category_id,
+               t.is_curated,
+               t.aliases,
+               t.created_at,
+               COALESCE(t.is_disabled, false) AS is_disabled,
+               tc.name AS category_name,
+               tc.slug AS category_slug,
+               COALESCE((SELECT COUNT(*) FROM tool_tags tt WHERE tt.tag_id = t.id), 0)::int
+                 AS tool_count
+        FROM tags t
+        LEFT JOIN tag_categories tc ON tc.id = t.tag_category_id
+        ORDER BY t.is_curated DESC,
+                 COALESCE(tc.sort_order, 999) ASC,
+                 tc.name NULLS LAST,
+                 t.name ASC
+      `
   return (rows as Record<string, unknown>[]).map(mapAdminTagRow)
 }
 
@@ -3176,18 +3729,27 @@ export async function neonAdminInsertTag(params: {
   const n = params.name.normalize('NFKC').trim().replace(/\s+/g, ' ')
   if (!n) return { ok: false, error: '名称不能为空' }
   const catRaw = params.tagCategoryId?.trim() ?? ''
-  const tagCatVal = catRaw === '' ? null : catRaw
+  const tagCatVal =
+    catRaw === '' ? null : catRaw.trim().toLowerCase()
   const sql = getNeonSql()
   const dup = await sql`
     SELECT id FROM tags WHERE lower(trim(name)) = lower(${n}) LIMIT 1
   `
   if (dup.length > 0) return { ok: false, error: '已存在同名标签' }
   try {
-    const ins = await sql`
-      INSERT INTO tags (name, tag_category_id, is_curated, aliases)
-      VALUES (${n}, ${tagCatVal}, ${params.isCurated}, '{}'::text[])
-      RETURNING id
-    `
+    const linked = await neonTagsHasTagCategoryLinkedAtColumn()
+    const ins = linked
+      ? await sql`
+          INSERT INTO tags (name, tag_category_id, is_curated, aliases, tag_category_linked_at)
+          VALUES (${n}, ${tagCatVal}, ${params.isCurated}, '{}'::text[],
+            CASE WHEN ${tagCatVal} IS NOT NULL THEN now() ELSE NULL END)
+          RETURNING id
+        `
+      : await sql`
+          INSERT INTO tags (name, tag_category_id, is_curated, aliases)
+          VALUES (${n}, ${tagCatVal}, ${params.isCurated}, '{}'::text[])
+          RETURNING id
+        `
     return { ok: true, id: String((ins[0] as { id: string }).id) }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : '写入失败' }
@@ -3488,13 +4050,61 @@ export async function neonAdminUnlinkTagFromRoleCategory(params: {
   }
 }
 
+/** 单条 Admin 标签行（与 `neonAdminListTagsAll` 同形状），用于写入后立即读回、避免 RSC refresh 滞后导致后台列表不刷新 */
+export async function neonAdminGetAdminTagRowById(
+  tagId: string,
+): Promise<AdminTagRow | null> {
+  const sql = getNeonSql()
+  const tid = String(tagId).trim().toLowerCase()
+  const linked = await neonTagsHasTagCategoryLinkedAtColumn()
+  const rows = linked
+    ? await sql`
+        SELECT t.id,
+               t.name,
+               t.tag_category_id,
+               t.tag_category_linked_at,
+               t.is_curated,
+               t.aliases,
+               t.created_at,
+               COALESCE(t.is_disabled, false) AS is_disabled,
+               tc.name AS category_name,
+               tc.slug AS category_slug,
+               COALESCE((SELECT COUNT(*) FROM tool_tags tt WHERE tt.tag_id = t.id), 0)::int
+                 AS tool_count
+        FROM tags t
+        LEFT JOIN tag_categories tc ON tc.id = t.tag_category_id
+        WHERE t.id = ${tid}
+        LIMIT 1
+      `
+    : await sql`
+        SELECT t.id,
+               t.name,
+               t.tag_category_id,
+               t.is_curated,
+               t.aliases,
+               t.created_at,
+               COALESCE(t.is_disabled, false) AS is_disabled,
+               tc.name AS category_name,
+               tc.slug AS category_slug,
+               COALESCE((SELECT COUNT(*) FROM tool_tags tt WHERE tt.tag_id = t.id), 0)::int
+                 AS tool_count
+        FROM tags t
+        LEFT JOIN tag_categories tc ON tc.id = t.tag_category_id
+        WHERE t.id = ${tid}
+        LIMIT 1
+      `
+  const r = rows[0] as Record<string, unknown> | undefined
+  return r ? mapAdminTagRow(r) : null
+}
+
 export async function neonAdminAssignTagToCategory(params: {
   tagId: string
   tagCategoryId: string | null
-}): Promise<{ ok: boolean; error?: string }> {
+}): Promise<{ ok: true; tag: AdminTagRow } | { ok: false; error: string }> {
   const sql = getNeonSql()
+  const tagId = String(params.tagId).trim().toLowerCase()
   const tagRows = await sql`
-    SELECT id FROM tags WHERE id = ${params.tagId} LIMIT 1
+    SELECT id FROM tags WHERE id = ${tagId} LIMIT 1
   `
   if (!tagRows[0]) return { ok: false, error: '标签不存在' }
 
@@ -3502,7 +4112,7 @@ export async function neonAdminAssignTagToCategory(params: {
   const cid =
     cidRaw == null || String(cidRaw).trim() === ''
       ? null
-      : String(cidRaw).trim()
+      : String(cidRaw).trim().toLowerCase()
 
   if (cid != null) {
     const catRows = await sql`
@@ -3512,12 +4122,27 @@ export async function neonAdminAssignTagToCategory(params: {
   }
 
   try {
-    await sql`
-      UPDATE tags
-      SET tag_category_id = ${cid}
-      WHERE id = ${params.tagId}
-    `
-    return { ok: true }
+    const linked = await neonTagsHasTagCategoryLinkedAtColumn()
+    const updated = linked
+      ? await sql`
+          UPDATE tags
+          SET tag_category_id = ${cid},
+              tag_category_linked_at = now()
+          WHERE id = ${tagId}
+          RETURNING id
+        `
+      : await sql`
+          UPDATE tags
+          SET tag_category_id = ${cid}
+          WHERE id = ${tagId}
+          RETURNING id
+        `
+    if (!updated.length) {
+      return { ok: false, error: '更新失败：未写入任何行' }
+    }
+    const tag = await neonAdminGetAdminTagRowById(tagId)
+    if (!tag) return { ok: false, error: '更新后读取标签失败' }
+    return { ok: true, tag }
   } catch (e) {
     return {
       ok: false,
@@ -3531,23 +4156,43 @@ export async function neonAdminAssignTagToCategory(params: {
  */
 export async function neonAdminListUncuratedTags(): Promise<AdminTagRow[]> {
   const sql = getNeonSql()
-  const rows = await sql`
-    SELECT t.id,
-           t.name,
-           t.tag_category_id,
-           t.is_curated,
-           t.aliases,
-           t.created_at,
-           COALESCE(t.is_disabled, false) AS is_disabled,
-           tc.name AS category_name,
-           tc.slug AS category_slug,
-           COALESCE((SELECT COUNT(*) FROM tool_tags tt WHERE tt.tag_id = t.id), 0)::int
-             AS tool_count
-    FROM tags t
-    LEFT JOIN tag_categories tc ON tc.id = t.tag_category_id
-    WHERE t.is_curated = false
-    ORDER BY tool_count DESC, t.name ASC
-  `
+  const linked = await neonTagsHasTagCategoryLinkedAtColumn()
+  const rows = linked
+    ? await sql`
+        SELECT t.id,
+               t.name,
+               t.tag_category_id,
+               t.tag_category_linked_at,
+               t.is_curated,
+               t.aliases,
+               t.created_at,
+               COALESCE(t.is_disabled, false) AS is_disabled,
+               tc.name AS category_name,
+               tc.slug AS category_slug,
+               COALESCE((SELECT COUNT(*) FROM tool_tags tt WHERE tt.tag_id = t.id), 0)::int
+                 AS tool_count
+        FROM tags t
+        LEFT JOIN tag_categories tc ON tc.id = t.tag_category_id
+        WHERE t.is_curated = false
+        ORDER BY tool_count DESC, t.name ASC
+      `
+    : await sql`
+        SELECT t.id,
+               t.name,
+               t.tag_category_id,
+               t.is_curated,
+               t.aliases,
+               t.created_at,
+               COALESCE(t.is_disabled, false) AS is_disabled,
+               tc.name AS category_name,
+               tc.slug AS category_slug,
+               COALESCE((SELECT COUNT(*) FROM tool_tags tt WHERE tt.tag_id = t.id), 0)::int
+                 AS tool_count
+        FROM tags t
+        LEFT JOIN tag_categories tc ON tc.id = t.tag_category_id
+        WHERE t.is_curated = false
+        ORDER BY tool_count DESC, t.name ASC
+      `
   return (rows as Record<string, unknown>[]).map(mapAdminTagRow)
 }
 
@@ -3555,23 +4200,43 @@ export async function neonAdminGetTagById(
   id: string,
 ): Promise<AdminTagRow | null> {
   const sql = getNeonSql()
-  const rows = await sql`
-    SELECT t.id,
-           t.name,
-           t.tag_category_id,
-           t.is_curated,
-           t.aliases,
-           t.created_at,
-           COALESCE(t.is_disabled, false) AS is_disabled,
-           tc.name AS category_name,
-           tc.slug AS category_slug,
-           COALESCE((SELECT COUNT(*) FROM tool_tags tt WHERE tt.tag_id = t.id), 0)::int
-             AS tool_count
-    FROM tags t
-    LEFT JOIN tag_categories tc ON tc.id = t.tag_category_id
-    WHERE t.id = ${id}
-    LIMIT 1
-  `
+  const linked = await neonTagsHasTagCategoryLinkedAtColumn()
+  const rows = linked
+    ? await sql`
+        SELECT t.id,
+               t.name,
+               t.tag_category_id,
+               t.tag_category_linked_at,
+               t.is_curated,
+               t.aliases,
+               t.created_at,
+               COALESCE(t.is_disabled, false) AS is_disabled,
+               tc.name AS category_name,
+               tc.slug AS category_slug,
+               COALESCE((SELECT COUNT(*) FROM tool_tags tt WHERE tt.tag_id = t.id), 0)::int
+                 AS tool_count
+        FROM tags t
+        LEFT JOIN tag_categories tc ON tc.id = t.tag_category_id
+        WHERE t.id = ${id}
+        LIMIT 1
+      `
+    : await sql`
+        SELECT t.id,
+               t.name,
+               t.tag_category_id,
+               t.is_curated,
+               t.aliases,
+               t.created_at,
+               COALESCE(t.is_disabled, false) AS is_disabled,
+               tc.name AS category_name,
+               tc.slug AS category_slug,
+               COALESCE((SELECT COUNT(*) FROM tool_tags tt WHERE tt.tag_id = t.id), 0)::int
+                 AS tool_count
+        FROM tags t
+        LEFT JOIN tag_categories tc ON tc.id = t.tag_category_id
+        WHERE t.id = ${id}
+        LIMIT 1
+      `
   const r = rows[0] as Record<string, unknown> | undefined
   return r ? mapAdminTagRow(r) : null
 }
@@ -3683,12 +4348,23 @@ export async function neonAdminSetTagCurated(input: {
   tagCategoryId: string | null
 }): Promise<void> {
   const sql = getNeonSql()
-  await sql`
-    UPDATE tags
-    SET is_curated = ${input.isCurated},
-        tag_category_id = ${input.tagCategoryId}
-    WHERE id = ${input.tagId}
-  `
+  const linked = await neonTagsHasTagCategoryLinkedAtColumn()
+  if (linked) {
+    await sql`
+      UPDATE tags
+      SET is_curated = ${input.isCurated},
+          tag_category_id = ${input.tagCategoryId},
+          tag_category_linked_at = now()
+      WHERE id = ${input.tagId}
+    `
+  } else {
+    await sql`
+      UPDATE tags
+      SET is_curated = ${input.isCurated},
+          tag_category_id = ${input.tagCategoryId}
+      WHERE id = ${input.tagId}
+    `
+  }
 }
 
 export async function neonAdminSetTagDisabled(params: {
@@ -3822,6 +4498,35 @@ export async function neonCountPublicListedToolsByTagCategoriesBulk(): Promise<
   return m
 }
 
+/**
+ * 各角色分类下「收录工具」去重数（与 `neonListToolsByRoleCategoryId` 同源）；
+ * 用于后台 Tab 加粗数字与首页「按角色」条带口径一致。
+ */
+export async function neonCountPublicListedToolsByRoleCategoriesBulk(): Promise<
+  Map<string, number>
+> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT rct.role_category_id::text AS role_id,
+           COUNT(DISTINCT t.id)::int AS n
+    FROM tool_tags tt
+    INNER JOIN tags tg ON tg.id = tt.tag_id
+      AND COALESCE(tg.is_disabled, false) = false
+    INNER JOIN role_category_tags rct ON rct.tag_id = tg.id
+    INNER JOIN tools t ON t.id = tt.tool_id
+      AND t.status = 'approved'
+      AND COALESCE(t.is_disabled, false) = false
+    GROUP BY rct.role_category_id
+  `
+  const m = new Map<string, number>()
+  for (const r of rows as { role_id: string; n: number }[]) {
+    const id = String(r.role_id ?? '').trim().toLowerCase()
+    if (!id) continue
+    m.set(id, Number(r.n ?? 0))
+  }
+  return m
+}
+
 /** 工具详情「所属场景」：当前挂载的启用标签所归属且未禁用的场景分类（去重） */
 export async function neonListPublicSceneSummariesForTool(toolId: string): Promise<
   { id: string; name: string; slug: string }[]
@@ -3905,4 +4610,175 @@ export async function neonListTagsForCategoryWithCounts(
     LIMIT ${limit}
   `
   return rows as { id: string; name: string; tool_count: number }[]
+}
+
+// =====================================================================
+// 个人中心「我的关注」：场景 / 角色分类订阅
+// =====================================================================
+
+function normalizeFollowUuidArray(ids: string[]): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const raw of ids) {
+    const s = String(raw ?? '').trim().toLowerCase()
+    if (!TAG_CATEGORY_HINT_UUID_RE.test(s)) continue
+    if (seen.has(s)) continue
+    seen.add(s)
+    out.push(s)
+  }
+  return out
+}
+
+/** 用户订阅的场景（JOIN 当前分类行；禁用仍可读出便于「失效」展示） */
+export async function neonListUserFollowTagCategoriesJoined(
+  userId: string,
+): Promise<UserFollowCategoryJoined[]> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT tc.id::text AS id,
+           tc.name,
+           tc.slug,
+           COALESCE(tc.is_disabled, false) AS is_disabled,
+           f.created_at AS created_at
+    FROM user_follow_tag_categories f
+    INNER JOIN tag_categories tc ON tc.id = f.tag_category_id
+    WHERE f.user_id = ${userId}
+    ORDER BY f.created_at ASC
+  `
+  return (rows as Record<string, unknown>[]).map((r) => ({
+    id: String(r.id ?? ''),
+    name: String(r.name ?? ''),
+    slug: String(r.slug ?? ''),
+    is_disabled: r.is_disabled === true,
+    created_at:
+      r.created_at instanceof Date
+        ? r.created_at.toISOString()
+        : String(r.created_at ?? ''),
+  }))
+}
+
+/** 用户订阅的角色分类（同上） */
+export async function neonListUserFollowRoleCategoriesJoined(
+  userId: string,
+): Promise<UserFollowCategoryJoined[]> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT rc.id::text AS id,
+           rc.name,
+           rc.slug,
+           COALESCE(rc.is_disabled, false) AS is_disabled,
+           f.created_at AS created_at
+    FROM user_follow_role_categories f
+    INNER JOIN role_categories rc ON rc.id = f.role_category_id
+    WHERE f.user_id = ${userId}
+    ORDER BY f.created_at ASC
+  `
+  return (rows as Record<string, unknown>[]).map((r) => ({
+    id: String(r.id ?? ''),
+    name: String(r.name ?? ''),
+    slug: String(r.slug ?? ''),
+    is_disabled: r.is_disabled === true,
+    created_at:
+      r.created_at instanceof Date
+        ? r.created_at.toISOString()
+        : String(r.created_at ?? ''),
+  }))
+}
+
+export async function neonReplaceUserFollowTagCategories(
+  userId: string,
+  ids: string[],
+): Promise<void> {
+  const sql = getNeonSql()
+  const norm = normalizeFollowUuidArray(ids)
+  await sql`DELETE FROM user_follow_tag_categories WHERE user_id = ${userId}`
+  if (norm.length === 0) return
+  await sql`
+    INSERT INTO user_follow_tag_categories (user_id, tag_category_id)
+    SELECT ${userId}, u FROM unnest(${norm}::uuid[]) AS u
+  `
+}
+
+export async function neonReplaceUserFollowRoleCategories(
+  userId: string,
+  ids: string[],
+): Promise<void> {
+  const sql = getNeonSql()
+  const norm = normalizeFollowUuidArray(ids)
+  await sql`DELETE FROM user_follow_role_categories WHERE user_id = ${userId}`
+  if (norm.length === 0) return
+  await sql`
+    INSERT INTO user_follow_role_categories (user_id, role_category_id)
+    SELECT ${userId}, u FROM unnest(${norm}::uuid[]) AS u
+    `
+}
+
+/** 用户关注的工具列表（含下架快照，`listing_ok` 区分展示区域） */
+export async function neonListUserFollowToolsForAccount(
+  userId: string,
+): Promise<UserFollowToolEntry[]> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT uft.tool_id::text AS tool_id,
+           uft.sort_order::int AS sort_order,
+           uft.created_at,
+           row_to_json(t.*) AS tool_row,
+           row_to_json(c.*) AS cat_row
+    FROM user_follow_tools uft
+    JOIN tools t ON t.id = uft.tool_id
+    LEFT JOIN categories c ON c.id = t.category_id
+      AND COALESCE(c.is_disabled, false) = false
+    WHERE uft.user_id = ${userId}
+    ORDER BY uft.sort_order ASC, uft.created_at ASC
+  `
+  const out: UserFollowToolEntry[] = []
+  for (const r of rows as Record<string, unknown>[]) {
+    const toolRaw = r.tool_row as Record<string, unknown> | null
+    const catRaw = r.cat_row as Record<string, unknown> | null
+    if (!toolRaw?.id) continue
+    const cat = catRaw?.id ? parseCategoryJson(catRaw) : null
+    const tool = publicizeToolImages(mapToolRow(toolRaw, cat ?? undefined))
+    const listing_ok =
+      tool.status === 'approved' && !(tool.is_disabled === true)
+    const createdAt =
+      r.created_at instanceof Date
+        ? r.created_at.toISOString()
+        : String(r.created_at ?? '')
+    out.push({
+      tool_id: String(r.tool_id ?? ''),
+      sort_order: Number(r.sort_order ?? 0),
+      created_at: createdAt,
+      tool,
+      listing_ok,
+    })
+  }
+  return out
+}
+
+export async function neonReplaceUserFollowTools(
+  userId: string,
+  toolIdsOrdered: string[],
+): Promise<{ error?: string }> {
+  const norm = normalizeFollowUuidArray(toolIdsOrdered)
+  if (norm.length > ACCOUNT_FOLLOW_TOOLS_MAX) {
+    return { error: `最多关注 ${ACCOUNT_FOLLOW_TOOLS_MAX} 个工具` }
+  }
+  const sql = getNeonSql()
+  if (norm.length > 0) {
+    const chk = await sql`
+      SELECT id::text FROM tools WHERE id = ANY(${norm}::uuid[])
+    `
+    if (chk.length !== norm.length) {
+      return { error: '包含不存在或已删除的工具' }
+    }
+  }
+  await sql`DELETE FROM user_follow_tools WHERE user_id = ${userId}`
+  if (norm.length === 0) return {}
+  const orders = norm.map((_, i) => i)
+  await sql`
+    INSERT INTO user_follow_tools (user_id, tool_id, sort_order)
+    SELECT ${userId}, tid, ord
+    FROM unnest(${norm}::uuid[], ${orders}::int[]) AS x(tid, ord)
+  `
+  return {}
 }

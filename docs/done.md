@@ -6,6 +6,47 @@
 
 ## 2026-05-07
 
+### 个人中心「我的关注」（场景 / 角色订阅 + 失效分类提示）
+
+**需求背景**：用户可订阅场景分类、角色分类（类似订阅）；可 pinned **至多 20 个**单工具（与收藏独立）；首次可多选开关保存。下方只读展示订阅维度下的工具列表；平台停用或隐藏的分类 / 下架的工具须单独展示以便移除订阅。
+
+**实现内容**：
+
+1. **迁移** [`supabase/migrations/20260508120000_user_taxonomy_follows.sql`](./supabase/migrations/20260508120000_user_taxonomy_follows.sql)：场景 / 角色关注表；[`supabase/migrations/20260508140000_user_follow_tools.sql`](./supabase/migrations/20260508140000_user_follow_tools.sql)：`user_follow_tools`（`sort_order`，上限应用层 20）。
+2. [`lib/neon/data.ts`](./lib/neon/data.ts)：场景 / 角色同上；另 `ACCOUNT_FOLLOW_TOOLS_MAX`、`neonListUserFollowToolsForAccount`、`neonReplaceUserFollowTools`、`neonAccountSearchListedToolsForFollows`。
+3. [`app/account/follows/page.tsx`](./app/account/follows/page.tsx)、[`app/account/follows/actions.ts`](./app/account/follows/actions.ts)、[`components/account-follows-panel.tsx`](./components/account-follows-panel.tsx)：订阅 UI、「已失效」分类 / 工具区、`searchToolsForFollowPickerAction`；`fetchFollowSceneToolsAction` / `fetchFollowRoleToolsAction`；链接 [`我的收藏`](../app/favorites/page.tsx)。
+4. [`components/account-follow-tool-tile.tsx`](./components/account-follow-tool-tile.tsx)：紧凑格 + 与首页一致的 hover（复用 [`components/tool-card.tsx`](./components/tool-card.tsx) 导出之 `TOOL_TIP_CONTENT_CLASS`）。
+5. [`components/compact-app-sidebar.tsx`](./components/compact-app-sidebar.tsx)：侧栏「我的关注」→ `/account/follows`。
+6. 计划与进度说明 [`docs/account-follows-plan.md`](./docs/account-follows-plan.md)。
+
+### 场景 / 角色分类管理：Tab 双数字统一与「挂载工具」
+
+**需求背景**：角色分类管理顶栏仅显示单括号计数，与场景分类「收录工具数 + 词条数」不一致；运营误以为「加入分类」即挂载工具，实际仅为联结标签，需要显式的将已通过工具写入 `tool_tags` 的能力。
+
+**实现内容**：
+
+1. [`lib/neon/data.ts`](./lib/neon/data.ts)：`neonCountPublicListedToolsByRoleCategoriesBulk`；`neonAdminAppendListedToolTags`（`tagIds` 非空为精确追加，**为空则按分类白名单顺序合并直至单工具 20 枚**）；场景 / 角色白名单列表按词条名排序。
+2. [`app/admin/tag-categories/actions.ts`](./app/admin/tag-categories/actions.ts)、[`app/admin/role-categories/actions.ts`](./app/admin/role-categories/actions.ts)：**批量挂载** `adminAppend*ListedToolsBatchAction`（循环写库后**仅一次** `revalidateSurfaces`，避免多次 `refresh()` 导致 Tab 收录数只涨 1）；单工具接口委托批量。
+3. [`components/admin-taxonomy-add-tool-panel.tsx`](./components/admin-taxonomy-add-tool-panel.tsx)：挂载工具为**分类一键写入**（无需勾选词条）；搜索工具 **防抖实时**筛选；选中项用 **Map 持久保存**，不因搜索结果刷新或竞态变窄而被丢掉（移除「按当前 hits 裁剪选中」逻辑）；搜索接口排除**已挂上本分类任一词条**的工具（含词条禁用）。
+4. [`components/admin-scene-category-manager.tsx`](./components/admin-scene-category-manager.tsx)、[`components/admin-role-category-manager.tsx`](./components/admin-role-category-manager.tsx)：区块内 **关联标签 / 挂载工具 / 移除挂载** 子 Tab；角色顶栏 Tab 与场景同一套 **`收录 · N词`** 展示与 `title` 提示；[`app/admin/role-categories/page.tsx`](./app/admin/role-categories/page.tsx) 预取并传入 `publicListedToolsByRoleCategoryId`。
+
+### 管理后台：「标签清理」命名与「移除挂载」
+
+**需求背景**：侧栏「标签管理」实为词典清洗入口需更名；场景 / 角色挂载工具后需可对称摘掉本维度下的 `tool_tags`，且不触碰联结表与其它词条。
+
+**实现内容**：
+
+1. [`components/compact-app-sidebar.tsx`](./components/compact-app-sidebar.tsx)、[`app/admin/tags/page.tsx`](./app/admin/tags/page.tsx) 及相关文案：**标签管理** → **标签清理**。
+2. [`lib/neon/data.ts`](./lib/neon/data.ts)：`neonAdminSearchToolsForTagging` 支持 **`onlyListedInTaxonomy`**（移除选人）；挂载选人仍为 **`excludeListedInTaxonomy`**。
+3. [`neonAdminStripSceneTagsFromListedTool`](./lib/neon/data.ts) / [`neonAdminStripRoleTagsFromListedTool`](./lib/neon/data.ts)；[`adminStripSceneTagsFromListedToolsBatchAction`](./app/admin/tag-categories/actions.ts)、[`adminStripRoleTagsFromListedToolsBatchAction`](./app/admin/role-categories/actions.ts)。
+4. [`components/admin-taxonomy-remove-tool-panel.tsx`](./components/admin-taxonomy-remove-tool-panel.tsx)：防抖搜索 + 单多选 + 批量移除；[`app/admin/tools-tagging/actions.ts`](./app/admin/tools-tagging/actions.ts) 转发 `onlyListed*`。
+
+### 文档：《工具 · 标签 · 场景 · 角色》关系与计数口径
+
+**需求背景**：固化工具、标签、场景分类、角色分类的联结方式与前台/后台计数规则，减少误判。
+
+**实现内容**：[`docs/tool-tag-taxonomy-counting.md`](./tool-tag-taxonomy-counting.md)（**重要说明**置顶、mermaid 关系示意、后台操作对照表、与挂载选人 SQL 口径差异说明、代码锚点）。
+
 ### 工具管理聚合页 & 工具与标签后台
 
 **需求背景**：侧栏「工具统计」改为「工具管理」入口并聚合常用模块；新增按工具维护标签（海量标签走搜索选用，场景/角色下拉辅助），写入仍为 `tool_tags`；搜索接口控制返回列与条数以保持可接受延迟。
@@ -19,6 +60,19 @@
 5. [`app/actions/tool-tags.ts`](./app/actions/tool-tags.ts)：管理员可选 `tagCategoryHints` 回填 `tags.tag_category_id`（修复新建标签无场景导致首页「按场景」不收录）；成功时失效 `HOME_TAG_CATEGORIES`、`/tag`、`/tag-category`、对应工具详情路径。
 6. [`app/admin/stats/page.tsx`](./app/admin/stats/page.tsx)：顶部链至「工具与标签」与「审核列表」。
 7. 说明文档 [`docs/tools-management-and-tagging.md`](./tools-management-and-tagging.md)。
+
+### 场景分类管理：迁入标签后计数 / 首页不刷新
+
+**需求背景**：后台「场景分类管理」中选场景、将已有标签迁入后提示成功，但 Tab 词条数 / 列表不更新，首页「按场景」也不体现。
+
+**实现内容**：
+
+1. [`lib/neon/mappers.ts`](./lib/neon/mappers.ts)：`tag_categories.id`、`tags.id`、`tags.tag_category_id`、`role_categories.id` 读出后统一 **小写**，避免与客户端 `===` 比较失败；`tags.tag_category_linked_at` 映射。
+2. [`supabase/migrations/20260508160000_tags_tag_category_linked_at.sql`](./supabase/migrations/20260508160000_tags_tag_category_linked_at.sql)：`tags.tag_category_linked_at`（迁入 / 迁出 / 打标签改场景时刷新）；已有归属回填 `created_at`。
+3. [`lib/neon/data.ts`](./lib/neon/data.ts)：`neonAdminAssignTagToCategory` 入参 **trim + lower**，成功返回整行；`UPDATE … RETURNING`；`neonAdminListTagsAll` / `neonAdminGetAdminTagRowById` 等 SELECT 带 `tag_category_linked_at`；`neonAdminInsertTag`、`neonSetToolTagsForTool`（hint）、`neonAdminSetTagCurated` 写入该列。
+4. [`app/admin/tag-categories/actions.ts`](./app/admin/tag-categories/actions.ts)：场景写入后 `refresh()`；迁入 / 迁出 Action 返回 **`publicListedToolsByTagCategoryId`** 全量快照（即时对齐 Tab **收录工具数**）。
+5. [`components/admin-scene-category-manager.tsx`](./components/admin-scene-category-manager.tsx)：列表筛选按规范化 id；`CommandItem` 的 `value` 为 **`名称 + id`**；迁入 / 迁出 **乐观合并** 标签行 + **收录数快照**；场景下列表按 **`tag_category_linked_at` / `created_at` 最新在上**；**`await router.refresh()`**。
+6. [`lib/neon/tags-linked-at-column.ts`](./lib/neon/tags-linked-at-column.ts)：启动时查 `information_schema`，**未跑迁移则不走该列**（避免列不存在报错）；迁移后需 **重启进程** 以重新探测列。
 
 ### 场景统计口径与详情页「场景分类」展示
 

@@ -12,7 +12,7 @@ import {
 import { ArrowLeft } from 'lucide-react'
 
 export const metadata = {
-  title: '标签管理 - 管理后台',
+  title: '标签清理 - 管理后台',
 }
 
 export const dynamic = 'force-dynamic'
@@ -36,7 +36,7 @@ export default async function AdminTagsPage() {
               返回管理后台
             </Link>
           </Button>
-          <h1 className="mt-1 text-2xl font-bold">标签管理</h1>
+          <h1 className="mt-1 text-2xl font-bold">标签清理</h1>
           <p className="text-sm text-muted-foreground">
             Curated / 待清理标签的查找、合并、改名、删除与 Curated 状态维护。场景分类挂载、前台禁用与统计请到「场景分类管理」。
           </p>

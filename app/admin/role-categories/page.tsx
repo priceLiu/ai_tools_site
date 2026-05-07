@@ -21,11 +21,14 @@ export const metadata = {
 export const dynamic = 'force-dynamic'
 
 export default async function AdminRoleCategoriesPage() {
-  const [roleCategories, tags, links] = await Promise.all([
+  const [roleCategories, tags, links, listedBulk] = await Promise.all([
     neon.neonListRoleCategoriesAll(),
     neon.neonAdminListTagsAll(),
     neon.neonListRoleCategoryTagLinks(),
+    neon.neonCountPublicListedToolsByRoleCategoriesBulk(),
   ])
+
+  const publicListedToolsByRoleCategoryId = Object.fromEntries(listedBulk)
 
   const rolesEnabled = roleCategories.filter((r) => !r.is_disabled).length
   const rolesDisabled = roleCategories.length - rolesEnabled
@@ -79,7 +82,9 @@ export default async function AdminRoleCategoriesPage() {
               后再刷新本页。
             </p>
             <p>
-              · 「将标签加入本品」仅增加 role↔tag 联结；要改标签所属场景请在「标签管理」或「场景分类管理」操作。
+              · 「将已有标签加入本品」写联结表；「挂载工具」勾选本品下标签写入{' '}
+              <code className="rounded bg-muted px-1">tool_tags</code>
+              。改词条所属场景仍在「场景分类管理」或「标签清理」。
             </p>
             <p>
               · 角色页的展示工具集 = 已审核工具 ∩ 任一关联标签。
@@ -101,6 +106,7 @@ export default async function AdminRoleCategoriesPage() {
         roleCategories={roleCategories}
         tags={tags}
         links={links}
+        publicListedToolsByRoleCategoryId={publicListedToolsByRoleCategoryId}
       />
     </div>
   )
