@@ -10,9 +10,11 @@
 
 # ---------- Stage 1: deps ----------
 FROM node:22-alpine AS deps
-RUN corepack enable
+# 固定 pnpm 版本，避免 Node 镜像自带 corepack 解析到其它 11.x 行为不一致
+RUN corepack enable && corepack prepare pnpm@11.0.8 --activate
 WORKDIR /app
-COPY package.json pnpm-lock.yaml ./
+# `.npmrc` 放行依赖构建脚本；`pnpm-workspace.yaml` 为显式 allowBuilds 双保险
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 # argon2 是 native 模块，alpine 上要装 build deps
 RUN apk add --no-cache python3 make g++ \
  && pnpm install --frozen-lockfile \
@@ -20,7 +22,7 @@ RUN apk add --no-cache python3 make g++ \
 
 # ---------- Stage 2: build ----------
 FROM node:22-alpine AS build
-RUN corepack enable
+RUN corepack enable && corepack prepare pnpm@11.0.8 --activate
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .

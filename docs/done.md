@@ -4,6 +4,20 @@
 
 ---
 
+## 2026-05-08
+
+### Docker / 腾讯云构建：pnpm 11 `approve-builds` 与非交互安装失败
+
+**需求背景**：CloudBase Run 等容器内 `corepack` 使用 pnpm 11.x，`strictDepBuilds` 默认开启；未预先声明允许生命周期脚本时，`pnpm install` 要求交互执行 `pnpm approve-builds`，CI 无 TTY 导致退出码 1。
+
+**实现内容**：
+
+1. 仓库根目录 [`pnpm-workspace.yaml`](./pnpm-workspace.yaml)（`allowBuilds`: `argon2`、`sharp`）+ 根目录 [`.npmrc`](./.npmrc) 设置 **`dangerously-allow-all-builds=true`**：容器无 TTY 时不再卡在依赖脚本审批（lockfile 锁定版本；官方亦推荐 Docker 场景）。
+2. [`Dockerfile`](./Dockerfile)：`corepack prepare pnpm@11.0.8 --activate` 固定 pnpm；`deps` / `build` 阶段均如此；`COPY` 含 `.npmrc`。
+3. [`package.json`](./package.json) **`packageManager`: `pnpm@11.0.8`** 与镜像一致。本地若仍为 pnpm 10，`pnpm approve-builds --all` 不可用，改用 **`npx pnpm@11.0.8 approve-builds --all`** 或直接依赖已提交的 yaml + `.npmrc`。
+
+---
+
 ## 2026-05-07
 
 ### 前台全局头部「按角色」横条（搜索框下方）
