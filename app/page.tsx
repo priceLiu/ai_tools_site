@@ -10,6 +10,7 @@ import { HomeTagCategoriesSection } from '@/components/home-tag-categories'
 import { getHomeToolBundle } from '@/lib/cached-home-data'
 import { getHomeAdsBundle } from '@/lib/cached-home-ads'
 import { getHomeTagCategoryCards } from '@/lib/cached-home-tag-categories'
+import { getHomeRoleStrip } from '@/lib/cached-home-role-strip'
 import { getNavigationMenuTreeStatic } from '@/lib/navigation-menu'
 import { getSiteUrl } from '@/lib/site-url'
 
@@ -23,11 +24,12 @@ export const metadata: Metadata = {
 }
 
 export default async function HomePage() {
-  const [bundle, navigation, ads, tagCategoryCards] = await Promise.all([
+  const [bundle, navigation, ads, tagCategoryCards, rolesStrip] = await Promise.all([
     getHomeToolBundle(),
     getNavigationMenuTreeStatic(),
     getHomeAdsBundle(),
     getHomeTagCategoryCards(),
+    getHomeRoleStrip(),
   ])
 
   const siteUrl = getSiteUrl()
@@ -108,7 +110,10 @@ export default async function HomePage() {
           </div>
 
           <div className="mx-auto w-full max-w-[min(100%,94rem)]">
-            <HomeTagCategoriesSection cards={tagCategoryCards} />
+            <HomeTagCategoriesSection
+              cards={tagCategoryCards}
+              rolesStrip={rolesStrip}
+            />
           </div>
 
           <HomeToolSections bundle={bundle} />

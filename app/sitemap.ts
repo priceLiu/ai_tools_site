@@ -1,7 +1,6 @@
 import type { MetadataRoute } from 'next'
 import * as neon from '@/lib/neon/data'
 import { getSiteUrl } from '@/lib/site-url'
-import { TAG_ROLES } from '@/lib/tag-roles'
 
 /**
  * Sitemap：每小时构建一次（与 Next ISR 配合，Vercel 上请求会命中已生成的版本）。
@@ -11,9 +10,9 @@ import { TAG_ROLES } from '@/lib/tag-roles'
  *   - 首页 / about / `/category/hot`
  *   - 全部 approved 工具：/tool/[slug]
  *   - 全部一级 / 二级分类：/category/[slug]
- *   - 全部 8 个场景一级分类：/tag-category/[slug]
+ *   - 全部已启用的场景分类：/tag-category/[slug]
  *   - 全部 curated 标签：/tag/[name]
- *   - 全部 4 个角色：/role/[slug]
+ *   - 全部已启用的角色页：/role/[slug]
  *
  * 不进 sitemap：admin、account、auth、api、submit、search、my-submissions、favorites、诊断页。
  */
@@ -44,12 +43,24 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     },
   ]
 
-  const roleEntries: MetadataRoute.Sitemap = TAG_ROLES.map((r) => ({
-    url: `${base}/role/${encodeURIComponent(r.slug)}`,
-    lastModified: now,
-    changeFrequency: 'daily' as const,
-    priority: 0.8,
-  }))
+  let roleEntries: MetadataRoute.Sitemap = []
+
+  try {
+    const roleSlugs = await neon.neonListRoleCategoryEnabledSlugs()
+    roleEntries = roleSlugs.map((slug) => ({
+      url: `${base}/role/${encodeURIComponent(slug)}`,
+      lastModified: now,
+      changeFrequency: 'daily' as const,
+      priority: 0.8,
+    }))
+  } catch (e) {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn(
+        '[sitemap] role_categories 不可用（迁移可能未执行）:',
+        e instanceof Error ? e.message : e,
+      )
+    }
+  }
 
   let toolEntries: MetadataRoute.Sitemap = []
   let categoryEntries: MetadataRoute.Sitemap = []
@@ -93,6 +104,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       neon.neonAdminListTagsAll(),
     ])
     tagCategoryEntries = tagCategories
+      .filter((c) => !c.is_disabled)
       .map((c) => (c.slug ?? '').trim())
       .filter((s) => s.length > 0)
       .map((slug) => ({

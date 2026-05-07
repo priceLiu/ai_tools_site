@@ -5,6 +5,7 @@ import {
   mapAdminTagRow,
   mapCommentRow,
   mapProfileRow,
+  mapRoleCategoryRow,
   mapTagCategoryRow,
   mapToolRow,
   parseCategoryJson,
@@ -16,6 +17,7 @@ import type {
   Category,
   NavigationMenuItemRow,
   Profile,
+  RoleCategory,
   TagCategory,
   Tool,
   ToolComment,
@@ -23,6 +25,7 @@ import type {
 import type { IntroductionFormat } from '@/lib/introduction-format'
 import { toolIntroductionPreviewDedup } from '@/lib/tool-dedup'
 import { publicizeToolImages, publicizeToolLogoUrl } from '@/lib/public-tool-image-url'
+import { slugifyTagCategoryName } from '@/lib/tag-category-slug'
 
 /** 与首页「最新收录」limit 一致 */
 export const HOME_LATEST_MAX = 15
@@ -2307,8 +2310,24 @@ export async function neonCountActiveAdsByPlacement(): Promise<{
 export async function neonListTagCategoriesAll(): Promise<TagCategory[]> {
   const sql = getNeonSql()
   const rows = await sql`
-    SELECT id, name, slug, icon, sort_order, description, created_at
+    SELECT id, name, slug, icon, sort_order, description, created_at,
+           COALESCE(is_disabled, false) AS is_disabled
     FROM tag_categories
+    ORDER BY sort_order ASC, name ASC
+  `
+  return (rows as Record<string, unknown>[]).map(mapTagCategoryRow)
+}
+
+/**
+ * 前台用：不包含已禁用的场景分类（首页、「按场景找 AI」卡片、聚合页等）。
+ */
+export async function neonListTagCategoriesEnabled(): Promise<TagCategory[]> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT id, name, slug, icon, sort_order, description, created_at,
+           COALESCE(is_disabled, false) AS is_disabled
+    FROM tag_categories
+    WHERE COALESCE(is_disabled, false) = false
     ORDER BY sort_order ASC, name ASC
   `
   return (rows as Record<string, unknown>[]).map(mapTagCategoryRow)
@@ -2316,18 +2335,42 @@ export async function neonListTagCategoriesAll(): Promise<TagCategory[]> {
 
 export async function neonGetTagCategoryBySlug(
   slug: string,
+  opts?: { includeDisabled?: boolean },
+): Promise<TagCategory | null> {
+  const sql = getNeonSql()
+  const rows = opts?.includeDisabled
+    ? await sql`
+      SELECT id, name, slug, icon, sort_order, description, created_at,
+             COALESCE(is_disabled, false) AS is_disabled
+      FROM tag_categories WHERE slug = ${slug} LIMIT 1
+    `
+    : await sql`
+      SELECT id, name, slug, icon, sort_order, description, created_at,
+             COALESCE(is_disabled, false) AS is_disabled
+      FROM tag_categories
+      WHERE slug = ${slug}
+        AND COALESCE(is_disabled, false) = false
+      LIMIT 1
+    `
+  const r = rows[0] as Record<string, unknown> | undefined
+  return r ? mapTagCategoryRow(r) : null
+}
+
+export async function neonGetTagCategoryById(
+  tagCategoryId: string,
 ): Promise<TagCategory | null> {
   const sql = getNeonSql()
   const rows = await sql`
-    SELECT id, name, slug, icon, sort_order, description, created_at
-    FROM tag_categories WHERE slug = ${slug} LIMIT 1
+    SELECT id, name, slug, icon, sort_order, description, created_at,
+           COALESCE(is_disabled, false) AS is_disabled
+    FROM tag_categories WHERE id = ${tagCategoryId} LIMIT 1
   `
   const r = rows[0] as Record<string, unknown> | undefined
   return r ? mapTagCategoryRow(r) : null
 }
 
 /**
- * 管理后台：列出全部标签 + 工具数 + 一级分类。
+ * 管理后台：列出全部标签 + 工具数 + 场景分类。
  * 排序：is_curated DESC（curated 在前），同分类内按名称。
  */
 export async function neonAdminListTagsAll(): Promise<AdminTagRow[]> {
@@ -2351,6 +2394,387 @@ export async function neonAdminListTagsAll(): Promise<AdminTagRow[]> {
              t.name ASC
   `
   return (rows as Record<string, unknown>[]).map(mapAdminTagRow)
+}
+
+/** 自动提取标签：全库 name + aliases，供规则打分字典（只读） */
+export async function neonListTagsSuggestDictionary(): Promise<
+  { name: string; aliases: string[] }[]
+> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT name, COALESCE(aliases, '{}'::text[]) AS aliases
+    FROM tags
+    ORDER BY lower(trim(name))
+  `
+  return (rows as { name: unknown; aliases: unknown }[])
+    .map((r) => {
+      const name = String(r.name ?? '').trim()
+      const aliases = Array.isArray(r.aliases)
+        ? (r.aliases as string[]).map((x) => String(x).trim()).filter(Boolean)
+        : []
+      return { name, aliases }
+    })
+    .filter((r) => r.name.length > 0)
+}
+
+/**
+ * 管理员新建标签（可控词表扩充）。须归属某一场景分类。
+ */
+export async function neonAdminInsertTag(params: {
+  name: string
+  tagCategoryId: string
+  isCurated: boolean
+}): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const n = params.name.normalize('NFKC').trim().replace(/\s+/g, ' ')
+  if (!n) return { ok: false, error: '名称不能为空' }
+  const cat = params.tagCategoryId.trim()
+  if (!cat) return { ok: false, error: '请选择场景分类' }
+  const sql = getNeonSql()
+  const dup = await sql`
+    SELECT id FROM tags WHERE lower(trim(name)) = lower(${n}) LIMIT 1
+  `
+  if (dup.length > 0) return { ok: false, error: '已存在同名标签' }
+  try {
+    const ins = await sql`
+      INSERT INTO tags (name, tag_category_id, is_curated, aliases)
+      VALUES (${n}, ${cat}, ${params.isCurated}, '{}'::text[])
+      RETURNING id
+    `
+    return { ok: true, id: String((ins[0] as { id: string }).id) }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : '写入失败' }
+  }
+}
+
+/**
+ * 管理员：新建场景分类（`tag_categories`）；slug 由名称生成并在冲突时重试。
+ */
+export async function neonAdminInsertTagCategory(params: {
+  name: string
+  icon?: string | null
+}): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const nm = params.name.normalize('NFKC').trim().replace(/\s+/g, ' ')
+  if (!nm.length) return { ok: false, error: '名称不能为空' }
+
+  const sql = getNeonSql()
+  const dupeName = await sql`
+    SELECT id FROM tag_categories WHERE lower(trim(name)) = lower(${nm}) LIMIT 1
+  `
+  if (dupeName.length > 0) return { ok: false, error: '已存在同名场景分类' }
+
+  const maxRows = await sql`
+    SELECT COALESCE(MAX(sort_order), 0)::int AS m FROM tag_categories
+  `
+  const nextOrder = Number((maxRows[0] as { m?: number }).m ?? 0) + 1
+  const icon = params.icon?.trim() ? params.icon.trim() : null
+  let baseSlug = slugifyTagCategoryName(nm)
+
+  for (let attempt = 0; attempt < 24; attempt++) {
+    const slug =
+      attempt === 0 ? baseSlug : `${baseSlug}-${attempt}-${Date.now().toString(36).slice(-5)}`
+    try {
+      const ins = await sql`
+        INSERT INTO tag_categories (name, slug, icon, sort_order)
+        VALUES (${nm}, ${slug}, ${icon}, ${nextOrder})
+        RETURNING id
+      `
+      return { ok: true, id: String((ins[0] as { id: string }).id) }
+    } catch {
+      baseSlug = slugifyTagCategoryName(`${nm}-${attempt + 2}`)
+      continue
+    }
+  }
+
+  return { ok: false, error: '无法生成可用的 slug，请稍后重试' }
+}
+
+export async function neonAdminSetTagCategoryDisabled(params: {
+  tagCategoryId: string
+  isDisabled: boolean
+}): Promise<{ ok: boolean; error?: string }> {
+  const sql = getNeonSql()
+  try {
+    const rows = await sql`
+      UPDATE tag_categories
+      SET is_disabled = ${params.isDisabled}
+      WHERE id = ${params.tagCategoryId}
+      RETURNING id
+    `
+    if (!rows[0]) return { ok: false, error: '场景分类不存在' }
+    return { ok: true }
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : 'unable to disable tag category',
+    }
+  }
+}
+
+// =====================================================================
+// 角色分类（`role_categories` / `role_category_tags`）
+// =====================================================================
+
+export async function neonListRoleCategoriesAll(): Promise<RoleCategory[]> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT id, name, slug, icon, sort_order, tagline, description, created_at,
+           COALESCE(is_disabled, false) AS is_disabled
+    FROM role_categories
+    ORDER BY sort_order ASC, name ASC
+  `
+  return (rows as Record<string, unknown>[]).map(mapRoleCategoryRow)
+}
+
+export async function neonListRoleCategoriesEnabled(): Promise<RoleCategory[]> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT id, name, slug, icon, sort_order, tagline, description, created_at,
+           COALESCE(is_disabled, false) AS is_disabled
+    FROM role_categories
+    WHERE COALESCE(is_disabled, false) = false
+    ORDER BY sort_order ASC, name ASC
+  `
+  return (rows as Record<string, unknown>[]).map(mapRoleCategoryRow)
+}
+
+export async function neonGetRoleCategoryBySlug(
+  slug: string,
+  opts?: { includeDisabled?: boolean },
+): Promise<RoleCategory | null> {
+  const sql = getNeonSql()
+  const rows = opts?.includeDisabled
+    ? await sql`
+      SELECT id, name, slug, icon, sort_order, tagline, description, created_at,
+             COALESCE(is_disabled, false) AS is_disabled
+      FROM role_categories WHERE slug = ${slug} LIMIT 1
+    `
+    : await sql`
+      SELECT id, name, slug, icon, sort_order, tagline, description, created_at,
+             COALESCE(is_disabled, false) AS is_disabled
+      FROM role_categories
+      WHERE slug = ${slug} AND COALESCE(is_disabled, false) = false
+      LIMIT 1
+    `
+  const r = rows[0] as Record<string, unknown> | undefined
+  return r ? mapRoleCategoryRow(r) : null
+}
+
+export async function neonCountRoleCategoriesEnabled(): Promise<number> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT COUNT(*)::int AS n FROM role_categories
+    WHERE COALESCE(is_disabled, false) = false
+  `
+  return Number((rows[0] as { n?: number })?.n ?? 0)
+}
+
+export async function neonListRoleCategoryEnabledSlugs(): Promise<string[]> {
+  const cats = await neonListRoleCategoriesEnabled()
+  return cats.map((c) => c.slug)
+}
+
+export async function neonListTagsForRolePage(
+  roleCategoryId: string,
+): Promise<{ id: string; name: string; tag_category_id: string | null }[]> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT t.id, t.name, t.tag_category_id
+    FROM role_category_tags rct
+    JOIN tags t ON t.id = rct.tag_id
+    WHERE rct.role_category_id = ${roleCategoryId}
+    ORDER BY rct.sort_order ASC,
+             lower(trim(t.name)),
+             t.id::text
+  `
+  return (rows as { id: unknown; name: unknown; tag_category_id: unknown }[])
+    .map((r) => ({
+      id: String(r.id),
+      name: String(r.name),
+      tag_category_id:
+        r.tag_category_id == null || String(r.tag_category_id).trim() === ''
+          ? null
+          : String(r.tag_category_id),
+    }))
+}
+
+export async function neonListRoleCategoryTagLinks(): Promise<
+  { role_category_id: string; tag_id: string }[]
+> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT role_category_id, tag_id FROM role_category_tags
+  `
+  return (rows as { role_category_id: unknown; tag_id: unknown }[]).map((r) => ({
+    role_category_id: String(r.role_category_id),
+    tag_id: String(r.tag_id),
+  }))
+}
+
+export async function neonAdminInsertRoleCategory(params: {
+  name: string
+  icon?: string | null
+  tagline?: string | null
+  description?: string | null
+}): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const nm = params.name.normalize('NFKC').trim().replace(/\s+/g, ' ')
+  if (!nm.length) return { ok: false, error: '名称不能为空' }
+  const taglineRaw = params.tagline?.normalize('NFKC').trim() ?? ''
+  const descriptionRaw =
+    params.description?.normalize('NFKC').trim().replace(/\s+/g, ' ') ?? ''
+  const icon = params.icon?.trim() ? params.icon.trim() : null
+
+  const sql = getNeonSql()
+  const dupeName = await sql`
+    SELECT id FROM role_categories WHERE lower(trim(name)) = lower(${nm}) LIMIT 1
+  `
+  if (dupeName.length > 0) return { ok: false, error: '已存在同名角色分类' }
+
+  const maxRows = await sql`
+    SELECT COALESCE(MAX(sort_order), 0)::int AS m FROM role_categories
+  `
+  const nextOrder = Number((maxRows[0] as { m?: number }).m ?? 0) + 1
+  let baseSlug = slugifyTagCategoryName(nm)
+
+  for (let attempt = 0; attempt < 24; attempt++) {
+    const slug =
+      attempt === 0
+        ? baseSlug
+        : `${baseSlug}-${attempt}-${Date.now().toString(36).slice(-5)}`
+    try {
+      const ins = await sql`
+        INSERT INTO role_categories (
+          name, slug, icon, sort_order,
+          tagline, description, is_disabled
+        )
+        VALUES (
+          ${nm}, ${slug}, ${icon}, ${nextOrder},
+          ${taglineRaw}, ${descriptionRaw}, false
+        )
+        RETURNING id
+      `
+      return { ok: true, id: String((ins[0] as { id: string }).id) }
+    } catch {
+      baseSlug = slugifyTagCategoryName(`${nm}-${attempt + 2}`)
+      continue
+    }
+  }
+
+  return { ok: false, error: '无法生成可用的 slug，请稍后重试' }
+}
+
+export async function neonAdminSetRoleCategoryDisabled(params: {
+  roleCategoryId: string
+  isDisabled: boolean
+}): Promise<{ ok: boolean; error?: string }> {
+  const sql = getNeonSql()
+  try {
+    const rows = await sql`
+      UPDATE role_categories
+      SET is_disabled = ${params.isDisabled}
+      WHERE id = ${params.roleCategoryId}
+      RETURNING id
+    `
+    if (!rows[0]) return { ok: false, error: '角色分类不存在' }
+    return { ok: true }
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : 'unable to disable role category',
+    }
+  }
+}
+
+export async function neonAdminLinkTagToRoleCategory(params: {
+  roleCategoryId: string
+  tagId: string
+}): Promise<{ ok: boolean; error?: string }> {
+  const sql = getNeonSql()
+  const roleRows = await sql`
+    SELECT id FROM role_categories WHERE id = ${params.roleCategoryId} LIMIT 1
+  `
+  if (!roleRows[0]) return { ok: false, error: '角色分类不存在' }
+  const tagRows = await sql`
+    SELECT id FROM tags WHERE id = ${params.tagId} LIMIT 1
+  `
+  if (!tagRows[0]) return { ok: false, error: '标签不存在' }
+
+  try {
+    const maxRows = await sql`
+      SELECT COALESCE(MAX(sort_order), -1)::int AS m
+      FROM role_category_tags
+      WHERE role_category_id = ${params.roleCategoryId}
+    `
+    const nextOrd = Number((maxRows[0] as { m?: number })?.m ?? -1) + 1
+    await sql`
+      INSERT INTO role_category_tags (role_category_id, tag_id, sort_order)
+      VALUES (${params.roleCategoryId}, ${params.tagId}, ${nextOrd})
+      ON CONFLICT (role_category_id, tag_id) DO NOTHING
+    `
+    return { ok: true }
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : 'unable to link tag to role',
+    }
+  }
+}
+
+export async function neonAdminUnlinkTagFromRoleCategory(params: {
+  roleCategoryId: string
+  tagId: string
+}): Promise<{ ok: boolean; error?: string }> {
+  const sql = getNeonSql()
+  try {
+    await sql`
+      DELETE FROM role_category_tags
+      WHERE role_category_id = ${params.roleCategoryId}
+        AND tag_id = ${params.tagId}
+    `
+    return { ok: true }
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : 'unable to unlink tag',
+    }
+  }
+}
+
+export async function neonAdminAssignTagToCategory(params: {
+  tagId: string
+  tagCategoryId: string | null
+}): Promise<{ ok: boolean; error?: string }> {
+  const sql = getNeonSql()
+  const tagRows = await sql`
+    SELECT id FROM tags WHERE id = ${params.tagId} LIMIT 1
+  `
+  if (!tagRows[0]) return { ok: false, error: '标签不存在' }
+
+  const cidRaw = params.tagCategoryId
+  const cid =
+    cidRaw == null || String(cidRaw).trim() === ''
+      ? null
+      : String(cidRaw).trim()
+
+  if (cid != null) {
+    const catRows = await sql`
+      SELECT id FROM tag_categories WHERE id = ${cid} LIMIT 1
+    `
+    if (!catRows[0]) return { ok: false, error: '场景分类不存在' }
+  }
+
+  try {
+    await sql`
+      UPDATE tags
+      SET tag_category_id = ${cid}
+      WHERE id = ${params.tagId}
+    `
+    return { ok: true }
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : 'unable to assign tag category',
+    }
+  }
 }
 
 /**
@@ -2592,7 +3016,40 @@ export async function neonListToolsByTagCategoryId(
     })
 }
 
-/** 一级分类 → 旗下标签（按工具数降序），用于 /tag-category/[slug] 与首页卡片 chip */
+export async function neonListToolsByRoleCategoryId(
+  roleCategoryId: string,
+): Promise<Tool[]> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT DISTINCT ON (t.id) t.*, row_to_json(c) AS category
+    FROM tool_tags tt
+    JOIN tags tg ON tg.id = tt.tag_id
+    JOIN role_category_tags rct ON rct.tag_id = tg.id
+      AND rct.role_category_id = ${roleCategoryId}
+    JOIN tools t ON t.id = tt.tool_id
+    LEFT JOIN categories c ON c.id = t.category_id
+    WHERE t.status = 'approved' AND COALESCE(t.is_disabled, false) = false
+    ORDER BY t.id, t.is_featured DESC, t.created_at DESC
+  `
+  const tools = (rows as Record<string, unknown>[])
+    .map(rowToTool)
+    .map(publicizeToolImages)
+  if (tools.length === 0) return tools
+  const tagMap = await loadToolTagsForTools(tools.map((x) => x.id))
+  return tools
+    .map((t) => {
+      const tags = tagMap.get(t.id)
+      return tags ? { ...t, tool_tags: tags } : t
+    })
+    .sort((a, b) => {
+      if (a.is_featured !== b.is_featured) return a.is_featured ? -1 : 1
+      return (
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      )
+    })
+}
+
+/** 场景分类 → 旗下标签（按工具数降序），用于 /tag-category/[slug] 与首页卡片 chip */
 export async function neonListTagsForCategoryWithCounts(
   tagCategoryId: string,
   limit = 100,

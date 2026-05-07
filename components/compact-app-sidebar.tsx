@@ -19,6 +19,8 @@ import {
   Megaphone,
   MessageSquare,
   Tag,
+  FolderTree,
+  UserSquare,
   type LucideIcon,
 } from 'lucide-react'
 import { AdminRegenerateStaticButton } from '@/components/admin-regenerate-static-button'
@@ -109,12 +111,15 @@ function NavRow({
   Icon,
   active,
   onItemSelect,
+  className,
 }: {
   href: string
   label: string
   Icon: LucideIcon
   active: boolean
   onItemSelect?: () => void
+  /** 子菜单缩进 */
+  className?: string
 }) {
   return (
     <Link
@@ -125,6 +130,7 @@ function NavRow({
         active
           ? 'bg-sidebar-accent text-sidebar-accent-foreground'
           : 'text-sidebar-foreground hover:bg-sidebar-accent/70',
+        className,
       )}
     >
       <Icon className="h-4 w-4 shrink-0" />
@@ -161,16 +167,20 @@ export function CompactAppSidebarFrame({
   ] as const
 
   const navigationAdminActive = pathname.startsWith('/admin/navigation')
+  const tagSceneAdminActive = pathname.startsWith('/admin/tag-categories')
+  const tagsListAdminActive = pathname.startsWith('/admin/tags')
+  const tagRoleAdminActive = pathname.startsWith('/admin/role-categories')
+  const tagAdminSubtreeActive =
+    tagsListAdminActive || tagSceneAdminActive || tagRoleAdminActive
   const usersAdminActive = pathname.startsWith('/admin/users')
   const importAdminActive = pathname.startsWith('/admin/import-tools')
   const statsAdminActive = pathname.startsWith('/admin/stats')
   const adsAdminActive = pathname.startsWith('/admin/ads')
   const commentsAdminActive = pathname.startsWith('/admin/comments')
-  const tagsAdminActive = pathname.startsWith('/admin/tags')
   const reviewsAdminActive =
     pathname.startsWith('/admin') &&
     !commentsAdminActive &&
-    !tagsAdminActive &&
+    !tagAdminSubtreeActive &&
     !navigationAdminActive &&
     !usersAdminActive &&
     !importAdminActive &&
@@ -256,7 +266,21 @@ export function CompactAppSidebarFrame({
               href="/admin/tags"
               label="标签管理"
               Icon={Tag}
-              active={tagsAdminActive}
+              active={tagsListAdminActive}
+              onItemSelect={onItemSelect}
+            />
+            <NavRow
+              href="/admin/tag-categories"
+              label="场景分类管理"
+              Icon={FolderTree}
+              active={tagSceneAdminActive}
+              onItemSelect={onItemSelect}
+            />
+            <NavRow
+              href="/admin/role-categories"
+              label="角色管理"
+              Icon={UserSquare}
+              active={tagRoleAdminActive}
               onItemSelect={onItemSelect}
             />
 

@@ -97,13 +97,13 @@ set_tool_tags_for_tool(uuid, text[])  -- EXIT WHEN i >= 20
 - [x] `TOOL_TAGS_MAX = 20`，输出建议 ≤ 12；首位仍兜底分类名，且若属 217 词表则规整为 curated 标准名
 - [x] 同步：`neonSetToolTagsForTool` 上限 6→20、`bulkExtractToolTagsAdminAction` 跑完后失效首页 / 分类 / 详情 / `/tag-category` / `/tag` / `/role` ISR
 
-### Phase 5：管理后台 `/admin/tags`
+### Phase 5：管理后台 `/admin/tags`与场景分类
 
-- [x] 数据层 `lib/neon/data.ts` 增加 `neonAdminListTagsAll` / `neonAdminListUncuratedTags` / `neonAdminMergeTags` / `neonAdminRenameTag` / `neonAdminDeleteTag` / `neonAdminSetTagCurated` / `neonListTagCategoriesAll` / `neonGetTagCategoryBySlug` / `neonGetTagByName` / `neonListToolsByTagId` / `neonListToolsByTagCategoryId` / `neonListTagsForCategoryWithCounts`
-- [x] Server Action：`app/admin/tags/actions.ts`
-- [x] 客户端：`components/admin-tags-manager.tsx`（统计、视图切换、分类筛选、搜索、合并/改名/删/标 curated）
-- [x] 页面：`app/admin/tags/page.tsx`
-- [x] 侧栏入口：`components/compact-app-sidebar.tsx`（管理后台「标签管理」）
+- [x] 数据层 `lib/neon/data.ts`：`neonAdmin*` 系列、`neonListTagCategoriesAll`、`neonListTagCategoriesEnabled`、`neonGetTagCategoryBySlug`（可按 `includeDisabled`）、`neonGetTagCategoryById`、`neonAdminInsertTagCategory`、`neonAdminAssignTagToCategory`、`neonAdminSetTagCategoryDisabled`；以及 `neonGetTagByName`、`neonListToolsByTagId`、`neonListToolsByTagCategoryId`、`neonListTagsForCategoryWithCounts`
+- [x] Server Action：`app/admin/tags/actions.ts`、`app/admin/tag-categories/actions.ts`
+- [x] 客户端：`components/admin-tags-manager.tsx`（视图切换、搜索；按场景 **Tabs** + 表格限高；合并 / 改名 / 删 / curated）；`components/admin-scene-category-manager.tsx` / `admin-tag-stats-cards` / `admin-tag-create-card`
+- [x] 页面：`app/admin/tags/page.tsx`（清洗视图）、`app/admin/tag-categories/page.tsx`（统计 + 新建标签 + 场景分类 CRUD）
+- [x] 侧栏：`compact-app-sidebar.tsx`（**标签管理** 与 **场景分类管理**平级）
 
 ### Phase 6：批量重打
 

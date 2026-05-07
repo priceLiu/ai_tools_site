@@ -48,7 +48,7 @@ export interface ToolTagLink {
   tag: { id: string; name: string }
 }
 
-/** 一级（场景）分类：与 categories（左栏菜单）解耦 */
+/** 场景分类（`tag_categories`，与左侧产品线 `categories` 解耦） */
 export interface TagCategory {
   id: string
   name: string
@@ -57,6 +57,22 @@ export interface TagCategory {
   sort_order: number
   description: string | null
   created_at: string
+  /** 禁用后前台不展示该场景分类本体页与首页卡片（标签数据仍保留） */
+  is_disabled?: boolean
+}
+
+/** 角色分类（`role_categories`）：首页「按角色」入口与 `/role/[slug]` */
+export interface RoleCategory {
+  id: string
+  name: string
+  slug: string
+  icon: string | null
+  sort_order: number
+  tagline: string | null
+  description: string | null
+  created_at: string
+  /** 禁用后前台隐去本品与对应角色聚合页、sitemap（标签与联结不删） */
+  is_disabled?: boolean
 }
 
 /** 标签（含 curated 元信息） */
@@ -73,9 +89,9 @@ export interface TagRow {
 export interface AdminTagRow extends TagRow {
   /** 关联工具数（COUNT(tool_tags)） */
   tool_count: number
-  /** 一级分类名（如有） */
+  /** 场景分类名（如有） */
   category_name: string | null
-  /** 一级分类 slug（如有） */
+  /** 场景分类 slug（如有） */
   category_slug: string | null
 }
 

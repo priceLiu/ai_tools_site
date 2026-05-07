@@ -14,12 +14,13 @@ import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import type { HomeTagCategoryCard } from '@/lib/cached-home-tag-categories'
+import type { HomeRoleStripItem } from '@/lib/cached-home-role-strip'
+import { roleLucideIcon } from '@/lib/role-lucide-icons'
 import {
   rolePublicPath,
   tagCategoryPublicPath,
   tagPublicPath,
 } from '@/lib/tag-slug'
-import { TAG_ROLES } from '@/lib/tag-roles'
 
 const ICON_MAP: Record<string, LucideIcon> = {
   Pen,
@@ -34,11 +35,17 @@ const ICON_MAP: Record<string, LucideIcon> = {
 
 interface Props {
   cards: HomeTagCategoryCard[]
+  /** 数据库启用的首页「按角色」条 */
+  rolesStrip: HomeRoleStripItem[]
   /** 区块顶部锚点 id；首页主导航跳转使用 */
   anchorId?: string
 }
 
-export function HomeTagCategoriesSection({ cards, anchorId = 'home-scenes' }: Props) {
+export function HomeTagCategoriesSection({
+  cards,
+  rolesStrip,
+  anchorId = 'home-scenes',
+}: Props) {
   if (cards.length === 0) return null
 
   return (
@@ -52,34 +59,37 @@ export function HomeTagCategoriesSection({ cards, anchorId = 'home-scenes' }: Pr
             按场景找 AI
           </h2>
         </div>
-        <div className="ml-auto flex flex-wrap items-center gap-1">
-          <span className="text-[10px] text-muted-foreground md:text-xs">
-            按角色：
-          </span>
-          {TAG_ROLES.map((r) => {
-            const RIcon = r.icon
-            return (
-              <Link
-                key={r.slug}
-                href={rolePublicPath(r.slug)}
-                aria-label={`${r.name}：${r.tagline}`}
-                title={r.tagline}
-                className="inline-flex"
-              >
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    'h-6 gap-1 border-primary/60 bg-card px-1.5 text-[10px] font-medium text-foreground/80',
-                    'hover:border-primary hover:bg-primary hover:text-primary-foreground',
-                  )}
+        {rolesStrip.length > 0 ? (
+          <div className="ml-auto flex flex-wrap items-center gap-1">
+            <span className="text-[10px] text-muted-foreground md:text-xs">
+              按角色：
+            </span>
+            {rolesStrip.map((r) => {
+              const RIcon = roleLucideIcon(r.icon)
+              const tip = r.tagline?.trim() ? r.tagline.trim() : r.name
+              return (
+                <Link
+                  key={r.slug}
+                  href={rolePublicPath(r.slug)}
+                  aria-label={`${r.name}：${tip}`}
+                  title={tip}
+                  className="inline-flex"
                 >
-                  <RIcon className="h-3 w-3" />
-                  {r.name}
-                </Badge>
-              </Link>
-            )
-          })}
-        </div>
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      'h-6 gap-1 border-primary/60 bg-card px-1.5 text-[10px] font-medium text-foreground/80',
+                      'hover:border-primary hover:bg-primary hover:text-primary-foreground',
+                    )}
+                  >
+                    <RIcon className="h-3 w-3" />
+                    {r.name}
+                  </Badge>
+                </Link>
+              )
+            })}
+          </div>
+        ) : null}
       </div>
 
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4">

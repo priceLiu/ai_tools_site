@@ -16,6 +16,7 @@ export function ToolTagsEditor({
   suggestLoading,
   onRequestSuggest,
   idPrefix,
+  allowManualEntry = true,
 }: {
   value: string[]
   onChange: (names: string[]) => void
@@ -23,6 +24,8 @@ export function ToolTagsEditor({
   suggestLoading?: boolean
   onRequestSuggest?: () => void
   idPrefix: string
+  /** 若为 false（访客提交）：仅允许移除 chip，必须通过「自动提取标签」填入 */
+  allowManualEntry?: boolean
 }) {
   const [draft, setDraft] = useState('')
 
@@ -67,13 +70,21 @@ export function ToolTagsEditor({
             ) : (
               <RotateCcw className="h-3.5 w-3.5" />
             )}
-            根据介绍自动生成
+            {allowManualEntry ? '根据介绍自动生成' : '自动提取标签'}
           </Button>
         ) : null}
       </div>
       <p className="text-xs text-muted-foreground">
-        首个一般为分类名；其余为从介绍中识别的 AI
-        能力（视频、音频等）。可自行增删。
+        {allowManualEntry ? (
+          <>
+            首个一般为分类名；其余为从介绍中识别的 AI
+            能力（视频、音频等）。可自行增删。
+          </>
+        ) : (
+          <>
+            仅能从受控标签库匹配：请点击「自动提取标签」一键生成（可删减 chip，不可手写新标签）。
+          </>
+        )}
       </p>
       <div className="flex min-h-[2.25rem] flex-wrap gap-2">
         {value.map((label, i) => (
@@ -100,31 +111,33 @@ export function ToolTagsEditor({
           <span className="text-xs text-muted-foreground">暂无标签</span>
         ) : null}
       </div>
-      <div className="flex flex-wrap gap-2">
-        <Input
-          id={`${idPrefix}-tag-draft`}
-          placeholder="手动添加标签…"
-          value={draft}
-          disabled={disabled || value.length >= TOOL_TAGS_MAX}
-          className="max-w-xs flex-1"
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              addDraft()
-            }
-          }}
-        />
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          disabled={disabled || value.length >= TOOL_TAGS_MAX}
-          onClick={() => addDraft()}
-        >
-          添加
-        </Button>
-      </div>
+      {allowManualEntry ? (
+        <div className="flex flex-wrap gap-2">
+          <Input
+            id={`${idPrefix}-tag-draft`}
+            placeholder="手动添加标签…"
+            value={draft}
+            disabled={disabled || value.length >= TOOL_TAGS_MAX}
+            className="max-w-xs flex-1"
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                addDraft()
+              }
+            }}
+          />
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            disabled={disabled || value.length >= TOOL_TAGS_MAX}
+            onClick={() => addDraft()}
+          >
+            添加
+          </Button>
+        </div>
+      ) : null}
     </div>
   )
 }

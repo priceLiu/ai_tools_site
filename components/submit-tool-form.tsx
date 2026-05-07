@@ -134,9 +134,11 @@ export function SubmitToolForm({
   const [tagNames, setTagNames] = useState<string[]>(
     () => editingTool?.initialTagNames ?? [],
   )
-  const [tagsUserTouched, setTagsUserTouched] = useState(
-    () => Boolean(editingTool),
-  )
+  const tagContentKeyRef = useRef('')
+  const editBootstrapToolIdRef = useRef<string | null>(null)
+  const [lastExtractSucceededForKey, setLastExtractSucceededForKey] = useState<
+    string | null
+  >(null)
   const [tagsSuggestLoading, setTagsSuggestLoading] = useState(false)
 
   const [uploadingLogo, setUploadingLogo] = useState(false)
@@ -221,32 +223,40 @@ export function SubmitToolForm({
         ? 'html'
         : 'plain'
 
+  const tagContentKey = useMemo(
+    () =>
+      [
+        resolvedSubmitCategoryId ?? '',
+        introDbFormat,
+        introText.trim(),
+        name.trim(),
+        summaryDescription.trim(),
+      ].join('\u0001'),
+    [
+      resolvedSubmitCategoryId,
+      introDbFormat,
+      introText,
+      name,
+      summaryDescription,
+    ],
+  )
+
+  tagContentKeyRef.current = tagContentKey
+
   useEffect(() => {
-    if (tagsUserTouched) return
-    const cat = resolvedSubmitCategoryId
-    if (!cat) return
-
-    let cancelled = false
-    const handle = window.setTimeout(async () => {
-      const r = await suggestToolTagNamesAction({
-        introduction: introText.trim(),
-        introductionFormat: introDbFormat,
-        categoryId: cat,
-      })
-      if (cancelled) return
-      if ('names' in r) setTagNames(r.names)
-    }, 520)
-
-    return () => {
-      cancelled = true
-      window.clearTimeout(handle)
+    if (!editingTool?.id) {
+      editBootstrapToolIdRef.current = null
+      setLastExtractSucceededForKey(null)
+      return
     }
-  }, [
-    introText,
-    introDbFormat,
-    resolvedSubmitCategoryId,
-    tagsUserTouched,
-  ])
+    if (editBootstrapToolIdRef.current === editingTool.id) return
+    editBootstrapToolIdRef.current = editingTool.id
+    const n = editingTool.initialTagNames?.length ?? 0
+    setLastExtractSucceededForKey(n > 0 ? tagContentKeyRef.current : null)
+  }, [editingTool?.id, editingTool?.initialTagNames?.length, editingTool])
+
+  const tagsExtractStale = lastExtractSucceededForKey !== tagContentKey
+  const tagsGateReady = tagNames.length > 0 && !tagsExtractStale
 
   const requestTagSuggest = useCallback(async () => {
     if (!resolvedSubmitCategoryId) {
@@ -265,17 +275,27 @@ export function SubmitToolForm({
         introduction: body,
         introductionFormat: introDbFormat,
         categoryId: resolvedSubmitCategoryId,
+        toolId: editingTool?.id ?? null,
+        name: name.trim() || null,
+        description: summaryDescription.trim() || null,
       })
       if ('error' in r) {
         setError(r.error)
         return
       }
       setTagNames(r.names)
-      setTagsUserTouched(false)
+      setLastExtractSucceededForKey(tagContentKeyRef.current)
     } finally {
       setTagsSuggestLoading(false)
     }
-  }, [introText, introDbFormat, resolvedSubmitCategoryId])
+  }, [
+    editingTool?.id,
+    introDbFormat,
+    introText,
+    name,
+    resolvedSubmitCategoryId,
+    summaryDescription,
+  ])
 
   useEffect(() => {
     if (summaryUserEdited) return
@@ -507,6 +527,15 @@ export function SubmitToolForm({
 
       const { body, dbFormat, description } = buildPayload()
 
+      if (tagNames.length === 0) {
+        throw new Error('请先点击「自动提取标签」，并至少保留一个标签')
+      }
+      if (tagsExtractStale) {
+        throw new Error(
+          '工具介绍、名称、概述或分类已变更，请先重新点击「自动提取标签」',
+        )
+      }
+
       const displayName = toolNameDedupKey(name)
       const dedup = await assertNoDuplicateToolForSubmitAction({
         name,
@@ -549,6 +578,14 @@ export function SubmitToolForm({
     setError('')
     try {
       buildPayload()
+      if (tagNames.length === 0) {
+        throw new Error('请先点击「自动提取标签」，并至少保留一个标签')
+      }
+      if (tagsExtractStale) {
+        throw new Error(
+          '工具介绍、名称、概述或分类已变更，请先重新点击「自动提取标签」',
+        )
+      }
       setPreviewOpen(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : '无法预览')
@@ -782,14 +819,19 @@ export function SubmitToolForm({
           <ToolTagsEditor
             idPrefix="submit-tool"
             value={tagNames}
-            onChange={(next) => {
-              setTagsUserTouched(true)
-              setTagNames(next)
-            }}
+            onChange={setTagNames}
             disabled={isSubmitting}
             suggestLoading={tagsSuggestLoading}
             onRequestSuggest={() => void requestTagSuggest()}
+            allowManualEntry={false}
           />
+          {resolvedSubmitCategoryId && introText.trim() && !tagsGateReady ? (
+            <p className="text-xs text-amber-700 dark:text-amber-500">
+              {tagNames.length === 0
+                ? '请点击「自动提取标签」从受控词表生成标签（可删减，不可手写）。'
+                : '内容已相对上次提取有变更，请重新点击「自动提取标签」。'}
+            </p>
+          ) : null}
 
           <div className="space-y-2">
             <Label className="text-sm font-medium">工具Logo</Label>
@@ -960,11 +1002,11 @@ export function SubmitToolForm({
             type="button"
             variant="secondary"
             onClick={openPreview}
-            disabled={isSubmitting}
+            disabled={isSubmitting || !tagsGateReady}
           >
             预览
           </Button>
-          <Button type="submit" disabled={isSubmitting}>
+          <Button type="submit" disabled={isSubmitting || !tagsGateReady}>
             {isSubmitting && <Spinner className="mr-2 h-4 w-4" />}
             {editingTool ? '保存并重新提交审核' : '提交审核'}
           </Button>

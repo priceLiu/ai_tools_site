@@ -7,6 +7,7 @@ import { loadHomeToolBundle } from '@/lib/cached-home-data'
 import { uploadHomeToolBundleSnapshot } from '@/lib/home-bundle-snapshot'
 import {
   HOME_ADS_CACHE_TAG,
+  HOME_ROLE_CATEGORIES_CACHE_TAG,
   HOME_TAG_CATEGORIES_CACHE_TAG,
   HOME_TOOL_BUNDLE_CACHE_TAG,
   NAVIGATION_MENU_CACHE_TAG,
@@ -52,6 +53,7 @@ export async function revalidateHomeToolBundleAction(): Promise<{
   revalidateTag(HOME_TOOL_BUNDLE_CACHE_TAG, { expire: 0 })
   revalidateTag(HOME_ADS_CACHE_TAG, { expire: 0 })
   revalidateTag(HOME_TAG_CATEGORIES_CACHE_TAG, { expire: 0 })
+  revalidateTag(HOME_ROLE_CATEGORIES_CACHE_TAG, { expire: 0 })
   /** 与 `regeneratePublicStaticAction` 等价：导航菜单也可能因工具变动需要刷新（隐藏空分类等）。 */
   revalidateTag(NAVIGATION_MENU_CACHE_TAG, { expire: 0 })
   revalidatePath('/')
@@ -85,6 +87,7 @@ export async function regeneratePublicStaticAction(): Promise<{
     revalidateTag(NAVIGATION_MENU_CACHE_TAG, { expire: 0 })
     revalidateTag(HOME_ADS_CACHE_TAG, { expire: 0 })
     revalidateTag(HOME_TAG_CATEGORIES_CACHE_TAG, { expire: 0 })
+    revalidateTag(HOME_ROLE_CATEGORIES_CACHE_TAG, { expire: 0 })
     revalidatePath('/')
     revalidatePath('/category/[slug]', 'page')
     revalidatePath('/tool/[slug]', 'page')
@@ -107,6 +110,7 @@ export async function regeneratePublicStaticAction(): Promise<{
     revalidateTag(NAVIGATION_MENU_CACHE_TAG, { expire: 0 })
     revalidateTag(HOME_ADS_CACHE_TAG, { expire: 0 })
     revalidateTag(HOME_TAG_CATEGORIES_CACHE_TAG, { expire: 0 })
+    revalidateTag(HOME_ROLE_CATEGORIES_CACHE_TAG, { expire: 0 })
     revalidatePath('/')
     revalidatePath('/category/[slug]', 'page')
     revalidatePath('/tool/[slug]', 'page')

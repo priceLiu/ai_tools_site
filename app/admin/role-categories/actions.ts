@@ -19,7 +19,7 @@ async function requireAdmin(): Promise<{ error: string } | null> {
   return null
 }
 
-function revalidateTagSurfaces() {
+function revalidateSurfaces() {
   revalidateTag(HOME_TOOL_BUNDLE_CACHE_TAG, { expire: 0 })
   revalidateTag(HOME_ADS_CACHE_TAG, { expire: 0 })
   revalidateTag(HOME_TAG_CATEGORIES_CACHE_TAG, { expire: 0 })
@@ -34,74 +34,62 @@ function revalidateTagSurfaces() {
   revalidatePath('/role/[slug]', 'page')
 }
 
-/**
- * 合并：source 上所有 tool_tags 转到 target；source.name 写入 target.aliases；删 source。
- */
-export async function adminMergeTagsAction(input: {
-  sourceTagId: string
-  targetTagId: string
-}): Promise<{ ok: boolean; error?: string; movedTools?: number }> {
-  const gate = await requireAdmin()
-  if (gate) return { ok: false, error: gate.error }
-
-  const r = await neon.neonAdminMergeTags(input)
-  if (!r.ok) return { ok: false, error: r.error }
-  revalidateTagSurfaces()
-  return { ok: true, movedTools: r.movedTools }
-}
-
-export async function adminRenameTagAction(input: {
-  tagId: string
-  newName: string
-}): Promise<{ ok: boolean; error?: string }> {
-  const gate = await requireAdmin()
-  if (gate) return { ok: false, error: gate.error }
-
-  const r = await neon.neonAdminRenameTag(input)
-  if (!r.ok) return { ok: false, error: r.error }
-  revalidateTagSurfaces()
-  return { ok: true }
-}
-
-export async function adminDeleteTagAction(
-  tagId: string,
-): Promise<{ ok: boolean; error?: string }> {
-  const gate = await requireAdmin()
-  if (gate) return { ok: false, error: gate.error }
-
-  const r = await neon.neonAdminDeleteTag(tagId)
-  if (!r.ok) return { ok: false, error: r.error }
-  revalidateTagSurfaces()
-  return { ok: true }
-}
-
-export async function adminSetTagCuratedAction(input: {
-  tagId: string
-  isCurated: boolean
-  tagCategoryId: string | null
-}): Promise<{ ok: boolean; error?: string }> {
-  const gate = await requireAdmin()
-  if (gate) return { ok: false, error: gate.error }
-
-  await neon.neonAdminSetTagCurated(input)
-  revalidateTagSurfaces()
-  return { ok: true }
-}
-
-export async function adminCreateTagAction(input: {
+export async function adminCreateRoleCategoryAction(input: {
   name: string
-  tagCategoryId: string
-  isCurated: boolean
 }): Promise<{ ok: boolean; error?: string; id?: string }> {
   const gate = await requireAdmin()
   if (gate) return { ok: false, error: gate.error }
 
-  const r = await neon.neonAdminInsertTag({
-    name: input.name,
-    tagCategoryId: input.tagCategoryId,
-    isCurated: input.isCurated,
+  const r = await neon.neonAdminInsertRoleCategory({ name: input.name })
+  if (!r.ok) return { ok: false, error: r.error }
+  revalidateSurfaces()
+  return { ok: true, id: r.id }
+}
+
+export async function adminSetRoleCategoryDisabledAction(input: {
+  roleCategoryId: string
+  isDisabled: boolean
+}): Promise<{ ok: boolean; error?: string }> {
+  const gate = await requireAdmin()
+  if (gate) return { ok: false, error: gate.error }
+
+  const r = await neon.neonAdminSetRoleCategoryDisabled({
+    roleCategoryId: input.roleCategoryId,
+    isDisabled: input.isDisabled,
   })
   if (!r.ok) return { ok: false, error: r.error }
-  revalidateTagSurfaces()
-  return { ok: true, id: r.id }
+  revalidateSurfaces()
+  return { ok: true }
+}
+
+export async function adminLinkTagToRoleCategoryAction(input: {
+  roleCategoryId: string
+  tagId: string
+}): Promise<{ ok: boolean; error?: string }> {
+  const gate = await requireAdmin()
+  if (gate) return { ok: false, error: gate.error }
+
+  const r = await neon.neonAdminLinkTagToRoleCategory({
+    roleCategoryId: input.roleCategoryId,
+    tagId: input.tagId,
+  })
+  if (!r.ok) return { ok: false, error: r.error }
+  revalidateSurfaces()
+  return { ok: true }
+}
+
+export async function adminUnlinkTagFromRoleCategoryAction(input: {
+  roleCategoryId: string
+  tagId: string
+}): Promise<{ ok: boolean; error?: string }> {
+  const gate = await requireAdmin()
+  if (gate) return { ok: false, error: gate.error }
+
+  const r = await neon.neonAdminUnlinkTagFromRoleCategory({
+    roleCategoryId: input.roleCategoryId,
+    tagId: input.tagId,
+  })
+  if (!r.ok) return { ok: false, error: r.error }
+  revalidateSurfaces()
+  return { ok: true }
 }

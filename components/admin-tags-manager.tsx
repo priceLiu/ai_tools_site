@@ -30,6 +30,8 @@ import {
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Spinner } from '@/components/ui/spinner'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { compareAdminTagRowByDisplayName } from '@/lib/tag-name-sort'
 import type { AdminTagRow, TagCategory } from '@/lib/types'
 import { Edit3, Merge, Star, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -46,21 +48,20 @@ export function AdminTagsManager({
   const router = useRouter()
   const [mode, setMode] = useState<Mode>('curated')
   const [keyword, setKeyword] = useState('')
-  const [filterCategoryId, setFilterCategoryId] = useState<string>('')
+  const [activeTab, setActiveTab] = useState<string | undefined>(undefined)
 
   const filtered = useMemo(() => {
     const kw = keyword.trim().toLowerCase()
     return tags.filter((t) => {
       if (mode === 'curated' && !t.is_curated) return false
       if (mode === 'uncurated' && t.is_curated) return false
-      if (filterCategoryId && t.tag_category_id !== filterCategoryId) return false
       if (kw) {
         const blob = `${t.name} ${(t.aliases ?? []).join(' ')}`.toLowerCase()
         if (!blob.includes(kw)) return false
       }
       return true
     })
-  }, [tags, mode, keyword, filterCategoryId])
+  }, [tags, mode, keyword])
 
   const grouped = useMemo(() => {
     const m = new Map<string | 'unset', AdminTagRow[]>()
@@ -73,26 +74,34 @@ export function AdminTagsManager({
     return m
   }, [filtered])
 
+  const sortedCats = useMemo(
+    () =>
+      [...tagCategories].sort(
+        (a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, 'zh-Hans-CN'),
+      ),
+    [tagCategories],
+  )
+
+  const tabKeys = useMemo(() => {
+    const keys: string[] = []
+    for (const cat of sortedCats) {
+      if ((grouped.get(cat.id)?.length ?? 0) > 0) keys.push(cat.id)
+    }
+    if ((grouped.get('unset')?.length ?? 0) > 0) keys.push('unset')
+    return keys
+  }, [sortedCats, grouped])
+
+  const effectiveTab = useMemo(() => {
+    if (tabKeys.length === 0) return undefined
+    if (activeTab != null && tabKeys.includes(activeTab)) return activeTab
+    return tabKeys[0]
+  }, [tabKeys, activeTab])
+
   const totalCurated = tags.filter((t) => t.is_curated).length
   const totalUncurated = tags.length - totalCurated
-  const curatedToolLinks = tags
-    .filter((t) => t.is_curated)
-    .reduce((s, t) => s + t.tool_count, 0)
-  const uncuratedToolLinks = tags
-    .filter((t) => !t.is_curated)
-    .reduce((s, t) => s + t.tool_count, 0)
 
   return (
     <div className="space-y-6">
-      <Stats
-        totalTags={tags.length}
-        curated={totalCurated}
-        uncurated={totalUncurated}
-        curatedToolLinks={curatedToolLinks}
-        uncuratedToolLinks={uncuratedToolLinks}
-        categoriesCount={tagCategories.length}
-      />
-
       <div className="flex flex-wrap items-end gap-3 rounded-md border bg-card/50 p-3">
         <div>
           <Label className="text-xs">视图</Label>
@@ -121,25 +130,9 @@ export function AdminTagsManager({
           </div>
         </div>
 
-        <div>
-          <Label htmlFor="tag-cat-filter" className="text-xs">
-            分类筛选
-          </Label>
-          <select
-            id="tag-cat-filter"
-            value={filterCategoryId}
-            onChange={(e) => setFilterCategoryId(e.target.value)}
-            className="mt-1 h-9 rounded-md border bg-background px-2 text-sm"
-          >
-            <option value="">全部分类</option>
-            {tagCategories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-            <option value="">— 未分类 —</option>
-          </select>
-        </div>
+        <p className="w-full basis-full text-xs text-muted-foreground">
+          使用下方 <strong>场景分类 Tab</strong> 切换表格；视图（Curated / 待清理 / 全部）与搜索对全库生效，仅有匹配结果的分类会出现 Tab。
+        </p>
 
         <div className="min-w-[220px] flex-1">
           <Label htmlFor="tag-search" className="text-xs">
@@ -155,91 +148,84 @@ export function AdminTagsManager({
         </div>
       </div>
 
-      <div className="space-y-6">
-        {tagCategories.map((cat) => {
-          const list = grouped.get(cat.id) ?? []
-          if (list.length === 0) return null
-          return (
-            <CategorySection
-              key={cat.id}
-              categoryName={cat.name}
-              categorySlug={cat.slug}
-              tags={list}
-              mergeTargetPool={tags}
-              tagCategories={tagCategories}
-              router={router}
-            />
-          )
-        })}
-
-        {(grouped.get('unset')?.length ?? 0) > 0 && (
-          <CategorySection
-            key="unset"
-            categoryName="未分类（可标 curated 并指定一级分类）"
-            categorySlug={null}
-            tags={grouped.get('unset') ?? []}
-            mergeTargetPool={tags}
-            tagCategories={tagCategories}
-            router={router}
-          />
-        )}
-
-        {filtered.length === 0 && (
+      <div className="space-y-3">
+        {filtered.length === 0 ? (
           <div className="rounded-md border bg-muted/40 p-6 text-center text-sm text-muted-foreground">
             没有匹配的标签
           </div>
+        ) : !effectiveTab ? (
+          <div className="rounded-md border bg-muted/40 p-6 text-center text-sm text-muted-foreground">
+            当前视图下暂无按分类可用的列表
+          </div>
+        ) : (
+          <Tabs
+            value={effectiveTab}
+            onValueChange={setActiveTab}
+            className="w-full gap-3"
+          >
+            <TabsList className="h-auto min-h-9 w-full min-w-0 flex-wrap justify-start gap-1 p-1">
+              {sortedCats.map((cat) => {
+                const n = grouped.get(cat.id)?.length ?? 0
+                if (n === 0) return null
+                return (
+                  <TabsTrigger
+                    key={cat.id}
+                    value={cat.id}
+                    className="flex-none basis-auto max-w-[min(100%,240px)] shrink-0 px-2.5 py-1.5 text-left text-xs sm:text-sm"
+                    title={cat.name}
+                  >
+                    <span className="truncate">{cat.name}</span>
+                    <span className="ml-1 shrink-0 tabular-nums text-[11px] text-muted-foreground">
+                      ({n})
+                    </span>
+                  </TabsTrigger>
+                )
+              })}
+              {(grouped.get('unset')?.length ?? 0) > 0 ? (
+                <TabsTrigger
+                  value="unset"
+                  className="flex-none basis-auto px-2.5 py-1.5 text-left text-xs sm:text-sm"
+                >
+                  未分类
+                  <span className="ml-1 tabular-nums text-[11px] text-muted-foreground">
+                    ({grouped.get('unset')?.length ?? 0})
+                  </span>
+                </TabsTrigger>
+              ) : null}
+            </TabsList>
+
+            {sortedCats.map((cat) => (
+              <TabsContent
+                key={cat.id}
+                value={cat.id}
+                className="mt-0 focus-visible:outline-none"
+              >
+                <CategorySection
+                  categoryName={cat.name}
+                  categorySlug={cat.slug}
+                  tags={grouped.get(cat.id) ?? []}
+                  mergeTargetPool={tags}
+                  tagCategories={tagCategories}
+                  router={router}
+                />
+              </TabsContent>
+            ))}
+
+            {(grouped.get('unset')?.length ?? 0) > 0 ? (
+              <TabsContent value="unset" className="mt-0 focus-visible:outline-none">
+                <CategorySection
+                  categoryName="未分类（可标 curated 并指定场景分类）"
+                  categorySlug={null}
+                  tags={grouped.get('unset') ?? []}
+                  mergeTargetPool={tags}
+                  tagCategories={tagCategories}
+                  router={router}
+                />
+              </TabsContent>
+            ) : null}
+          </Tabs>
         )}
       </div>
-    </div>
-  )
-}
-
-function Stats({
-  totalTags,
-  curated,
-  uncurated,
-  curatedToolLinks,
-  uncuratedToolLinks,
-  categoriesCount,
-}: {
-  totalTags: number
-  curated: number
-  uncurated: number
-  curatedToolLinks: number
-  uncuratedToolLinks: number
-  categoriesCount: number
-}) {
-  return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-      {[
-        { label: '总标签数', value: totalTags },
-        { label: 'Curated 标签', value: curated, hint: '受保护的官方词表' },
-        { label: '待清理标签', value: uncurated, hint: '历史落库的非官方词' },
-        {
-          label: 'Curated 工具关联',
-          value: curatedToolLinks,
-          hint: '已挂在 curated 标签上的 tool_tags 数',
-        },
-        {
-          label: '待清理工具关联',
-          value: uncuratedToolLinks,
-          hint: '挂在非 curated 标签上、需合并/重打的 tool_tags 数',
-        },
-        { label: '一级分类', value: categoriesCount },
-      ].map((it) => (
-        <div
-          key={it.label}
-          className="rounded-md border bg-card p-3 text-center"
-        >
-          <div className="text-2xl font-semibold tabular-nums">{it.value}</div>
-          <div className="mt-1 text-xs text-muted-foreground">{it.label}</div>
-          {it.hint && (
-            <div className="mt-0.5 text-[10px] text-muted-foreground/70">
-              {it.hint}
-            </div>
-          )}
-        </div>
-      ))}
     </div>
   )
 }
@@ -260,18 +246,23 @@ function CategorySection({
   tagCategories: TagCategory[]
   router: ReturnType<typeof useRouter>
 }) {
+  const sortedTags = useMemo(
+    () => [...tags].sort(compareAdminTagRowByDisplayName),
+    [tags],
+  )
+
   return (
     <div className="space-y-2">
       <div className="flex items-baseline gap-2">
         <h2 className="text-base font-semibold">{categoryName}</h2>
         <span className="text-xs text-muted-foreground">
-          {tags.length} 个标签
+          {sortedTags.length} 个标签
         </span>
         {categorySlug && (
           <span className="text-xs text-muted-foreground">/ {categorySlug}</span>
         )}
       </div>
-      <div className="rounded-md border bg-card">
+      <div className="max-h-[min(560px,60vh)] overflow-auto rounded-md border bg-card overscroll-contain">
         <Table>
           <TableHeader>
             <TableRow>
@@ -283,7 +274,7 @@ function CategorySection({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {tags.map((t) => (
+            {sortedTags.map((t) => (
               <TagRowView
                 key={t.id}
                 row={t}
@@ -344,7 +335,7 @@ function TagRowView({
         toast.error(r.error ?? '失败')
         return
       }
-      toast.success('已更新一级分类')
+      toast.success('已更新场景分类')
       onChanged()
     })
   }

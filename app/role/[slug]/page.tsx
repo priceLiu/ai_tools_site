@@ -10,31 +10,16 @@ import { Badge } from '@/components/ui/badge'
 import { getNavigationMenuTreeStatic } from '@/lib/navigation-menu'
 import * as neon from '@/lib/neon/data'
 import { getSiteUrl } from '@/lib/site-url'
-import {
-  TAG_ROLES,
-  TAG_ROLE_SLUGS,
-  getTagRoleBySlug,
-} from '@/lib/tag-roles'
+import { roleLucideIcon } from '@/lib/role-lucide-icons'
 import {
   rolePublicPath,
   tagCategoryPublicPath,
   tagPublicPath,
 } from '@/lib/tag-slug'
-import type { Tool } from '@/lib/types'
+import type { TagCategory } from '@/lib/types'
 
-/** 60s ISR：标签 / 分类 / 工具任意写入都会失效 */
+/** 60s ISR：标签 / 角色 / 工具任意写入都会失效 */
 export const revalidate = 60
-/**
- * `dynamicParams = true`：允许运行时为未预渲染的 slug SSR + ISR。
- * 历史上是 `false`（强制 build 时把 9 个角色全预渲染）。但腾讯云 CloudBase Run 的 Docker
- * 构建阶段拿不到 `DATABASE_URL`（环境变量只在运行时注入），强制预渲染会让 `next build`
- * 在 `neonListTagCategoriesAll()` 抛出 `DATABASE_URL is required` 而失败。
- *
- * 现在的策略：
- *  - build 期 `generateStaticParams()` 在缺 DB 时返回 `[]` → 不预渲染任何 slug → build 通过；
- *  - 运行时第一次访问 `/role/<slug>` 触发 SSR，命中 60s ISR，后续走缓存；
- *  - 无效 slug 走 `getTagRoleBySlug` → `notFound()`，行为与 `dynamicParams=false` 等价。
- */
 export const dynamicParams = true
 
 interface PageProps {
@@ -42,60 +27,62 @@ interface PageProps {
 }
 
 const getRoleBundleCached = cache(async (slug: string) => {
-  const role = getTagRoleBySlug(slug)
+  const role = await neon.neonGetRoleCategoryBySlug(slug)
   if (!role) return null
-  const tagCategories = await neon.neonListTagCategoriesAll()
-  const matchedCategoryIds = role.tagCategoryNames
-    .map((n) => tagCategories.find((c) => c.name === n)?.id)
-    .filter((x): x is string => Boolean(x))
+  const [tagCategories, linkedTags, tools, enabledRoleCount] = await Promise.all([
+    neon.neonListTagCategoriesEnabled(),
+    neon.neonListTagsForRolePage(role.id),
+    neon.neonListToolsByRoleCategoryId(role.id),
+    neon.neonCountRoleCategoriesEnabled(),
+  ])
 
-  const toolsByCategory: Tool[][] = await Promise.all(
-    matchedCategoryIds.map((cid) => neon.neonListToolsByTagCategoryId(cid)),
+  const catIdSet = new Set(
+    linkedTags.map((t) => t.tag_category_id).filter((x): x is string => Boolean(x)),
   )
-  const dedup = new Map<string, Tool>()
-  for (const list of toolsByCategory) {
-    for (const t of list) dedup.set(t.id, t)
+  const matchedCategories: TagCategory[] = []
+  for (const id of catIdSet) {
+    const c = tagCategories.find((x) => x.id === id)
+    if (c) matchedCategories.push(c)
   }
-  const tools: Tool[] = Array.from(dedup.values()).sort((a, b) => {
-    if (a.is_featured !== b.is_featured) return a.is_featured ? -1 : 1
-    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-  })
+  matchedCategories.sort((a, b) => a.sort_order - b.sort_order)
 
-  return { role, tagCategories, matchedCategoryIds, tools }
+  return { role, linkedTags, tools, matchedCategories, enabledRoleCount }
 })
 
 export async function generateStaticParams() {
-  /**
-   * 构建容器拿不到 `DATABASE_URL`（CloudBase Run 把环境变量留到运行时）时，
-   * 直接返回 `[]` 跳过预渲染——否则页面渲染会调用 `neonListTagCategoriesAll()`
-   * 抛 `DATABASE_URL is required` 把 build 干挂。
-   * 运行时第一次访问会 SSR + ISR 缓存。
-   */
   if (!process.env.DATABASE_URL) return []
-  return TAG_ROLE_SLUGS.map((slug) => ({ slug }))
+  try {
+    const slugs = await neon.neonListRoleCategoryEnabledSlugs()
+    return slugs.map((slug) => ({ slug }))
+  } catch {
+    return []
+  }
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug: raw } = await params
   const slug = decodeURIComponent(raw ?? '').trim()
-  const role = getTagRoleBySlug(slug)
+  const role = await neon.neonGetRoleCategoryBySlug(slug)
   if (!role) return { title: '角色未找到', robots: { index: false } }
   const path = rolePublicPath(role.slug)
+  const sub = role.tagline?.trim() ? role.tagline.trim() : role.name
+  const desc =
+    role.description?.trim() ?? `${role.name}：站内 AI 工具推荐与标签导航。`
   return {
-    title: `${role.name}专属 AI 工具 · ${role.tagline}`,
-    description: role.description,
-    keywords: [role.name, role.tagline, 'AI 工具推荐'].join(', '),
+    title: `${role.name}专属 AI 工具 · ${sub}`,
+    description: desc,
+    keywords: [role.name, sub, 'AI 工具推荐'].join(', '),
     alternates: { canonical: path },
     openGraph: {
       type: 'website',
       url: path,
-      title: `${role.name} · ${role.tagline}`,
-      description: role.description,
+      title: `${role.name} · ${sub}`,
+      description: desc,
     },
     twitter: {
       card: 'summary_large_image',
-      title: `${role.name} · ${role.tagline}`,
-      description: role.description,
+      title: `${role.name} · ${sub}`,
+      description: desc,
     },
   }
 }
@@ -105,25 +92,25 @@ export default async function RolePage({ params }: PageProps) {
   const slug = decodeURIComponent(raw ?? '').trim()
   const bundle = await getRoleBundleCached(slug)
   if (!bundle) notFound()
-  const { role, tagCategories, matchedCategoryIds, tools } = bundle
+
+  const { role, matchedCategories, linkedTags, tools, enabledRoleCount } = bundle
 
   const navigation = await getNavigationMenuTreeStatic()
 
-  const matchedCategories = matchedCategoryIds
-    .map((id) => tagCategories.find((c) => c.id === id))
-    .filter((x): x is NonNullable<typeof x> => Boolean(x))
-
-  const Icon = role.icon
+  const Icon = roleLucideIcon(role.icon)
 
   const siteUrl = getSiteUrl()
   const path = rolePublicPath(role.slug)
+  const sub = role.tagline?.trim() ? role.tagline.trim() : role.name
+  const bodyText =
+    role.description?.trim() ?? '通过关联标签聚合本站已审核的 AI 工具。'
 
   const collectionLd = {
     '@context': 'https://schema.org',
     '@type': 'CollectionPage',
-    name: `${role.name} · ${role.tagline}`,
+    name: `${role.name} · ${sub}`,
     url: `${siteUrl}${path}`,
-    description: role.description,
+    description: bodyText,
     isPartOf: { '@type': 'WebSite', url: siteUrl },
   }
 
@@ -161,24 +148,23 @@ export default async function RolePage({ params }: PageProps) {
                 </div>
                 <div>
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                    角色专属 · {TAG_ROLES.length} 选 1
+                    角色专属
+                    {enabledRoleCount > 0 ? <> · {enabledRoleCount} 选 1</> : null}
                   </p>
                   <h1 className="mt-0.5 text-xl font-bold text-foreground md:text-2xl">
                     {role.name}
                   </h1>
-                  <p className="mt-0.5 text-sm font-medium text-primary">
-                    {role.tagline}
-                  </p>
-                  <p className="mt-2 text-sm text-foreground/80">
-                    {role.description}
-                  </p>
+                  <p className="mt-0.5 text-sm font-medium text-primary">{sub}</p>
+                  <p className="mt-2 text-sm text-foreground/80">{bodyText}</p>
                 </div>
               </div>
             </div>
 
             {matchedCategories.length > 0 && (
               <div className="mb-4 flex flex-wrap items-center gap-2">
-                <span className="text-xs text-muted-foreground">关联场景：</span>
+                <span className="text-xs text-muted-foreground">
+                  关联场景（标签归属）：
+                </span>
                 {matchedCategories.map((c) => (
                   <Link key={c.id} href={tagCategoryPublicPath(c.slug)}>
                     <Badge variant="default">{c.name}</Badge>
@@ -187,17 +173,17 @@ export default async function RolePage({ params }: PageProps) {
               </div>
             )}
 
-            {role.highlightedTagNames.length > 0 && (
+            {linkedTags.length > 0 && (
               <div className="mb-6 rounded-xl border bg-card/50 p-4">
                 <p className="mb-2 text-sm font-semibold">推荐标签</p>
                 <div className="flex flex-wrap gap-1.5">
-                  {role.highlightedTagNames.map((name) => (
-                    <Link key={name} href={tagPublicPath(name)}>
+                  {linkedTags.map((t) => (
+                    <Link key={t.id} href={tagPublicPath(t.name)}>
                       <Badge
                         variant="secondary"
                         className="hover:bg-primary hover:text-primary-foreground"
                       >
-                        {name}
+                        {t.name}
                       </Badge>
                     </Link>
                   ))}
@@ -224,7 +210,7 @@ export default async function RolePage({ params }: PageProps) {
                   暂无工具
                 </h2>
                 <p className="mt-2 text-muted-foreground">
-                  当前还没有打上该角色聚合分类标签的工具
+                  请在本站后台「角色管理」为本品关联标签，或为工具打上对应标签。
                 </p>
               </div>
             )}

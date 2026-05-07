@@ -14,7 +14,7 @@ export interface HomeTagCategoryCard {
 async function loadHomeTagCategoryCards(): Promise<HomeTagCategoryCard[]> {
   let cats
   try {
-    cats = await neon.neonListTagCategoriesAll()
+    cats = await neon.neonListTagCategoriesEnabled()
   } catch (e) {
     /**
      * `tag_categories` 表 / `tags.tag_category_id` 列缺失时：

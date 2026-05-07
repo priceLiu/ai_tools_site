@@ -26,7 +26,7 @@ interface PageProps {
 
 export async function generateStaticParams() {
   try {
-    const cats = await neon.neonListTagCategoriesAll()
+    const cats = await neon.neonListTagCategoriesEnabled()
     return cats
       .map((c) => (c.slug ?? '').trim())
       .filter((s) => s.length > 0)
@@ -43,7 +43,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const { slug: raw } = await params
   const slug = decodeURIComponent(raw ?? '').trim()
   const cat = await getCategoryBySlugCached(slug)
-  if (!cat) return { title: '一级分类未找到', robots: { index: false } }
+  if (!cat) return { title: '场景分类未找到', robots: { index: false } }
   const path = tagCategoryPublicPath(slug)
   const desc =
     cat.description?.trim() ||

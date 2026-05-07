@@ -216,9 +216,9 @@
 4. **公开页**
    - `/tag-category/[slug]`：8 个一级分类详情（chip + 工具网格 + `CollectionPage` / `ItemList` JSON-LD）
    - `/tag/[slug]`：单个标签详情（`generateStaticParams` 仅预生 curated）
-   - `/role/[slug]`：4 个角色聚合页（打工人 / 创业老板 / 自由职业自媒体 / 转型学习者）；配置在 `lib/tag-roles.ts`
+   - `/role/[slug]`：角色聚合页；数据由 **`role_categories` + `role_category_tags`** 驱动（曾硬编码于已删除的 `lib/tag-roles.ts`）
    - `lib/tag-slug.ts`：`tagPublicPath` / `tagCategoryPublicPath` / `rolePublicPath` / `decodeTagNameFromSlug`
-   - `app/sitemap.ts`：收录全部 `/tag-category/*`、curated `/tag/*`（`tool_count > 0`）、4 个 `/role/*`
+   - `app/sitemap.ts`：收录全部 `/tag-category/*`、curated `/tag/*`（`tool_count > 0`）、**已启用**的 `/role/*`
 
 5. **首页腰部「按场景找 AI」**
    - `components/home-tag-categories.tsx`：8 卡片，每张含场景图标 + 工具数 + 工具数前 5 的标签 chip；点击卡片跳 `/tag-category/<slug>`，点击 chip 跳 `/tag/<name>`
@@ -311,6 +311,35 @@
 
 ---
 
+## 2026-05-06：访客标签闸门 + 全库字典匹配 + 后台新建标签
+
+**需求背景**：访客侧标签需可控、可清洗；产品与「场景」（一级标签分类）、侧栏类目分工见 [`docs/tag-scenario-control-plan.md`](./tag-scenario-control-plan.md)。
+
+**实现内容**：
+
+1. **访客提交**：关闭手写/手动添加标签；必须点击「自动提取标签」（仅匹配 `tags` 表词表，`TAG_KEYWORDS` 作补充）；介绍/名称/概述/分类变更后须重新提取方可预览与提交。
+2. **服务端**：`suggestToolTagNamesAction` / 管理端 bulk 重写使用 `getCachedTagsSuggestDictionary` + `buildSuggestedToolTagNamesFromDictionary`（空库回落旧规则）；标签写操作失效 `TAG_SUGGEST_DICTIONARY_CACHE_TAG`。
+3. **后台**：`/admin/tag-categories`（场景分类管理）：`AdminTagCreateCard`、`adminCreateTagAction`；`/admin/tags` 聚焦合并 / 改名 / curated / 待清理视图。
+4. **UI**：`ToolTagsEditor` 支持 `allowManualEntry`（`/submit` 为 `false`，审核编辑仍为默认 `true`）。
+
+---
+
+## 2026-05-06：场景分类管理 + 文案「场景分类」+ `is_disabled`
+
+**需求背景**：将「一级场景」产品与 UI 统一为 **场景分类**；集中管理场景与词表增长能力；支持前台临时下线某场景而不删数据。设计见 [`docs/tag-scenario-control-plan.md`](./tag-scenario-control-plan.md)。
+
+**实现内容**：
+
+1. **迁移**：`supabase/migrations/20260506123000_tag_categories_is_disabled.sql` — `tag_categories.is_disabled boolean NOT NULL DEFAULT false`。
+2. **数据层**：`neonListTagCategoriesEnabled()` 供首页 / 角色页 / sitemap / `generateStaticParams`；`neonGetTagCategoryBySlug` 默认排除禁用；`neonGetTagCategoryById`；`neonAdminInsertTagCategory` / `neonAdminAssignTagToCategory` / `neonAdminSetTagCategoryDisabled`。
+3. **路由**：`app/admin/tag-categories/page.tsx` — `AdminTagStatsCards`、`AdminTagCreateCard`、`AdminSceneCategoryManager`；`app/admin/tag-categories/actions.ts`。
+4. **导航**：侧栏 **标签管理** 与 **场景分类管理**（`FolderTree`）为**平级**两项；`/admin/tags` 移除统计与新建标签块。
+5. **场景交互**：场景分类以 **Tabs** 切换；单类标签列表 **限高滚动**，避免整页过长。
+6. **前台**：`/tag/[slug]` 在所属场景禁用时不再链到 `/tag-category`；JSON-LD `isPartOf` 同步。
+7. **`/admin/tags` 布局**：`AdminTagsManager` 与场景页一致，按场景分类 **Tabs** 展示；表格 **限高滚动**；原「场景分类」下拉筛选移除（由 Tab 代替）。
+
+---
+
 ## 2026-05-06（晚）：`/admin/tags`「合并」候选列表修复
 
 **需求背景**：待在「待清理 → 未分类」分组内点「合并」时，原先合并目标仅从**当前分组**的标签里挑选，无法在弹窗中选到其它分组下的 curated 官方标签。
@@ -321,7 +350,24 @@
 
 ---
 
+## 2026-05-06：角色管理（首页「按角色」+ `/role/[slug]` DB 化）
+
+**需求背景**：与「场景分类管理」对齐，首页「按角色」条带与角色落地页应由后台维护；支持禁用某角色分类、为本品关联或移出标签，并控制前台 / sitemap 曝光。
+
+**实现内容**：
+
+1. **迁移**：`20260506140000_role_categories.sql` — `role_categories`、`role_category_tags`（RLS 只读）；`20260506140100_seed_role_categories.sql` — 4 个种子角色与原高亮标签关联。
+2. **数据**：`neonListRoleCategories*` / `neonGetRoleCategoryBySlug` / `neonListToolsByRoleCategoryId` / `neonListTagsForRolePage` / Admin CRUD（创建、禁用、`neonAdminLinkTagToRoleCategory` / Unlink）。
+3. **前台缓存**：`lib/cached-home-role-strip.ts`、`HOME_ROLE_CATEGORIES_CACHE_TAG`；与标签 / 场景 / 工具写入一同 `revalidateTag`。
+4. **页面**：`app/page.tsx` 传入 `getHomeRoleStrip()`；`components/home-tag-categories.tsx` 接收 `rolesStrip`；`lib/role-lucide-icons.ts` 映射 `icon` 字符串。
+5. **后台**：`/admin/role-categories` — 布局与「场景分类管理」对齐：`AdminRoleStatsCards`、`AdminRoleLinkBreakdown`（各角色关联标签数表）、说明卡、`AdminTagCreateCard`、`AdminRoleCategoryManager`（Tabs + 限高列表 + 迁入/移出 + 禁用）；侧栏「角色管理」。
+6. **移除**：静态 `lib/tag-roles.ts`（避免与库内配置双源）。
+
+---
+
 ## 数据库迁移
+
+- `20260506140000_role_categories.sql` / `20260506140100_seed_role_categories.sql` — 角色分类表 + 联结 + 种子数据
 
 - `20260505020000_ad_placements.sql` - 广告位表
 - `20260505030000_ad_placements_tab_c.sql` - 支持第三个标签

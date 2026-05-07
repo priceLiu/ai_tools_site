@@ -5,6 +5,7 @@ import type {
   Category,
   Favorite,
   Profile,
+  RoleCategory,
   TagCategory,
   TagRow,
   Tool,
@@ -135,6 +136,29 @@ export function mapTagCategoryRow(r: Record<string, unknown>): TagCategory {
         ? null
         : String(r.description),
     created_at: asIso(r.created_at),
+    is_disabled: r.is_disabled === true,
+  }
+}
+
+export function mapRoleCategoryRow(r: Record<string, unknown>): RoleCategory {
+  const tag =
+    r.tagline == null || String(r.tagline).trim() === ''
+      ? null
+      : String(r.tagline).trim()
+  const desc =
+    r.description == null || String(r.description).trim() === ''
+      ? null
+      : String(r.description).trim()
+  return {
+    id: String(r.id),
+    name: String(r.name),
+    slug: String(r.slug),
+    icon: r.icon == null ? null : String(r.icon),
+    sort_order: Number(r.sort_order ?? 0),
+    tagline: tag,
+    description: desc,
+    created_at: asIso(r.created_at),
+    is_disabled: r.is_disabled === true,
   }
 }
 

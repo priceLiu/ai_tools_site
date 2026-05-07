@@ -78,15 +78,23 @@ export default async function TagPage({ params }: PageProps) {
   const tag = await getTagByNameCached(name)
   if (!tag) notFound()
 
-  const [navigation, tools, tagCategories] = await Promise.all([
+  const [navigation, tools] = await Promise.all([
     getNavigationMenuTreeStatic(),
     neon.neonListToolsByTagId(tag.id),
-    neon.neonListTagCategoriesAll(),
   ])
 
-  const tagCategory = tag.tag_category_id
-    ? tagCategories.find((c) => c.id === tag.tag_category_id) ?? null
+  const rawParent = tag.tag_category_id
+    ? await neon.neonGetTagCategoryById(tag.tag_category_id)
     : null
+
+  const tagCategory =
+    rawParent && !rawParent.is_disabled ? rawParent : null
+
+  const sceneLabel = rawParent
+    ? rawParent.is_disabled
+      ? `${rawParent.name}（场景分类已禁用）`
+      : rawParent.name
+    : '未归入场景分类'
 
   const siteUrl = getSiteUrl()
   const path = tagPublicPath(tag.name)
@@ -141,25 +149,27 @@ export default async function TagPage({ params }: PageProps) {
               </h1>
               <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground md:text-sm">
                 <span>共 {tools.length} 个工具</span>
-                {tagCategory && (
+                {rawParent ? (
                   <>
                     <span>·</span>
-                    <Link
-                      href={tagCategoryPublicPath(tagCategory.slug)}
-                      className="underline-offset-2 hover:underline"
-                    >
-                      返回「{tagCategory.name}」一级分类
-                    </Link>
+                    {tagCategory ? (
+                      <Link
+                        href={tagCategoryPublicPath(rawParent.slug)}
+                        className="underline-offset-2 hover:underline"
+                      >
+                        「{rawParent.name}」场景分类
+                      </Link>
+                    ) : (
+                      <span>场景分类「{rawParent.name}」已禁用</span>
+                    )}
                   </>
-                )}
+                ) : null}
               </div>
               <Badge
-                variant={
-                  tagCategory ? 'default' : 'outline'
-                }
+                variant={tagCategory ? 'default' : 'outline'}
                 className="mt-2"
               >
-                {tagCategory ? `${tagCategory.name}` : '未归档一级分类'}
+                {sceneLabel}
               </Badge>
             </div>
 

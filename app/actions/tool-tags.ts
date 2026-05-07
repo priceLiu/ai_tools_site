@@ -9,14 +9,19 @@ import {
   neonListToolsIdIntroFormatCategoryName,
   neonSetToolTagsForTool,
 } from '@/lib/neon/data'
+import { getCachedTagsSuggestDictionary } from '@/lib/tag-suggest-dictionary'
 import {
   buildSuggestedToolTagNames,
   TOOL_TAGS_MAX,
+  type BuildSuggestedToolTagNamesInput,
 } from '@/lib/tool-tags-extract'
+import { buildSuggestedToolTagNamesFromDictionary } from '@/lib/tool-tags-match-library'
 import {
   HOME_ADS_CACHE_TAG,
+  HOME_ROLE_CATEGORIES_CACHE_TAG,
   HOME_TAG_CATEGORIES_CACHE_TAG,
   HOME_TOOL_BUNDLE_CACHE_TAG,
+  TAG_SUGGEST_DICTIONARY_CACHE_TAG,
 } from '@/lib/navigation-menu-cache-config'
 import { loadHomeToolBundle } from '@/lib/cached-home-data'
 import { uploadHomeToolBundleSnapshot } from '@/lib/home-bundle-snapshot'
@@ -35,6 +40,17 @@ function normalizeTagNames(raw: string[]): string[] {
     if (out.length >= TOOL_TAGS_MAX) break
   }
   return out
+}
+
+async function suggestNamesFromLibraryOrLegacy(
+  input: BuildSuggestedToolTagNamesInput,
+): Promise<string[]> {
+  const dict = await getCachedTagsSuggestDictionary()
+  const names =
+    dict.length > 0
+      ? buildSuggestedToolTagNamesFromDictionary({ ...input, dictionary: dict })
+      : buildSuggestedToolTagNames(input)
+  return normalizeTagNames(names)
 }
 
 /**
@@ -70,14 +86,14 @@ export async function suggestToolTagNamesAction(input: {
     }
   }
 
-  const names = buildSuggestedToolTagNames({
+  const names = await suggestNamesFromLibraryOrLegacy({
     categoryName,
     name,
     description,
     introduction: input.introduction,
     introductionFormat: input.introductionFormat,
   })
-  return { names: normalizeTagNames(names) }
+  return { names }
 }
 
 /**
@@ -92,12 +108,18 @@ export async function setToolTagsAction(input: {
 
   const names = normalizeTagNames(input.tagNames)
   const isAdmin = await neonGetProfileIsAdmin(user.id)
-  return neonSetToolTagsForTool({
+  const res = await neonSetToolTagsForTool({
     actorUserId: user.id,
     actorIsAdmin: isAdmin,
     toolId: input.toolId,
     names,
   })
+  if (!res.error) {
+    revalidateTag(TAG_SUGGEST_DICTIONARY_CACHE_TAG, { expire: 0 })
+    revalidateTag(HOME_ROLE_CATEGORIES_CACHE_TAG, { expire: 0 })
+    revalidatePath('/role/[slug]', 'page')
+  }
+  return res
 }
 
 /**
@@ -119,21 +141,32 @@ export async function bulkExtractToolTagsAdminAction(): Promise<{
   const isAdmin = await neonGetProfileIsAdmin(user.id)
   if (!isAdmin) return { ok: false, updated: 0, error: '无权限' }
 
+  const dictionary = await getCachedTagsSuggestDictionary()
   const rows = await neonListToolsIdIntroFormatCategoryName()
   let updated = 0
   for (const row of rows) {
-    const names = buildSuggestedToolTagNames({
-      categoryName: row.category_name,
-      name: row.name,
-      description: row.description,
-      introduction: row.introduction ?? '',
-      introductionFormat: row.introduction_format as IntroductionFormat,
-    })
+    const raw =
+      dictionary.length > 0
+        ? buildSuggestedToolTagNamesFromDictionary({
+            dictionary,
+            categoryName: row.category_name,
+            name: row.name,
+            description: row.description,
+            introduction: row.introduction ?? '',
+            introductionFormat: row.introduction_format as IntroductionFormat,
+          })
+        : buildSuggestedToolTagNames({
+            categoryName: row.category_name,
+            name: row.name,
+            description: row.description,
+            introduction: row.introduction ?? '',
+            introductionFormat: row.introduction_format as IntroductionFormat,
+          })
     const res = await neonSetToolTagsForTool({
       actorUserId: user.id,
       actorIsAdmin: true,
       toolId: row.id,
-      names: normalizeTagNames(names),
+      names: normalizeTagNames(raw),
     })
     if (!res.error) updated += 1
   }
@@ -147,12 +180,15 @@ export async function bulkExtractToolTagsAdminAction(): Promise<{
   revalidateTag(HOME_TOOL_BUNDLE_CACHE_TAG, { expire: 0 })
   revalidateTag(HOME_ADS_CACHE_TAG, { expire: 0 })
   revalidateTag(HOME_TAG_CATEGORIES_CACHE_TAG, { expire: 0 })
+  revalidateTag(HOME_ROLE_CATEGORIES_CACHE_TAG, { expire: 0 })
+  revalidateTag(TAG_SUGGEST_DICTIONARY_CACHE_TAG, { expire: 0 })
   revalidatePath('/')
   revalidatePath('/category/[slug]', 'page')
   revalidatePath('/tool/[slug]', 'page')
   revalidatePath('/tag-category/[slug]', 'page')
   revalidatePath('/tag/[slug]', 'page')
   revalidatePath('/role/[slug]', 'page')
+  revalidatePath('/admin/role-categories')
 
   return { ok: true, updated }
 }

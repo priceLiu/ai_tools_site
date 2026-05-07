@@ -19,7 +19,7 @@ async function requireAdmin(): Promise<{ error: string } | null> {
   return null
 }
 
-function revalidateTagSurfaces() {
+function revalidateSurfaces() {
   revalidateTag(HOME_TOOL_BUNDLE_CACHE_TAG, { expire: 0 })
   revalidateTag(HOME_ADS_CACHE_TAG, { expire: 0 })
   revalidateTag(HOME_TAG_CATEGORIES_CACHE_TAG, { expire: 0 })
@@ -28,80 +28,52 @@ function revalidateTagSurfaces() {
   revalidatePath('/')
   revalidatePath('/admin/tags')
   revalidatePath('/admin/tag-categories')
-  revalidatePath('/admin/role-categories')
   revalidatePath('/tag-category/[slug]', 'page')
   revalidatePath('/tag/[slug]', 'page')
   revalidatePath('/role/[slug]', 'page')
+  revalidatePath('/admin/role-categories')
 }
 
-/**
- * 合并：source 上所有 tool_tags 转到 target；source.name 写入 target.aliases；删 source。
- */
-export async function adminMergeTagsAction(input: {
-  sourceTagId: string
-  targetTagId: string
-}): Promise<{ ok: boolean; error?: string; movedTools?: number }> {
+export async function adminCreateSceneCategoryAction(input: {
+  name: string
+}): Promise<{ ok: boolean; error?: string; id?: string }> {
   const gate = await requireAdmin()
   if (gate) return { ok: false, error: gate.error }
 
-  const r = await neon.neonAdminMergeTags(input)
+  const r = await neon.neonAdminInsertTagCategory({ name: input.name })
   if (!r.ok) return { ok: false, error: r.error }
-  revalidateTagSurfaces()
-  return { ok: true, movedTools: r.movedTools }
+  revalidateSurfaces()
+  return { ok: true, id: r.id }
 }
 
-export async function adminRenameTagAction(input: {
-  tagId: string
-  newName: string
+export async function adminSetSceneCategoryDisabledAction(input: {
+  tagCategoryId: string
+  isDisabled: boolean
 }): Promise<{ ok: boolean; error?: string }> {
   const gate = await requireAdmin()
   if (gate) return { ok: false, error: gate.error }
 
-  const r = await neon.neonAdminRenameTag(input)
+  const r = await neon.neonAdminSetTagCategoryDisabled({
+    tagCategoryId: input.tagCategoryId,
+    isDisabled: input.isDisabled,
+  })
   if (!r.ok) return { ok: false, error: r.error }
-  revalidateTagSurfaces()
+  revalidateSurfaces()
   return { ok: true }
 }
 
-export async function adminDeleteTagAction(
-  tagId: string,
-): Promise<{ ok: boolean; error?: string }> {
-  const gate = await requireAdmin()
-  if (gate) return { ok: false, error: gate.error }
-
-  const r = await neon.neonAdminDeleteTag(tagId)
-  if (!r.ok) return { ok: false, error: r.error }
-  revalidateTagSurfaces()
-  return { ok: true }
-}
-
-export async function adminSetTagCuratedAction(input: {
+export async function adminAssignTagToSceneCategoryAction(input: {
   tagId: string
-  isCurated: boolean
   tagCategoryId: string | null
 }): Promise<{ ok: boolean; error?: string }> {
   const gate = await requireAdmin()
   if (gate) return { ok: false, error: gate.error }
 
-  await neon.neonAdminSetTagCurated(input)
-  revalidateTagSurfaces()
-  return { ok: true }
-}
-
-export async function adminCreateTagAction(input: {
-  name: string
-  tagCategoryId: string
-  isCurated: boolean
-}): Promise<{ ok: boolean; error?: string; id?: string }> {
-  const gate = await requireAdmin()
-  if (gate) return { ok: false, error: gate.error }
-
-  const r = await neon.neonAdminInsertTag({
-    name: input.name,
+  const r = await neon.neonAdminAssignTagToCategory({
+    tagId: input.tagId,
     tagCategoryId: input.tagCategoryId,
-    isCurated: input.isCurated,
   })
   if (!r.ok) return { ok: false, error: r.error }
-  revalidateTagSurfaces()
-  return { ok: true, id: r.id }
+  revalidateSurfaces()
+  return { ok: true }
 }
