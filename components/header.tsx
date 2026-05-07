@@ -33,17 +33,17 @@ export function Header({ user, profile, mobileNav }: HeaderProps) {
   }
 
   return (
-    <header className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
+    <header className="flex h-14 items-center justify-between gap-3 px-3 md:h-16 md:gap-4 md:px-6">
       {/**
        * PC（md+）布局严格对齐原版：h-16 / gap-4 / px-6 / justify-between；
        * 仅在 < md 用紧凑尺寸 + 渲染 mobileNav 槽位，不影响桌面端。
+       * 粘性顶栏与底边线由外层 `SitePublicHeader` / `AccountChrome` 统一包住。
        */}
-      <div className="flex h-14 items-center justify-between gap-3 px-3 md:h-16 md:gap-4 md:px-6">
-        {mobileNav}
-        <HeaderSearchForm />
+      {mobileNav}
+      <HeaderSearchForm />
 
-        {/* Actions */}
-        <div className="flex items-center gap-2">
+      {/* Actions */}
+      <div className="flex items-center gap-2">
           {user ? (
             <>
               <Button asChild variant="outline" size="sm">
@@ -126,7 +126,6 @@ export function Header({ user, profile, mobileNav }: HeaderProps) {
             </>
           )}
         </div>
-      </div>
     </header>
   )
 }

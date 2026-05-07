@@ -6,6 +6,17 @@
 
 ## 2026-05-07
 
+### 前台全局头部「按角色」横条（搜索框下方）
+
+**需求背景**：按角色入口需固定在头部搜索框下方，与设计稿一致的浅紫底、白底描边胶囊尺寸；凡进入带站内搜索的前台页面均应可见。
+
+**实现内容**：
+
+1. [`components/public-role-strip.tsx`](./components/public-role-strip.tsx)、[`components/site-public-header.tsx`](./components/site-public-header.tsx)：缓存数据源仍为 [`getHomeRoleStrip`](./lib/cached-home-role-strip.ts)。
+2. 侧栏前台页（首页、分类、标签、场景、角色、工具详情、搜索）统一使用 `SitePublicHeader`。
+3. [`components/account-chrome-with-role-strip.tsx`](./components/account-chrome-with-role-strip.tsx)：个人中心布局、提交页、收藏页顶栏第二行同步展示。
+4. [`components/home-tag-categories.tsx`](./components/home-tag-categories.tsx)：移除原「按场景」标题行右侧重复的按角色徽章；[`components/header.tsx`](./components/header.tsx) 粘性顶栏样式由外层包住（[`app/admin/layout.tsx`](./app/admin/layout.tsx) 同步）。
+
 ### 个人中心「我的关注」（场景 / 角色订阅 + 失效分类提示）
 
 **需求背景**：用户可订阅场景分类、角色分类（类似订阅）；可 pinned **至多 20 个**单工具（与收藏独立）；首次可多选开关保存。下方只读展示订阅维度下的工具列表；平台停用或隐藏的分类 / 下架的工具须单独展示以便移除订阅。

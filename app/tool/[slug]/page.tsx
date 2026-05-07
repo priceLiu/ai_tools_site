@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import type { Metadata } from 'next'
 import { Sidebar } from '@/components/sidebar'
-import { HeaderUser } from '@/components/header-user'
+import { SitePublicHeader } from '@/components/site-public-header'
 import { ToolDetailPublicView } from '@/components/tool-detail-public-view'
 import {
   toolDetailPageGutterClass,
@@ -156,7 +156,7 @@ export default async function ToolPage({ params }: ToolPageProps) {
       <Sidebar navigation={navigation} enableHomeAnchors={false} />
 
       <div className="md:pl-64">
-        <HeaderUser navigation={navigation} />
+        <SitePublicHeader navigation={navigation} />
 
         <main className={toolDetailPageGutterClass}>
           <div className={toolDetailMaxWidthClass}>

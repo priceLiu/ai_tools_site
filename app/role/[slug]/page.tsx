@@ -4,7 +4,7 @@ import Link from 'next/link'
 import type { Metadata } from 'next'
 import { ArrowLeft, Sparkles } from 'lucide-react'
 import { Sidebar } from '@/components/sidebar'
-import { HeaderUser } from '@/components/header-user'
+import { SitePublicHeader } from '@/components/site-public-header'
 import { ToolCard } from '@/components/tool-card'
 import { Badge } from '@/components/ui/badge'
 import { getNavigationMenuTreeStatic } from '@/lib/navigation-menu'
@@ -131,7 +131,7 @@ export default async function RolePage({ params }: PageProps) {
     <div className="min-h-screen bg-background">
       <Sidebar navigation={navigation} enableHomeAnchors />
       <div className="md:pl-64">
-        <HeaderUser navigation={navigation} enableHomeAnchors />
+        <SitePublicHeader navigation={navigation} enableHomeAnchors />
         <main className="px-3 py-4 sm:px-4 md:p-6">
           <div className="mx-auto max-w-7xl">
             <Link

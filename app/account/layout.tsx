@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { getAuthUser } from '@/lib/auth/session'
 import { redirect } from 'next/navigation'
-import { AccountChrome } from '@/components/account-chrome'
+import { AccountChromeWithRoleStrip } from '@/components/account-chrome-with-role-strip'
 import type { Profile } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import {
@@ -26,10 +26,10 @@ export default async function AccountLayout({
   const profile = await getSessionProfile(user.id)
 
   return (
-    <AccountChrome user={user} profile={profile as Profile | null}>
+    <AccountChromeWithRoleStrip user={user} profile={profile as Profile | null}>
       <div className={cn('w-full', toolDetailPageGutterClass)}>
         {children}
       </div>
-    </AccountChrome>
+    </AccountChromeWithRoleStrip>
   )
 }

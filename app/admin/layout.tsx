@@ -40,17 +40,19 @@ export default async function AdminLayout({
         avatarUrl={avatarUrl}
       />
       <div className="flex min-h-screen flex-col md:pl-56">
-        <Header
-          user={user}
-          profile={profile as Profile}
-          mobileNav={
-            <MobileAccountSheet
-              variant="admin"
-              email={email}
-              avatarUrl={avatarUrl}
-            />
-          }
-        />
+        <div className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
+          <Header
+            user={user}
+            profile={profile as Profile}
+            mobileNav={
+              <MobileAccountSheet
+                variant="admin"
+                email={email}
+                avatarUrl={avatarUrl}
+              />
+            }
+          />
+        </div>
         <div className="flex-1">{children}</div>
         <Toaster />
         <SonnerToaster

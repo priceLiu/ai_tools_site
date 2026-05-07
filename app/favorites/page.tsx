@@ -1,6 +1,6 @@
 import { getAuthUser } from '@/lib/auth/session'
 import { redirect } from 'next/navigation'
-import { AccountChrome } from '@/components/account-chrome'
+import { AccountChromeWithRoleStrip } from '@/components/account-chrome-with-role-strip'
 import { ToolCard } from '@/components/tool-card'
 import { Heart, Sparkles } from 'lucide-react'
 import type { Tool, Profile } from '@/lib/types'
@@ -38,7 +38,7 @@ export default async function FavoritesPage() {
     }) || []
 
   return (
-    <AccountChrome user={user} profile={profile as Profile}>
+    <AccountChromeWithRoleStrip user={user} profile={profile as Profile}>
       <div className="mx-auto max-w-7xl px-4 py-6 md:px-8">
         <div className="mb-8">
           <div className="flex items-center gap-3">
@@ -81,6 +81,6 @@ export default async function FavoritesPage() {
           </div>
         )}
       </div>
-    </AccountChrome>
+    </AccountChromeWithRoleStrip>
   )
 }

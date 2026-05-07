@@ -1,6 +1,6 @@
 import { getAuthUser } from '@/lib/auth/session'
 import { redirect } from 'next/navigation'
-import { AccountChrome } from '@/components/account-chrome'
+import { AccountChromeWithRoleStrip } from '@/components/account-chrome-with-role-strip'
 import {
   SubmitToolForm,
   type EditingToolPayload,
@@ -117,7 +117,7 @@ export default async function SubmitPage({ searchParams }: SubmitPageProps) {
   }
 
   return (
-    <AccountChrome user={user} profile={profile as Profile}>
+    <AccountChromeWithRoleStrip user={user} profile={profile as Profile}>
       <div className="mx-auto max-w-2xl px-4 py-6 md:px-8">
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-foreground">
@@ -140,6 +140,6 @@ export default async function SubmitPage({ searchParams }: SubmitPageProps) {
           editingTool={editingTool}
         />
       </div>
-    </AccountChrome>
+    </AccountChromeWithRoleStrip>
   )
 }

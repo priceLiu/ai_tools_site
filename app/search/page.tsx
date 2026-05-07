@@ -1,12 +1,10 @@
-import { getAuthUser } from '@/lib/auth/session'
 import { Sidebar } from '@/components/sidebar'
-import { Header } from '@/components/header'
+import { SitePublicHeader } from '@/components/site-public-header'
 import { ToolCard } from '@/components/tool-card'
 import { Search as SearchIcon } from 'lucide-react'
-import type { Tool, Profile } from '@/lib/types'
+import type { Tool } from '@/lib/types'
 import { getNavigationMenuTree } from '@/lib/navigation-menu'
 import * as neon from '@/lib/neon/data'
-import { getSessionProfile } from '@/lib/server-profile'
 
 interface SearchPageProps {
   searchParams: Promise<{ q?: string }>
@@ -24,11 +22,6 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const { q } = await searchParams
   const navigation = await getNavigationMenuTree()
 
-  const user = await getAuthUser()
-
-  const profile = user ? await getSessionProfile(user.id) : null
-
-  // Search tools
   let tools: Tool[] = []
   if (q && q.trim()) {
     tools = await neon.neonSearchToolsPublic(q)
@@ -37,13 +30,12 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   return (
     <div className="min-h-screen bg-background">
       <Sidebar navigation={navigation} enableHomeAnchors />
-      
-      <div className="pl-16 md:pl-64">
-        <Header user={user} profile={profile as Profile | null} />
-        
-        <main className="p-4 md:p-6">
+
+      <div className="md:pl-64">
+        <SitePublicHeader navigation={navigation} enableHomeAnchors />
+
+        <main className="px-3 py-4 sm:px-4 md:p-6">
           <div className="mx-auto max-w-7xl">
-            {/* Search Header */}
             <div className="mb-8">
               <div className="flex items-center gap-3">
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
@@ -59,15 +51,11 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                 </div>
               </div>
             </div>
-            
-            {/* Results */}
+
             {q && tools.length > 0 ? (
               <div className="flex flex-wrap justify-center gap-4 sm:justify-start">
                 {tools.map((tool) => (
-                  <ToolCard
-                    key={tool.id}
-                    tool={tool}
-                  />
+                  <ToolCard key={tool.id} tool={tool} />
                 ))}
               </div>
             ) : q ? (

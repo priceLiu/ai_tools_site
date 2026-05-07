@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Image from 'next/image'
 import { Sidebar } from '@/components/sidebar'
-import { HeaderUser } from '@/components/header-user'
+import { SitePublicHeader } from '@/components/site-public-header'
 import { HomeToolSections } from '@/components/home-tool-sections'
 import { HomeScrollToHash } from '@/components/home-scroll-to-hash'
 import { HomeAdSection1 } from '@/components/home-ad-section1'
@@ -10,7 +10,6 @@ import { HomeTagCategoriesSection } from '@/components/home-tag-categories'
 import { getHomeToolBundle } from '@/lib/cached-home-data'
 import { getHomeAdsBundle } from '@/lib/cached-home-ads'
 import { getHomeTagCategoryCards } from '@/lib/cached-home-tag-categories'
-import { getHomeRoleStrip } from '@/lib/cached-home-role-strip'
 import { getNavigationMenuTreeStatic } from '@/lib/navigation-menu'
 import { getSiteUrl } from '@/lib/site-url'
 
@@ -24,12 +23,11 @@ export const metadata: Metadata = {
 }
 
 export default async function HomePage() {
-  const [bundle, navigation, ads, tagCategoryCards, rolesStrip] = await Promise.all([
+  const [bundle, navigation, ads, tagCategoryCards] = await Promise.all([
     getHomeToolBundle(),
     getNavigationMenuTreeStatic(),
     getHomeAdsBundle(),
     getHomeTagCategoryCards(),
-    getHomeRoleStrip(),
   ])
 
   const siteUrl = getSiteUrl()
@@ -67,7 +65,7 @@ export default async function HomePage() {
       <Sidebar navigation={navigation} enableHomeAnchors />
 
       <div className="md:pl-64">
-        <HeaderUser navigation={navigation} enableHomeAnchors />
+        <SitePublicHeader navigation={navigation} enableHomeAnchors />
 
         <main className="px-3 py-4 sm:px-4 md:p-6">
           <div className="mb-4 flex flex-col items-center md:mb-6">
@@ -110,10 +108,7 @@ export default async function HomePage() {
           </div>
 
           <div className="mx-auto w-full max-w-[min(100%,94rem)]">
-            <HomeTagCategoriesSection
-              cards={tagCategoryCards}
-              rolesStrip={rolesStrip}
-            />
+            <HomeTagCategoriesSection cards={tagCategoryCards} />
           </div>
 
           <HomeToolSections bundle={bundle} />

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Header } from '@/components/header'
 import { CompactAppSidebar } from '@/components/compact-app-sidebar'
 import { MobileAccountSheet } from '@/components/mobile-account-sheet'
@@ -7,7 +8,9 @@ import type { AuthUser } from '@/lib/auth/session'
 interface AccountChromeProps {
   user: AuthUser
   profile: Profile | null
-  children: React.ReactNode
+  children: ReactNode
+  /** 顶栏第二行（如同步服务端渲染的 `PublicRoleStrip`） */
+  belowHeader?: ReactNode
 }
 
 /**
@@ -16,7 +19,12 @@ interface AccountChromeProps {
  * - 移动端 sidebar 收起，header 左上角 `<MobileAccountSheet>` 汉堡抽屉调出；
  * - 顶部 `<Header>` 与首页一致（搜索框 / 头像 / 更多三点）。
  */
-export function AccountChrome({ user, profile, children }: AccountChromeProps) {
+export function AccountChrome({
+  user,
+  profile,
+  children,
+  belowHeader,
+}: AccountChromeProps) {
   const email = user.email
   const avatarUrl = profile?.avatar_url ?? null
 
@@ -28,17 +36,20 @@ export function AccountChrome({ user, profile, children }: AccountChromeProps) {
         avatarUrl={avatarUrl}
       />
       <div className="flex min-h-screen flex-col md:pl-56">
-        <Header
-          user={user}
-          profile={profile}
-          mobileNav={
-            <MobileAccountSheet
-              variant="default"
-              email={email}
-              avatarUrl={avatarUrl}
-            />
-          }
-        />
+        <div className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
+          <Header
+            user={user}
+            profile={profile}
+            mobileNav={
+              <MobileAccountSheet
+                variant="default"
+                email={email}
+                avatarUrl={avatarUrl}
+              />
+            }
+          />
+          {belowHeader}
+        </div>
         <div className="min-w-0 flex-1">{children}</div>
       </div>
     </div>

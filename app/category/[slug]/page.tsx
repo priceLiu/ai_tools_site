@@ -2,7 +2,7 @@ import { cache } from 'react'
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { Sidebar } from '@/components/sidebar'
-import { HeaderUser } from '@/components/header-user'
+import { SitePublicHeader } from '@/components/site-public-header'
 import { ToolCard } from '@/components/tool-card'
 import type { Tool } from '@/lib/types'
 import { getNavigationMenuTreeStatic } from '@/lib/navigation-menu'
@@ -188,7 +188,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
       <Sidebar navigation={navigation} enableHomeAnchors />
 
       <div className="md:pl-64">
-        <HeaderUser navigation={navigation} enableHomeAnchors />
+        <SitePublicHeader navigation={navigation} enableHomeAnchors />
 
         <main className="px-3 py-4 sm:px-4 md:p-6">
           <div className="mx-auto max-w-7xl">
