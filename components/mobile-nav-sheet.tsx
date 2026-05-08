@@ -38,7 +38,7 @@ export function MobileNavSheet({
       </SheetTrigger>
       <SheetContent
         side="left"
-        className="w-[18rem] max-w-[85vw] border-r border-border bg-sidebar p-0 sm:max-w-[18rem]"
+        className="w-[162px] max-w-[85vw] border-r border-border bg-sidebar p-0 sm:max-w-[162px]"
       >
         <SheetTitle className="sr-only">导航菜单</SheetTitle>
         <SidebarFrame

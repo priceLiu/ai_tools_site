@@ -31,7 +31,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     <div className="min-h-screen bg-background">
       <Sidebar navigation={navigation} enableHomeAnchors />
 
-      <div className="md:pl-64">
+      <div className="md:pl-[162px]">
         <SitePublicHeader navigation={navigation} enableHomeAnchors />
 
         <main className="px-3 py-4 sm:px-4 md:p-6">

@@ -15,7 +15,7 @@ interface AccountChromeProps {
 
 /**
  * 个人中心通用骨架：
- * - PC（≥ md）左侧固定 `<CompactAppSidebar variant="default">`，主区 `pl-52 md:pl-56`；
+ * - PC（≥ md）左侧固定 `<CompactAppSidebar variant="default">`，主区 `md:pl-[178px]`；
  * - 移动端 sidebar 收起，header 左上角 `<MobileAccountSheet>` 汉堡抽屉调出；
  * - 顶部 `<Header>` 与首页一致（搜索框 / 头像 / 更多三点）。
  */
@@ -35,7 +35,7 @@ export function AccountChrome({
         email={email}
         avatarUrl={avatarUrl}
       />
-      <div className="flex min-h-screen flex-col md:pl-56">
+      <div className="flex min-h-screen flex-col md:pl-[178px]">
         <div className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
           <Header
             user={user}

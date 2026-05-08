@@ -155,7 +155,7 @@ export default async function ToolPage({ params }: ToolPageProps) {
     <div className="min-h-screen bg-background">
       <Sidebar navigation={navigation} enableHomeAnchors={false} />
 
-      <div className="md:pl-64">
+      <div className="md:pl-[162px]">
         <SitePublicHeader navigation={navigation} />
 
         <main className={toolDetailPageGutterClass}>

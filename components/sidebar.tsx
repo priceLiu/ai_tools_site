@@ -57,7 +57,7 @@ interface SidebarFrameProps extends SidebarProps {
   /** 移动抽屉中传入；点击导航项后自动关抽屉 */
   onItemSelect?: () => void
   /**
-   * 抽屉里恒为 true（始终铺开 256px、显示 logo 文字 + 节点标签）；
+   * 抽屉里恒为 true（始终铺开 ~162px、显示 logo 文字 + 节点标签）；
    * 桌面 aside 下保持 false：md 断点以上才显示文字。
    */
   alwaysExpanded?: boolean
@@ -65,7 +65,7 @@ interface SidebarFrameProps extends SidebarProps {
 
 function itemRowClass(active: boolean) {
   return cn(
-    'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+    'flex items-center gap-2 rounded-lg px-2 py-2 text-sm font-medium transition-colors',
     active
       ? 'bg-sidebar-accent text-sidebar-accent-foreground'
       : 'text-sidebar-foreground hover:bg-sidebar-accent/80',
@@ -139,7 +139,7 @@ function LeafLink({
             enableHomeAnchors && activeHomeAnchorId === anchorId
               ? 'bg-sidebar-accent text-sidebar-accent-foreground'
               : 'text-sidebar-foreground hover:bg-sidebar-accent/80',
-            'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors',
+            'flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm font-medium transition-colors',
           )}
         >
           {rowInner}
@@ -225,8 +225,8 @@ function NavNode({
 
   const parentLabelClass = showLabel ? 'flex-1' : 'hidden flex-1 md:block'
   const groupChildClass = showLabel
-    ? 'space-y-0.5 pb-1 pl-2 pt-0.5 data-[state=closed]:animate-none ml-3 border-l border-border pl-3'
-    : 'space-y-0.5 pb-1 pl-2 pt-0.5 data-[state=closed]:animate-none md:ml-3 md:border-l md:border-border md:pl-3'
+    ? 'space-y-0.5 pb-1 pl-1 pt-0.5 data-[state=closed]:animate-none ml-2 border-l border-border pl-2'
+    : 'space-y-0.5 pb-1 pl-1 pt-0.5 data-[state=closed]:animate-none md:ml-2 md:border-l md:border-border md:pl-2'
 
   return (
     <Collapsible className="space-y-0.5">
@@ -318,7 +318,7 @@ export function SidebarFrame({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-16 items-center justify-center border-b border-border px-4">
+      <div className="flex h-16 items-center justify-center border-b border-border px-3">
         <Link
           href="/"
           className="flex items-center gap-2"
@@ -352,7 +352,7 @@ export function SidebarFrame({
         )}
       </nav>
 
-      <div className="border-t border-border p-3">
+      <div className="border-t border-border p-2">
         <Link href="/submit" onClick={onItemSelect}>
           <Button className="w-full justify-center gap-2" size="sm">
             <Plus className="h-4 w-4" />
@@ -369,7 +369,7 @@ export function SidebarFrame({
  */
 export function Sidebar(props: SidebarProps) {
   return (
-    <aside className="fixed left-0 top-0 z-40 hidden h-screen w-64 border-r border-border bg-sidebar md:block">
+    <aside className="fixed left-0 top-0 z-40 hidden h-screen w-[162px] border-r border-border bg-sidebar md:block">
       <SidebarFrame {...props} />
     </aside>
   )

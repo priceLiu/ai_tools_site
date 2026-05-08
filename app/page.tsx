@@ -64,7 +64,7 @@ export default async function HomePage() {
       <HomeScrollToHash />
       <Sidebar navigation={navigation} enableHomeAnchors />
 
-      <div className="md:pl-64">
+      <div className="md:pl-[162px]">
         <SitePublicHeader navigation={navigation} enableHomeAnchors />
 
         <main className="px-3 py-4 sm:px-4 md:p-6">

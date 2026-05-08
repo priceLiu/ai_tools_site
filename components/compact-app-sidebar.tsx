@@ -361,7 +361,7 @@ export function CompactAppSidebar(props: CompactAppSidebarProps) {
   return (
     <aside
       className={cn(
-        'fixed left-0 top-0 z-40 hidden h-screen w-52 flex-col border-r border-border bg-sidebar md:flex md:w-56',
+        'fixed left-0 top-0 z-40 hidden h-screen w-[162px] flex-col border-r border-border bg-sidebar md:flex md:w-[178px]',
       )}
     >
       <CompactAppSidebarFrame {...props} />
