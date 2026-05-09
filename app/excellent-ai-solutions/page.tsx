@@ -4,7 +4,8 @@ import * as neon from '@/lib/neon/data'
 import { excellentSolutionsListPath } from '@/lib/account-portal-path'
 import { ExcellentShowcaseAvatarTile } from '@/components/excellent-showcase-avatar-tile'
 
-export const revalidate = 60
+/** 构建阶段（如 Docker 镜像）往往未注入 DATABASE_URL；避免预渲染时查库导致 build 失败。 */
+export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
   title: '优秀 AI 解决方案',

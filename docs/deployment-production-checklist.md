@@ -41,7 +41,8 @@
 
 1. **`pnpm install` / `pnpm build`**：与 lockfile 一致；Docker / CI 参考仓库既有 [`Dockerfile`](../Dockerfile)、[`pnpm-workspace.yaml`](../pnpm-workspace.yaml)、[`.npmrc`](../.npmrc)。  
 2. **Node / pnpm 版本**：与 [`package.json`](../package.json) 的 `packageManager`、`engines`（若有）一致。  
-3. **ISR / 缓存**：优秀方案列表与详情使用 `revalidate`（见对应 `page.tsx`）；发布后若需立即见效，可对相关路径做一次 **`revalidatePath`** 或等待 TTL。
+3. **Docker / CI 构建与 `DATABASE_URL`**：`pnpm run build` 阶段会为多个路由做静态预渲染。[`/app/excellent-ai-solutions/page.tsx`](../app/excellent-ai-solutions/page.tsx) 使用 **`dynamic = 'force-dynamic'`**，在**未注入 `DATABASE_URL` 的镜像构建**中也可完成编译（列表在容器运行时读库渲染）。若希望改为构建期生成静态 HTML，需在 **`docker build` 传入可用的 `DATABASE_URL`（BuildKit secret）**，可自行去掉该页的 `force-dynamic` 并恢复 ISR。
+4. **ISR / 缓存**：[`app/excellent-ai-solutions/[slug]/page.tsx`](../app/excellent-ai-solutions/[slug]/page.tsx) 等仍可使用 `revalidate`；发布后若需立即见效，可对相关路径做一次 **`revalidatePath`** 或等待 TTL。
 
 ---
 
