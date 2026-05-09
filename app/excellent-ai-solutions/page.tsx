@@ -7,17 +7,19 @@ import { ExcellentShowcaseAvatarTile } from '@/components/excellent-showcase-ava
 /** 构建阶段（如 Docker 镜像）往往未注入 DATABASE_URL；避免预渲染时查库导致 build 失败。 */
 export const dynamic = 'force-dynamic'
 
+const SITE_SECTION_TITLE = 'AI 方案集'
+const SITE_SECTION_DESC =
+  '社区精选的 AI 工具组合与实践心得，经管理员审核后在主站公开发布。'
+
 export const metadata: Metadata = {
-  title: '优秀 AI 解决方案',
-  description:
-    '社区精选的 AI 工具组合与实践心得，经管理员审核后在主站公开发布。',
+  title: SITE_SECTION_TITLE,
+  description: SITE_SECTION_DESC,
   alternates: { canonical: excellentSolutionsListPath() },
   openGraph: {
     type: 'website',
     url: excellentSolutionsListPath(),
-    title: '优秀 AI 解决方案',
-    description:
-      '社区精选的 AI 工具组合与实践心得，经管理员审核后在主站公开发布。',
+    title: SITE_SECTION_TITLE,
+    description: SITE_SECTION_DESC,
   },
 }
 
@@ -38,16 +40,16 @@ export default async function ExcellentSolutionsIndexPage() {
             Featured authors
           </div>
           <h1 className="text-balance text-3xl font-bold tracking-tight text-foreground md:text-4xl">
-            优秀 AI 解决方案
+            {SITE_SECTION_TITLE}
           </h1>
           <p className="mx-auto mt-3 max-w-2xl text-pretty text-sm leading-relaxed text-muted-foreground md:text-base">
-            头像墙汇总的创作者公开发布页；悬停卡片可查看简介概述（桌面端），点击进入完整方案。
+            头像墙收录各创作者的公开发布页；悬停卡片可查看简介概述（桌面端），点击进入完整方案。
           </p>
         </header>
 
         {cards.length === 0 ? (
           <p className="mx-auto max-w-lg rounded-2xl border border-dashed border-border/80 bg-muted/25 px-6 py-16 text-center text-sm text-muted-foreground">
-            暂无已发布的解决方案，敬请期待。
+            暂无已发布的方案，敬请期待。
           </p>
         ) : (
           <ul className="mx-auto grid list-none grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-3 md:grid-cols-6 lg:gap-3.5 xl:grid-cols-8">

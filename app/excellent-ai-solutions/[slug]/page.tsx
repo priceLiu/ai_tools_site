@@ -38,7 +38,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     : null
   const title = profile?.showcase_title?.trim()
     ? profile.showcase_title.trim()
-    : '解决方案'
+    : 'AI 方案集'
   const desc =
     profile?.showcase_summary?.trim() ||
     '用户分享的 AI 工具与实践精选，由智选 AI 审核发布。'
@@ -115,10 +115,10 @@ export default async function ExcellentSolutionDetailPage({ params }: Props) {
         </div>
         <div className="min-w-0 flex-1 space-y-2">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            优秀 AI 解决方案
+            AI 方案集
           </p>
           <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">
-            {profile.showcase_title?.trim() || profile.display_name || '精选方案'}
+            {profile.showcase_title?.trim() || profile.display_name || '创作者方案'}
           </h1>
           <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground md:text-base">
             {profile.showcase_summary?.trim() ||

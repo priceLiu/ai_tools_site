@@ -226,7 +226,7 @@ export function CompactAppSidebarFrame({
         />
         <NavRow
           href="/excellent-ai-solutions"
-          label="优秀 AI 解决方案"
+          label="AI 方案集"
           Icon={Sparkles}
           active={excellentActive}
           onItemSelect={onItemSelect}
@@ -341,7 +341,7 @@ export function CompactAppSidebarFrame({
             />
             <NavRow
               href="/admin/showcases"
-              label="优秀方案审核"
+              label="AI 方案集审核"
               Icon={Sparkles}
               active={showcasesAdminActive}
               onItemSelect={onItemSelect}

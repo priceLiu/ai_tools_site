@@ -1,4 +1,4 @@
--- 个人中心「主页门户」与「优秀 AI 解决方案」公开发布申请
+-- 个人中心「主页门户」与「AI 方案集」公开发布申请
 -- RLS：profiles 沿用仓库既有策略；应用层 Neon Server Actions 写权限。
 
 ALTER TABLE public.profiles

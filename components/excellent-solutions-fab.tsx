@@ -26,7 +26,7 @@ export function ExcellentSolutionsFab() {
       style={{ paddingBottom: 'max(0.625rem, env(safe-area-inset-bottom))' }}
     >
       <Sparkles className="h-4 w-4 shrink-0 text-primary" aria-hidden />
-      <span className="leading-tight">优秀 AI 解决方案</span>
+      <span className="leading-tight">AI 方案集</span>
     </Link>
   )
 }

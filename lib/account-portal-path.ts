@@ -10,7 +10,7 @@ export function accountPortalToolPath(slug: string): string {
   return `/account/home/tool/${encodeURIComponent(s)}`
 }
 
-/** 主站公开发布的精选解决方案列表 */
+/** 主站公开发布的创作者方案列表（AI 方案集） */
 export function excellentSolutionsListPath(): string {
   return '/excellent-ai-solutions'
 }

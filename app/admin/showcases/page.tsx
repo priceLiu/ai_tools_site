@@ -5,7 +5,7 @@ import * as neon from '@/lib/neon/data'
 import { AdminShowcasesPanel } from '@/components/admin-showcases-panel'
 
 export const metadata = {
-  title: '优秀方案审核 - 管理后台',
+  title: 'AI 方案集审核 - 管理后台',
 }
 
 export default async function AdminShowcasesPage() {
@@ -25,10 +25,11 @@ export default async function AdminShowcasesPage() {
         </Button>
 
         <h1 className="mb-2 text-2xl font-bold text-foreground">
-          优秀 AI 解决方案审核
+          AI 方案集审核
         </h1>
         <p className="mb-8 text-sm text-muted-foreground">
-          用户从个人主页提交的公开发布申请将出现在「待审核」。同意后生成主站静态页并进入汇总列表。
+          用户从个人主页提交的公开发布申请将出现在「待审核」。同意后生成主站公开页并进入「AI
+          方案集」汇总。
         </p>
 
         <AdminShowcasesPanel pending={pending} approved={approved} />

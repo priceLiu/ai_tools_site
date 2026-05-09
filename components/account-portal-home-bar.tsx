@@ -319,8 +319,8 @@ export function AccountPortalHomeBar({
                   <DialogHeader>
                     <DialogTitle>申请发布到主站</DialogTitle>
                     <DialogDescription>
-                      提交后需管理员审核。通过后将生成静态展示页，并出现在「优秀 AI
-                      解决方案」汇总中。
+                      提交后需管理员审核。通过后将生成静态展示页，并出现在「AI
+                      方案集」汇总中。
                     </DialogDescription>
                   </DialogHeader>
                   <div className="space-y-3 py-2">
@@ -330,7 +330,7 @@ export function AccountPortalHomeBar({
                         id="pub-title"
                         value={titleIn}
                         onChange={(e) => setTitleIn(e.target.value)}
-                        placeholder="对外展示的解决方案标题"
+                        placeholder="对外展示的方案标题"
                       />
                     </div>
                     <div className="space-y-1.5">

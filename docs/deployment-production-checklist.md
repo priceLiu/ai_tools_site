@@ -33,7 +33,7 @@
 | 1 | [`supabase/migrations/20260509120000_profiles_portal_showcase.sql`](../supabase/migrations/20260509120000_profiles_portal_showcase.sql) |
 | 2 | [`supabase/migrations/20260509133000_showcase_revoke_requested.sql`](../supabase/migrations/20260509133000_showcase_revoke_requested.sql) |
 
-若漏跑：**前台门户 / 优秀方案 / 撤销请求** 会因缺列或约束报错。
+若漏跑：**前台门户 / AI 方案集 / 撤销请求** 会因缺列或约束报错。
 
 ---
 

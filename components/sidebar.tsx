@@ -364,7 +364,7 @@ export function SidebarFrame({
             size="sm"
           >
             <Award className="h-4 w-4 shrink-0" />
-            <span className={submitTextClass}>优秀方案</span>
+            <span className={submitTextClass}>方案集</span>
           </Button>
         </Link>
         <Link href="/submit" onClick={onItemSelect}>

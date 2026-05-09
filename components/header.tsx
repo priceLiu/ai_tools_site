@@ -59,11 +59,11 @@ export function Header({ user, profile, mobileNav }: HeaderProps) {
       >
         <Link
           href={excellentSolutionsListPath()}
-          title="优秀 AI 解决方案"
+          title="AI 方案集"
           className="flex items-center"
         >
           <Sparkles className="h-4 w-4 shrink-0" aria-hidden />
-          <span className="hidden font-medium sm:inline">优秀方案</span>
+          <span className="hidden font-medium sm:inline">方案集</span>
         </Link>
       </Button>
 
@@ -116,7 +116,7 @@ export function Header({ user, profile, mobileNav }: HeaderProps) {
                       className="cursor-pointer"
                     >
                       <Sparkles className="mr-2 h-4 w-4" />
-                      优秀 AI 解决方案
+                      AI 方案集
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>

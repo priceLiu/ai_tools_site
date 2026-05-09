@@ -6,11 +6,11 @@
 
 ## 2026-05-09
 
-### 个人中心门户 ·「优秀 AI 解决方案」· 公开发布与迭代（完整记录）
+### 个人中心门户 ·「AI 方案集」· 公开发布与迭代（完整记录）
 
 **生产部署清单（环境与迁移）**：单独成文 [`docs/deployment-production-checklist.md`](./deployment-production-checklist.md)，涵盖 `.env.local` 与生产环境变量的区别、`DATABASE_URL` / `AUTH_SECRET` / `SITE_URL`、两条迁移执行顺序、上线后烟雾测试。**切勿将 `.env.local` 中的连接串或密钥写入仓库或文档正文。**
 
-**需求背景**：个人中心需要门户式聚合页（关注 / 收藏 / 评论 / 提交）；工具卡片在个人主页内需站内打开详情；支持板块顺序与显隐、多套样式模板；用户可申请公开发布到主站，审核通过后 ISR 展示；汇总列表与全站入口可达；后续迭代修正「关注」展示口径、公开发布页版式、撤销协作流程与头像墙布局。
+**需求背景**：个人中心需要门户式聚合页（关注 / 收藏 / 评论 / 提交）；工具卡片在个人主页内需站内打开详情；支持板块顺序与显隐、多套样式模板；用户可申请公开发布到主站，审核通过后 ISR 展示；**AI 方案集**（路径仍为 `/excellent-ai-solutions`）汇总列表与全站入口可达；后续迭代修正「关注」展示口径、公开发布页版式、撤销协作流程与头像墙布局。
 
 ---
 
@@ -40,7 +40,7 @@
 - [`lib/account-portal-policy.ts`](./lib/account-portal-policy.ts)、[`app/account/page.tsx`](./app/account/page.tsx)：门户开关与跳转。
 - [`app/account/home/page.tsx`](./app/account/home/page.tsx)：私密门户数据组装。
 - [`app/account/home/tool/[slug]/page.tsx`](./app/account/home/tool/[slug]/page.tsx)：站内工具详情。
-- [`app/excellent-ai-solutions/layout.tsx`](./app/excellent-ai-solutions/layout.tsx)、[`app/excellent-ai-solutions/page.tsx`](./app/excellent-ai-solutions/page.tsx)：汇总（头像墙 + ISR）。
+- [`app/excellent-ai-solutions/layout.tsx`](./app/excellent-ai-solutions/layout.tsx)、[`app/excellent-ai-solutions/page.tsx`](./app/excellent-ai-solutions/page.tsx)：汇总（头像墙；列表页 `dynamic = 'force-dynamic'` 以避免无 `DATABASE_URL` 的 Docker build 失败）。
 - [`app/excellent-ai-solutions/[slug]/page.tsx`](./app/excellent-ai-solutions/[slug]/page.tsx)：公开详情（`showSectionHeadings={false}`，`publicListedOnly`）。
 - [`app/account/home/actions.ts`](./app/account/home/actions.ts)：门户板块 / 主题 / 门户开关 / 申请发布 / **`requestShowcaseRevokePublicationAction`**。
 - [`app/admin/showcases/actions.ts`](./app/admin/showcases/actions.ts)：审核、驳回、撤销及路径失效。
@@ -56,9 +56,9 @@
 - [`components/tool-section.tsx`](./components/tool-section.tsx)、[`components/tool-card.tsx`](./components/tool-card.tsx)：**`toolCardLinkMode`**（`public` \| `portal`），避免 Server→Client 传递函数；复用 `TOOL_TIP_CONTENT_CLASS`。
 - [`components/excellent-showcase-avatar-tile.tsx`](./components/excellent-showcase-avatar-tile.tsx)：汇总页方形格子、圆头像、桌面 Tooltip 概述。
 - [`components/excellent-solutions-fab.tsx`](./components/excellent-solutions-fab.tsx)：前台 FAB；**仅** `/admin`、`/auth`、`/diag`、`/echo` 隐藏。
-- [`components/header.tsx`](./components/header.tsx)：顶栏「优秀方案」入口；下拉菜单项。
-- [`components/sidebar.tsx`](./components/sidebar.tsx)：`SidebarFrame` 底部「优秀方案」按钮。
-- [`components/compact-app-sidebar.tsx`](./components/compact-app-sidebar.tsx)：**「我的主页」**、优秀方案链接；桌面宽 **`208px`**（原 178 +30）。
+- [`components/header.tsx`](./components/header.tsx)：顶栏「方案集」入口；下拉菜单「AI 方案集」。
+- [`components/sidebar.tsx`](./components/sidebar.tsx)：`SidebarFrame` 底部「方案集」按钮。
+- [`components/compact-app-sidebar.tsx`](./components/compact-app-sidebar.tsx)：**「我的主页」**、**AI 方案集**链接；桌面宽 **`208px`**（原 178 +30）。
 - [`components/account-chrome.tsx`](./components/account-chrome.tsx)、[`app/admin/layout.tsx`](./app/admin/layout.tsx)：主区 **`md:pl-[208px]`**。
 - [`components/mobile-account-sheet.tsx`](./components/mobile-account-sheet.tsx)：抽屉宽 **`192px`**（原 162 +30）。
 - [`components/admin-showcases-panel.tsx`](./components/admin-showcases-panel.tsx)：待审 / 已发布、「用户请求撤销」徽章。
@@ -75,6 +75,10 @@
 - 分组与计数仍受 **`tool_tags` / `tag_category_id` / `role_category_tags`** 约束（见 [`docs/tool-tag-taxonomy-counting.md`](./tool-tag-taxonomy-counting.md)）。
 - 管理员「关闭门户」后用户无法自行重新开启门户入口。
 - **本地 `.env.local`**：仅存开发机；上线时在平台配置等价变量，**轮换生产专用 `AUTH_SECRET` 与数据库口令**，勿复用本地文件中的密钥。
+
+### 产品命名（2026-05-09）
+
+前台与管理后台对外的精选创作者列表统一称 **「AI 方案集」**（窄位 UI 用简称「方案集」）；URL 仍为 **`/excellent-ai-solutions`**（未改路径以免外链失效）。
 
 ---
 
