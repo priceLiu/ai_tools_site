@@ -18,6 +18,8 @@ import type { Profile, Tool } from '@/lib/types'
 interface ToolDetailPublicViewProps {
   tool: Tool
   sceneSummaries?: { name: string; slug: string }[]
+  /** 默认主站 `/tool/...`；个人门户内可改为站内路径 */
+  logoHref?: string | null
 }
 
 /**
@@ -35,6 +37,7 @@ interface ToolDetailPublicViewProps {
 export function ToolDetailPublicView({
   tool,
   sceneSummaries,
+  logoHref,
 }: ToolDetailPublicViewProps) {
   const sp = useSearchParams()
   const hideComments = sp?.get('admin_preview') === '1'
@@ -118,7 +121,7 @@ export function ToolDetailPublicView({
         favorite_count: favCount,
       }}
       sceneSummaries={sceneSummaries}
-      logoHref={toolPublicPath(tool.slug)}
+      logoHref={logoHref ?? toolPublicPath(tool.slug)}
       showComments={!hideComments}
       badges={
         <>

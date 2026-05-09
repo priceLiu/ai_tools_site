@@ -39,7 +39,7 @@ export default async function AdminLayout({
         email={email}
         avatarUrl={avatarUrl}
       />
-      <div className="flex min-h-screen flex-col md:pl-[178px]">
+      <div className="flex min-h-screen flex-col md:pl-[208px]">
         <div className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
           <Header
             user={user}

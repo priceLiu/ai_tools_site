@@ -4,8 +4,10 @@ import type {
   AdminTagRow,
   Category,
   Favorite,
+  PortalSectionConfigEntry,
   Profile,
   RoleCategory,
+  ShowcasePublishStatus,
   TagCategory,
   TagRow,
   Tool,
@@ -102,7 +104,37 @@ export function mapToolRow(
   }
 }
 
+function parsePortalSectionConfig(
+  raw: unknown,
+): PortalSectionConfigEntry[] | null {
+  if (raw == null || !Array.isArray(raw)) return null
+  const out: PortalSectionConfigEntry[] = []
+  const allowed = new Set(['follows', 'favorites', 'comments', 'submissions'])
+  for (const row of raw) {
+    if (!row || typeof row !== 'object') continue
+    const o = row as Record<string, unknown>
+    const id = String(o.id ?? '')
+    if (!allowed.has(id)) continue
+    out.push({
+      id: id as PortalSectionConfigEntry['id'],
+      visible: o.visible !== false,
+      order: Number(o.order ?? 0),
+    })
+  }
+  return out.length ? out : null
+}
+
 export function mapProfileRow(r: Record<string, unknown>): Profile {
+  const showcaseStatusRaw = String(r.showcase_status ?? 'none').trim()
+  const showcaseStatus: ShowcasePublishStatus =
+    showcaseStatusRaw === 'pending' ||
+    showcaseStatusRaw === 'approved' ||
+    showcaseStatusRaw === 'rejected'
+      ? showcaseStatusRaw
+      : showcaseStatusRaw === 'none'
+        ? 'none'
+        : 'none'
+
   return {
     id: String(r.id),
     display_name: r.display_name == null ? null : String(r.display_name),
@@ -123,6 +155,41 @@ export function mapProfileRow(r: Record<string, unknown>): Profile {
         ? null
         : String(r.registration_email),
     created_at: asIso(r.created_at),
+    portal_home_enabled:
+      r.portal_home_enabled === undefined || r.portal_home_enabled === null
+        ? true
+        : r.portal_home_enabled === true,
+    portal_disabled_by_admin: r.portal_disabled_by_admin === true,
+    portal_section_config: parsePortalSectionConfig(r.portal_section_config),
+    portal_theme:
+      r.portal_theme == null || String(r.portal_theme).trim() === ''
+        ? 'default'
+        : String(r.portal_theme),
+    showcase_slug:
+      r.showcase_slug == null || String(r.showcase_slug).trim() === ''
+        ? null
+        : String(r.showcase_slug).trim(),
+    showcase_status: showcaseStatus,
+    showcase_title:
+      r.showcase_title == null ? null : String(r.showcase_title),
+    showcase_summary:
+      r.showcase_summary == null ? null : String(r.showcase_summary),
+    showcase_requested_at:
+      r.showcase_requested_at == null
+        ? null
+        : asIso(r.showcase_requested_at),
+    showcase_reviewed_at:
+      r.showcase_reviewed_at == null
+        ? null
+        : asIso(r.showcase_reviewed_at),
+    showcase_rejection_reason:
+      r.showcase_rejection_reason == null
+        ? null
+        : String(r.showcase_rejection_reason),
+    showcase_revoke_requested_at:
+      r.showcase_revoke_requested_at == null
+        ? null
+        : asIso(r.showcase_revoke_requested_at),
   }
 }
 

@@ -4,6 +4,80 @@
 
 ---
 
+## 2026-05-09
+
+### 个人中心门户 ·「优秀 AI 解决方案」· 公开发布与迭代（完整记录）
+
+**生产部署清单（环境与迁移）**：单独成文 [`docs/deployment-production-checklist.md`](./deployment-production-checklist.md)，涵盖 `.env.local` 与生产环境变量的区别、`DATABASE_URL` / `AUTH_SECRET` / `SITE_URL`、两条迁移执行顺序、上线后烟雾测试。**切勿将 `.env.local` 中的连接串或密钥写入仓库或文档正文。**
+
+**需求背景**：个人中心需要门户式聚合页（关注 / 收藏 / 评论 / 提交）；工具卡片在个人主页内需站内打开详情；支持板块顺序与显隐、多套样式模板；用户可申请公开发布到主站，审核通过后 ISR 展示；汇总列表与全站入口可达；后续迭代修正「关注」展示口径、公开发布页版式、撤销协作流程与头像墙布局。
+
+---
+
+#### 数据库迁移
+
+| 文件 | 要点 |
+|------|------|
+| [`supabase/migrations/20260509120000_profiles_portal_showcase.sql`](./supabase/migrations/20260509120000_profiles_portal_showcase.sql) | `profiles`：`portal_home_enabled`、`portal_disabled_by_admin`、`portal_section_config`、`portal_theme`；公开发布 `showcase_slug`、`showcase_status`、`showcase_title`、`showcase_summary`、`showcase_requested_at`、`showcase_reviewed_at`、`showcase_rejection_reason`；slug 唯一索引（条件非空）。 |
+| [`supabase/migrations/20260509133000_showcase_revoke_requested.sql`](./supabase/migrations/20260509133000_showcase_revoke_requested.sql) | `profiles.showcase_revoke_requested_at`：用户「通知撤销」打点；管理员同意发布 / 撤销发布时应清空（代码侧）。 |
+
+---
+
+#### 数据聚合与服务端逻辑
+
+1. **门户 bundle** [`lib/account-portal-bundle.ts`](./lib/account-portal-bundle.ts)：`loadAccountPortalBundle`；`followBlocks`（`PortalFollowBlock`：`pinned` / `scene_follow` / `role_follow`）；`portalFollowToolIds` 供收藏去重。
+2. **「关注」分块口径**：置顶工具 + 各已订阅场景下列表 + 各已订阅角色下列表；与 `/account/follows` 同源（`neonListToolsByTagCategoryId`、`neonListToolsByRoleCategoryId`、`neonListUserFollowToolsForAccount`）。**不在此汇总后再走词条 taxonomy 重桶**，避免角色订阅工具被误标成其它场景标题。
+3. **收藏 / 提交分组**：仍用 [`lib/account-portal-group-tools.ts`](./lib/account-portal-group-tools.ts) `groupToolsForPortalStrip`（场景 → 角色 → 其它）。
+4. **公开发布数据**：[`neonListApprovedShowcaseCards`](./lib/neon/data.ts)、[`neonGetProfileByShowcaseSlugPublic`](./lib/neon/data.ts)；bundle 可选 `publicListedOnly`；[`neonSubmitShowcaseApplication`](./lib/neon/data.ts)、[`neonAdminApproveShowcaseApplication`](./lib/neon/data.ts)、[`neonAdminRejectShowcaseApplication`](./lib/neon/data.ts)、[`neonAdminRevokeShowcasePublication`](./lib/neon/data.ts)。
+5. **撤销请求**：[`neonRequestShowcaseRevokePublication`](./lib/neon/data.ts)；[`neonListApprovedShowcasesAdmin`](./lib/neon/data.ts) 返回 `revoke_requested_at`，排序优先待处理请求。
+6. **类型**：[`lib/types.ts`](./lib/types.ts) `Profile` 增补门户与 showcase 字段及 `showcase_revoke_requested_at`；[`lib/neon/mappers.ts`](./lib/neon/mappers.ts) `mapProfileRow` 映射。
+7. **路径辅助**：[`lib/account-portal-path.ts`](./lib/account-portal-path.ts)（汇总路径、详情路径、门户内工具路径）。
+
+---
+
+#### 路由与页面
+
+- [`lib/account-portal-policy.ts`](./lib/account-portal-policy.ts)、[`app/account/page.tsx`](./app/account/page.tsx)：门户开关与跳转。
+- [`app/account/home/page.tsx`](./app/account/home/page.tsx)：私密门户数据组装。
+- [`app/account/home/tool/[slug]/page.tsx`](./app/account/home/tool/[slug]/page.tsx)：站内工具详情。
+- [`app/excellent-ai-solutions/layout.tsx`](./app/excellent-ai-solutions/layout.tsx)、[`app/excellent-ai-solutions/page.tsx`](./app/excellent-ai-solutions/page.tsx)：汇总（头像墙 + ISR）。
+- [`app/excellent-ai-solutions/[slug]/page.tsx`](./app/excellent-ai-solutions/[slug]/page.tsx)：公开详情（`showSectionHeadings={false}`，`publicListedOnly`）。
+- [`app/account/home/actions.ts`](./app/account/home/actions.ts)：门户板块 / 主题 / 门户开关 / 申请发布 / **`requestShowcaseRevokePublicationAction`**。
+- [`app/admin/showcases/actions.ts`](./app/admin/showcases/actions.ts)：审核、驳回、撤销及路径失效。
+- [`app/sitemap.ts`](./app/sitemap.ts)：汇总页与各 slug。
+
+---
+
+#### UI 与交互
+
+- [`components/account-portal-body.tsx`](./components/account-portal-body.tsx)：分区标题（私密门户）；`followBlocks` → `ToolSection`；`PortalSubmissionsSection`；`showSectionHeadings`。
+- [`components/portal-submissions-section.tsx`](./components/portal-submissions-section.tsx)：提交工具默认收起 → 预览 8 → 展示全部分组。
+- [`components/account-portal-home-bar.tsx`](./components/account-portal-home-bar.tsx)：板块与样式、申请发布、**右上角通知撤销发布** / 状态徽章；与 [`components/account-portal-preference-card.tsx`](./components/account-portal-preference-card.tsx) 门户入口与个人设置联动。
+- [`components/tool-section.tsx`](./components/tool-section.tsx)、[`components/tool-card.tsx`](./components/tool-card.tsx)：**`toolCardLinkMode`**（`public` \| `portal`），避免 Server→Client 传递函数；复用 `TOOL_TIP_CONTENT_CLASS`。
+- [`components/excellent-showcase-avatar-tile.tsx`](./components/excellent-showcase-avatar-tile.tsx)：汇总页方形格子、圆头像、桌面 Tooltip 概述。
+- [`components/excellent-solutions-fab.tsx`](./components/excellent-solutions-fab.tsx)：前台 FAB；**仅** `/admin`、`/auth`、`/diag`、`/echo` 隐藏。
+- [`components/header.tsx`](./components/header.tsx)：顶栏「优秀方案」入口；下拉菜单项。
+- [`components/sidebar.tsx`](./components/sidebar.tsx)：`SidebarFrame` 底部「优秀方案」按钮。
+- [`components/compact-app-sidebar.tsx`](./components/compact-app-sidebar.tsx)：**「我的主页」**、优秀方案链接；桌面宽 **`208px`**（原 178 +30）。
+- [`components/account-chrome.tsx`](./components/account-chrome.tsx)、[`app/admin/layout.tsx`](./app/admin/layout.tsx)：主区 **`md:pl-[208px]`**。
+- [`components/mobile-account-sheet.tsx`](./components/mobile-account-sheet.tsx)：抽屉宽 **`192px`**（原 162 +30）。
+- [`components/admin-showcases-panel.tsx`](./components/admin-showcases-panel.tsx)：待审 / 已发布、「用户请求撤销」徽章。
+- [`components/admin-users-table.tsx`](./components/admin-users-table.tsx) + [`app/admin/users/actions.ts`](./app/admin/users/actions.ts)：关闭门户。
+- Root [`app/layout.tsx`](./app/layout.tsx)：`ExcellentSolutionsFab`。
+
+---
+
+#### 注意事项（业务与技术）
+
+- **务必在生产执行上述两条迁移**，缺列会导致运行时错误。
+- 公开发布详情仅展示 **已通过且前台可见** 的工具与评论；私密门户数据口径可能更宽。
+- 收藏列表会与 **`portalFollowToolIds`** 去重，避免与关注重复展示。
+- 分组与计数仍受 **`tool_tags` / `tag_category_id` / `role_category_tags`** 约束（见 [`docs/tool-tag-taxonomy-counting.md`](./tool-tag-taxonomy-counting.md)）。
+- 管理员「关闭门户」后用户无法自行重新开启门户入口。
+- **本地 `.env.local`**：仅存开发机；上线时在平台配置等价变量，**轮换生产专用 `AUTH_SECRET` 与数据库口令**，勿复用本地文件中的密钥。
+
+---
+
 ## 2026-05-08
 
 ### Docker / 腾讯云构建：pnpm 11 `approve-builds` 与非交互安装失败

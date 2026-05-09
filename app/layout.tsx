@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { TooltipProvider } from '@radix-ui/react-tooltip'
 import { SiteFooter } from '@/components/site-footer'
+import { ExcellentSolutionsFab } from '@/components/excellent-solutions-fab'
 import { getSiteUrlObject } from '@/lib/site-url'
 import './globals.css'
 
@@ -97,6 +98,7 @@ export default function RootLayout({
         <TooltipProvider delayDuration={280} disableHoverableContent>
           <div className="flex min-h-screen flex-col">
             <div className="flex-1">{children}</div>
+            <ExcellentSolutionsFab />
             <SiteFooter />
           </div>
         </TooltipProvider>

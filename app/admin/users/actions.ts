@@ -58,3 +58,17 @@ export async function adminSetProfileDisabledAction(
 
 // 删除用户的功能已移除（曾经的级联删除导致历史数据丢失）：
 // 管理员只能「禁用」用户。如有极端情况需要彻底清理，请走数据库 SQL Editor + 备份。
+
+export async function adminSetPortalDisabledByAdminAction(
+  profileUserId: string,
+  portalDisabled: boolean,
+) {
+  await requireAdmin()
+  await neon.neonAdminSetPortalDisabledByAdmin({
+    profileId: profileUserId,
+    disabled: portalDisabled,
+  })
+  revalidatePath('/admin/users')
+  revalidatePath('/account/home')
+  revalidatePath('/account/profile')
+}

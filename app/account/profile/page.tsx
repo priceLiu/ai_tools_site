@@ -2,6 +2,7 @@ import { getAuthUser } from '@/lib/auth/session'
 import { AccountProfileForm } from '@/components/account-profile-form'
 import { AccountChangePasswordCard } from '@/components/account-change-password-card'
 import { AccountAvatarEditor } from '@/components/account-avatar-editor'
+import { AccountPortalPreferenceCard } from '@/components/account-portal-preference-card'
 import type { Profile } from '@/lib/types'
 import { getSessionProfile } from '@/lib/server-profile'
 
@@ -23,6 +24,8 @@ export default async function AccountProfilePage() {
         <h1 className="text-2xl font-bold text-foreground">个人信息</h1>
         <p className="mt-1 text-muted-foreground">管理在当前站点展示的账号信息</p>
       </div>
+
+      {p ? <AccountPortalPreferenceCard profile={p} /> : null}
 
       <AccountAvatarEditor profile={p} />
 

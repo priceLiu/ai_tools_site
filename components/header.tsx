@@ -11,10 +11,20 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Plus, User, LogOut, Settings, Heart, MoreVertical, History } from 'lucide-react'
+import {
+  Plus,
+  User,
+  LogOut,
+  Settings,
+  Heart,
+  MoreVertical,
+  History,
+  Sparkles,
+} from 'lucide-react'
 import type { AuthUser } from '@/lib/auth/session'
 import type { Profile } from '@/lib/types'
 import { invalidateAuthMeCache } from '@/lib/client-auth-me-cache'
+import { excellentSolutionsListPath } from '@/lib/account-portal-path'
 
 interface HeaderProps {
   user: AuthUser | null
@@ -41,6 +51,21 @@ export function Header({ user, profile, mobileNav }: HeaderProps) {
        */}
       {mobileNav}
       <HeaderSearchForm />
+      <Button
+        asChild
+        variant="ghost"
+        size="sm"
+        className="shrink-0 gap-1.5 px-2 text-primary md:px-3"
+      >
+        <Link
+          href={excellentSolutionsListPath()}
+          title="优秀 AI 解决方案"
+          className="flex items-center"
+        >
+          <Sparkles className="h-4 w-4 shrink-0" aria-hidden />
+          <span className="hidden font-medium sm:inline">优秀方案</span>
+        </Link>
+      </Button>
 
       {/* Actions */}
       <div className="flex items-center gap-2">
@@ -83,6 +108,15 @@ export function Header({ user, profile, mobileNav }: HeaderProps) {
                     <Link href="/favorites" className="cursor-pointer">
                       <Heart className="mr-2 h-4 w-4" />
                       我的收藏
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link
+                      href={excellentSolutionsListPath()}
+                      className="cursor-pointer"
+                    >
+                      <Sparkles className="mr-2 h-4 w-4" />
+                      优秀 AI 解决方案
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>

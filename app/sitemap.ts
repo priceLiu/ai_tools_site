@@ -13,6 +13,7 @@ import { getSiteUrl } from '@/lib/site-url'
  *   - 全部已启用的场景分类：/tag-category/[slug]
  *   - 全部 curated 标签：/tag/[name]
  *   - 全部已启用的角色页：/role/[slug]
+ *   - 已通过审核的用户公开发布页：/excellent-ai-solutions/[slug]
  *
  * 不进 sitemap：admin、account、auth、api、submit、search、my-submissions、favorites、诊断页。
  */
@@ -40,6 +41,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: now,
       changeFrequency: 'daily',
       priority: 0.9,
+    },
+    {
+      url: `${base}/excellent-ai-solutions`,
+      lastModified: now,
+      changeFrequency: 'weekly',
+      priority: 0.72,
     },
   ]
 
@@ -131,6 +138,24 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }
   }
 
+  let showcaseEntries: MetadataRoute.Sitemap = []
+  try {
+    const showcaseSlugs = await neon.neonListApprovedShowcaseSlugs()
+    showcaseEntries = showcaseSlugs.map((slug) => ({
+      url: `${base}/excellent-ai-solutions/${encodeURIComponent(slug)}`,
+      lastModified: now,
+      changeFrequency: 'weekly' as const,
+      priority: 0.65,
+    }))
+  } catch (e) {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn(
+        '[sitemap] excellent-ai-solutions slugs 不可用（迁移可能未执行）:',
+        e instanceof Error ? e.message : e,
+      )
+    }
+  }
+
   return [
     ...staticEntries,
     ...roleEntries,
@@ -138,5 +163,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...tagCategoryEntries,
     ...tagEntries,
     ...toolEntries,
+    ...showcaseEntries,
   ]
 }

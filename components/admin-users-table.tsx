@@ -28,6 +28,7 @@ import { Label } from '@/components/ui/label'
 import {
   adminSetProfileAdminAction,
   adminSetProfileDisabledAction,
+  adminSetPortalDisabledByAdminAction,
 } from '@/app/admin/users/actions'
 
 interface AdminUsersTableProps {
@@ -104,6 +105,9 @@ export function AdminUsersTable({
               <TableHead className="min-w-[100px] text-center">账号状态</TableHead>
               <TableHead className="hidden min-w-[160px] md:table-cell">
                 禁用原因
+              </TableHead>
+              <TableHead className="min-w-[100px] text-center">
+                关闭门户
               </TableHead>
               <TableHead className="hidden md:table-cell">注册时间</TableHead>
               <TableHead className="text-right">操作</TableHead>
@@ -183,6 +187,39 @@ export function AdminUsersTable({
                   </TableCell>
                   <TableCell className="hidden max-w-[220px] truncate text-xs text-muted-foreground md:table-cell">
                     {p.disabled_reason?.trim() || '—'}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <Switch
+                      checked={p.portal_disabled_by_admin === true}
+                      disabled={
+                        p.is_disabled === true ||
+                        pending === `${p.id}-portal-off`
+                      }
+                      title="强制关闭个人主页门户（用户退回「个人信息」入口）"
+                      onCheckedChange={(checked) => {
+                        setPending(`${p.id}-portal-off`)
+                        startTransition(() => {
+                          void (async () => {
+                            try {
+                              await adminSetPortalDisabledByAdminAction(
+                                p.id,
+                                checked,
+                              )
+                              toast.success(
+                                checked ? '已强制关闭门户' : '已允许门户',
+                              )
+                              router.refresh()
+                            } catch (e) {
+                              toast.error(
+                                e instanceof Error ? e.message : '更新失败',
+                              )
+                            } finally {
+                              setPending(null)
+                            }
+                          })()
+                        })
+                      }}
+                    />
                   </TableCell>
                   <TableCell className="hidden text-sm text-muted-foreground md:table-cell">
                     {new Date(p.created_at).toLocaleString('zh-CN')}

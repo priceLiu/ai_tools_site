@@ -44,7 +44,7 @@ export function MobileAccountSheet({
       </SheetTrigger>
       <SheetContent
         side="left"
-        className="w-[162px] max-w-[85vw] border-r border-border bg-sidebar p-0 sm:max-w-[162px]"
+        className="w-[192px] max-w-[85vw] border-r border-border bg-sidebar p-0 sm:max-w-[192px]"
       >
         <SheetTitle className="sr-only">
           {variant === 'admin' ? '管理后台导航' : '个人中心导航'}

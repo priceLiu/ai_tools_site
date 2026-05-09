@@ -47,7 +47,12 @@ export interface Tool {
 
 export interface ToolTagLink {
   sort_order: number
-  tag: { id: string; name: string }
+  tag: {
+    id: string
+    name: string
+    /** 词条归属场景分类；列表聚合用 */
+    tag_category_id?: string | null
+  }
 }
 
 /** 场景分类（`tag_categories`，与左侧产品线 `categories` 解耦） */
@@ -126,6 +131,26 @@ export type HomeListedTool = Pick<
     introduction?: string | null
   }
 
+export type ShowcasePublishStatus =
+  | 'none'
+  | 'pending'
+  | 'approved'
+  | 'rejected'
+
+export type PortalThemeId = 'default' | 'minimal' | 'dense'
+
+export type PortalSectionId =
+  | 'follows'
+  | 'favorites'
+  | 'comments'
+  | 'submissions'
+
+export interface PortalSectionConfigEntry {
+  id: PortalSectionId
+  visible: boolean
+  order: number
+}
+
 export interface Profile {
   id: string
   display_name: string | null
@@ -142,6 +167,24 @@ export interface Profile {
   /** 管理员用户列表：关联 auth_credentials.email */
   registration_email?: string | null
   created_at: string
+  /** 个人主页门户（/account/home）是否对用户开启 */
+  portal_home_enabled?: boolean
+  /** 管理员强制关闭门户（回到仅个人信息入口） */
+  portal_disabled_by_admin?: boolean
+  /** 板块顺序与显隐；null/undefined 表示默认 */
+  portal_section_config?: PortalSectionConfigEntry[] | null
+  /** 门户样式模板 */
+  portal_theme?: PortalThemeId | string | null
+  /** 已审核通过的公开发布 slug */
+  showcase_slug?: string | null
+  showcase_status?: ShowcasePublishStatus
+  showcase_title?: string | null
+  showcase_summary?: string | null
+  showcase_requested_at?: string | null
+  showcase_reviewed_at?: string | null
+  showcase_rejection_reason?: string | null
+  /** 用户请求撤销公开发布的时间；管理员处理后应收空 */
+  showcase_revoke_requested_at?: string | null
 }
 
 /** 站点会话用户（邮箱密码登录，id 与 profiles.id 一致） */
@@ -167,6 +210,12 @@ export interface ToolComment {
   user_id?: string | null
   /** 管理端可见；前台列表不返回为 true 的评论 */
   is_hidden?: boolean
+}
+
+/** 用户侧「我的评论」列表行 */
+export interface ToolCommentMineRow extends ToolComment {
+  tool_name: string
+  tool_slug: string
 }
 
 /** 管理后台评论列表行 */

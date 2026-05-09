@@ -17,11 +17,13 @@ import type {
   AdminTagRow,
   Category,
   NavigationMenuItemRow,
+  PortalSectionConfigEntry,
   Profile,
   RoleCategory,
   TagCategory,
   Tool,
   ToolComment,
+  ToolCommentMineRow,
 } from '@/lib/types'
 import type { IntroductionFormat } from '@/lib/introduction-format'
 import { toolIntroductionPreviewDedup } from '@/lib/tool-dedup'
@@ -57,7 +59,11 @@ async function loadToolTagsForTools(
            json_agg(
              json_build_object(
                'sort_order', tt.sort_order,
-               'tag', json_build_object('id', tg.id, 'name', tg.name)
+               'tag', json_build_object(
+                 'id', tg.id,
+                 'name', tg.name,
+                 'tag_category_id', tg.tag_category_id
+               )
              )
              ORDER BY tt.sort_order
            ) AS tags_json
@@ -354,6 +360,17 @@ export async function neonListProfilesForAdmin(): Promise<Profile[]> {
       p.disabled_reason,
       COALESCE(p.comment_muted, false) AS comment_muted,
       p.comment_mute_reason,
+      COALESCE(p.portal_home_enabled, true) AS portal_home_enabled,
+      COALESCE(p.portal_disabled_by_admin, false) AS portal_disabled_by_admin,
+      p.portal_section_config,
+      COALESCE(p.portal_theme, 'default') AS portal_theme,
+      p.showcase_slug,
+      COALESCE(p.showcase_status, 'none') AS showcase_status,
+      p.showcase_title,
+      p.showcase_summary,
+      p.showcase_requested_at,
+      p.showcase_reviewed_at,
+      p.showcase_rejection_reason,
       ac.email AS registration_email
     FROM profiles p
     LEFT JOIN public.auth_credentials ac ON ac.user_id = p.id
@@ -4781,4 +4798,437 @@ export async function neonReplaceUserFollowTools(
     FROM unnest(${norm}::uuid[], ${orders}::int[]) AS x(tid, ord)
   `
   return {}
+}
+
+async function loadRoleCategoryIdsByTagIds(
+  tagIds: string[],
+): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>()
+  if (tagIds.length === 0) return out
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT tag_id::text AS tag_id, role_category_id::text AS role_category_id
+    FROM role_category_tags
+    WHERE tag_id = ANY(${tagIds}::uuid[])
+  `
+  for (const r of rows as { tag_id: string; role_category_id: string }[]) {
+    const tid = String(r.tag_id ?? '')
+    const rid = String(r.role_category_id ?? '')
+    if (!tid || !rid) continue
+    const arr = out.get(tid) ?? []
+    arr.push(rid)
+    out.set(tid, arr)
+  }
+  return out
+}
+
+/**
+ * 门户分组：工具 ↔ 启用标签 ↔ 场景 tag_category_id / 角色 role_category_tags。
+ */
+export async function neonPortalTaxonomyMapsForTools(toolIds: string[]): Promise<{
+  tagsByTool: Map<string, NonNullable<Tool['tool_tags']>>
+  rolesByTagId: Map<string, string[]>
+}> {
+  const rawTags = await loadToolTagsForTools(toolIds)
+  const tagsByTool = new Map<string, NonNullable<Tool['tool_tags']>>()
+  for (const [tid, links] of rawTags) {
+    tagsByTool.set(tid, links ?? [])
+  }
+  const tagIdSet = new Set<string>()
+  for (const links of tagsByTool.values()) {
+    for (const row of links) {
+      tagIdSet.add(row.tag.id)
+    }
+  }
+  const rolesByTagId = await loadRoleCategoryIdsByTagIds([...tagIdSet])
+  return { tagsByTool, rolesByTagId }
+}
+
+/** 个人门户内打开工具：已通过且未隐藏，或当前用户为提交者 */
+export async function neonGetToolForAccountPortal(
+  slug: string,
+  userId: string,
+): Promise<Tool | null> {
+  const norm = decodeURIComponent(slug ?? '').trim()
+  if (!norm) return null
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT t.*, row_to_json(c.*) AS category
+    FROM tools t
+    LEFT JOIN categories c ON c.id = t.category_id
+      AND COALESCE(c.is_disabled, false) = false
+    WHERE trim(t.slug) = trim(${norm})
+      AND (
+        (
+          t.status = 'approved'
+          AND COALESCE(t.is_disabled, false) = false
+        )
+        OR t.user_id = ${userId}
+      )
+    LIMIT 1
+  `
+  const row = rows[0] as Record<string, unknown> | undefined
+  if (!row) return null
+  const tool = publicizeToolImages(rowToTool(row))
+  const tagMap = await loadToolTagsForTools([tool.id])
+  const tags = tagMap.get(tool.id)
+  return tags ? { ...tool, tool_tags: tags } : tool
+}
+
+export async function neonListToolCommentsMineForUser(
+  userId: string,
+  opts?: { limit?: number; listedToolsOnly?: boolean },
+): Promise<ToolCommentMineRow[]> {
+  const lim = Math.min(Math.max(opts?.limit ?? 120, 1), 300)
+  const listedOnly = opts?.listedToolsOnly === true
+  const sql = getNeonSql()
+  const rows = listedOnly
+    ? await sql`
+        SELECT
+          tc.*,
+          t.name AS tool_name,
+          t.slug AS tool_slug
+        FROM tool_comments tc
+        JOIN tools t ON t.id = tc.tool_id
+        WHERE tc.user_id = ${userId}
+          AND COALESCE(tc.is_hidden, false) = false
+          AND t.status = 'approved'
+          AND COALESCE(t.is_disabled, false) = false
+        ORDER BY tc.created_at DESC
+        LIMIT ${lim}
+      `
+    : await sql`
+        SELECT
+          tc.*,
+          t.name AS tool_name,
+          t.slug AS tool_slug
+        FROM tool_comments tc
+        JOIN tools t ON t.id = tc.tool_id
+        WHERE tc.user_id = ${userId}
+          AND COALESCE(tc.is_hidden, false) = false
+        ORDER BY tc.created_at DESC
+        LIMIT ${lim}
+      `
+  return (rows as Record<string, unknown>[]).map((r) => ({
+    ...mapCommentRow(r),
+    tool_name: String(r.tool_name ?? ''),
+    tool_slug: String(r.tool_slug ?? ''),
+  }))
+}
+
+export async function neonUpdateProfilePortalPreferences(
+  userId: string,
+  patch: {
+    portal_home_enabled?: boolean
+    portal_section_config?: PortalSectionConfigEntry[] | null
+    portal_theme?: string | null
+  },
+): Promise<void> {
+  const sql = getNeonSql()
+  if (patch.portal_home_enabled !== undefined) {
+    await sql`
+      UPDATE profiles
+      SET portal_home_enabled = ${patch.portal_home_enabled}
+      WHERE id = ${userId}
+    `
+  }
+  if (patch.portal_section_config !== undefined) {
+    const json =
+      patch.portal_section_config == null
+        ? null
+        : JSON.stringify(patch.portal_section_config)
+    await sql`
+      UPDATE profiles
+      SET portal_section_config = ${json}::jsonb
+      WHERE id = ${userId}
+    `
+  }
+  if (patch.portal_theme !== undefined) {
+    const th =
+      patch.portal_theme == null || String(patch.portal_theme).trim() === ''
+        ? 'default'
+        : String(patch.portal_theme).trim()
+    await sql`
+      UPDATE profiles SET portal_theme = ${th} WHERE id = ${userId}
+    `
+  }
+}
+
+export async function neonSubmitShowcaseApplication(
+  userId: string,
+  input: { title: string; summary: string },
+): Promise<{ error?: string }> {
+  const title = input.title.trim()
+  const summary = input.summary.trim()
+  if (title.length < 2 || title.length > 120) {
+    return { error: '标题长度为 2～120 字' }
+  }
+  if (summary.length < 10 || summary.length > 500) {
+    return { error: '简介长度为 10～500 字' }
+  }
+  const sql = getNeonSql()
+  const cur = await sql`
+    SELECT showcase_status::text AS st
+    FROM profiles WHERE id = ${userId} LIMIT 1
+  `
+  const st = String((cur[0] as { st?: string } | undefined)?.st ?? 'none')
+  if (st === 'pending') {
+    return { error: '已有申请正在审核中' }
+  }
+  if (st === 'approved') {
+    return { error: '当前已公开发布，请先联系管理员撤销后再申请' }
+  }
+  await sql`
+    UPDATE profiles
+    SET
+      showcase_title = ${title},
+      showcase_summary = ${summary},
+      showcase_status = 'pending',
+      showcase_requested_at = now(),
+      showcase_rejection_reason = NULL,
+      showcase_reviewed_at = NULL,
+      showcase_revoke_requested_at = NULL
+    WHERE id = ${userId}
+  `
+  return {}
+}
+
+export async function neonRequestShowcaseRevokePublication(
+  userId: string,
+): Promise<{ error?: string }> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT showcase_status::text AS st,
+           showcase_revoke_requested_at AS rq
+    FROM profiles
+    WHERE id = ${userId}
+    LIMIT 1
+  `
+  const row = rows[0] as { st?: string; rq?: unknown } | undefined
+  if (!row || String(row.st ?? '') !== 'approved') {
+    return { error: '当前未处于公开发布状态' }
+  }
+  if (row.rq != null) {
+    return { error: '已通知管理员撤销，请耐心等待处理' }
+  }
+  await sql`
+    UPDATE profiles
+    SET showcase_revoke_requested_at = now()
+    WHERE id = ${userId}
+      AND showcase_status = 'approved'
+  `
+  return {}
+}
+
+export async function neonListShowcasePendingProfiles(): Promise<Profile[]> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT p.*, ac.email AS registration_email
+    FROM profiles p
+    LEFT JOIN public.auth_credentials ac ON ac.user_id = p.id
+    WHERE p.showcase_status = 'pending'
+    ORDER BY p.showcase_requested_at ASC NULLS LAST
+  `
+  return (rows as Record<string, unknown>[]).map(mapProfileRow)
+}
+
+export type ApprovedShowcaseCard = {
+  slug: string
+  title: string
+  summary: string
+  display_name: string | null
+  avatar_url: string | null
+  reviewed_at: string
+}
+
+export async function neonListApprovedShowcaseCards(): Promise<
+  ApprovedShowcaseCard[]
+> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT
+      showcase_slug AS slug,
+      showcase_title AS title,
+      showcase_summary AS summary,
+      display_name,
+      avatar_url,
+      showcase_reviewed_at AS reviewed_at
+    FROM profiles
+    WHERE showcase_status = 'approved'
+      AND showcase_slug IS NOT NULL
+      AND trim(showcase_slug) <> ''
+    ORDER BY showcase_reviewed_at DESC NULLS LAST
+  `
+  return (rows as Record<string, unknown>[]).map((r) => ({
+    slug: String(r.slug ?? '').trim(),
+    title: String(r.title ?? ''),
+    summary: String(r.summary ?? ''),
+    display_name:
+      r.display_name == null ? null : String(r.display_name),
+    avatar_url: r.avatar_url == null ? null : String(r.avatar_url),
+    reviewed_at:
+      r.reviewed_at instanceof Date
+        ? r.reviewed_at.toISOString()
+        : String(r.reviewed_at ?? ''),
+  }))
+}
+
+export async function neonListApprovedShowcasesAdmin(): Promise<
+  {
+    profileId: string
+    slug: string
+    title: string
+    revoke_requested_at: string | null
+  }[]
+> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT id::text AS profile_id,
+           showcase_slug AS slug,
+           showcase_title AS title,
+           showcase_revoke_requested_at AS revoke_requested_at
+    FROM profiles
+    WHERE showcase_status = 'approved'
+      AND showcase_slug IS NOT NULL
+      AND trim(showcase_slug) <> ''
+    ORDER BY
+      CASE WHEN showcase_revoke_requested_at IS NOT NULL THEN 0 ELSE 1 END,
+      showcase_revoke_requested_at DESC NULLS LAST,
+      showcase_reviewed_at DESC NULLS LAST
+  `
+  return (
+    rows as {
+      profile_id: string
+      slug: string
+      title: string
+      revoke_requested_at: unknown
+    }[]
+  ).map((r) => ({
+    profileId: String(r.profile_id ?? ''),
+    slug: String(r.slug ?? '').trim(),
+    title: String(r.title ?? ''),
+    revoke_requested_at:
+      r.revoke_requested_at instanceof Date
+        ? r.revoke_requested_at.toISOString()
+        : r.revoke_requested_at == null
+          ? null
+          : String(r.revoke_requested_at),
+  }))
+}
+
+export async function neonListApprovedShowcaseSlugs(): Promise<string[]> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT showcase_slug AS slug
+    FROM profiles
+    WHERE showcase_status = 'approved'
+      AND showcase_slug IS NOT NULL
+      AND trim(showcase_slug) <> ''
+  `
+  return (rows as { slug: string }[])
+    .map((r) => String(r.slug ?? '').trim())
+    .filter((s) => s.length > 0)
+}
+
+export async function neonGetProfileByShowcaseSlugPublic(
+  slug: string,
+): Promise<Profile | null> {
+  const norm = decodeURIComponent(slug ?? '').trim()
+  if (!norm) return null
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT * FROM profiles
+    WHERE showcase_slug = ${norm}
+      AND showcase_status = 'approved'
+    LIMIT 1
+  `
+  const r = rows[0] as Record<string, unknown> | undefined
+  return r ? mapProfileRow(r) : null
+}
+
+export async function neonAdminApproveShowcaseApplication(input: {
+  profileId: string
+  slug: string
+}): Promise<{ error?: string; slug?: string }> {
+  const slug = input.slug
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\u4e00-\u9fff]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80)
+  if (slug.length < 2) {
+    return { error: 'slug 至少 2 个字符，可用字母数字与中文' }
+  }
+  const sql = getNeonSql()
+  const clash = await sql`
+    SELECT id FROM profiles
+    WHERE showcase_slug = ${slug} AND id <> ${input.profileId}
+    LIMIT 1
+  `
+  if (clash.length > 0) {
+    return { error: '该 slug 已被占用，请换一个' }
+  }
+  const done = await sql`
+    UPDATE profiles
+    SET
+      showcase_slug = ${slug},
+      showcase_status = 'approved',
+      showcase_reviewed_at = now(),
+      showcase_rejection_reason = NULL,
+      showcase_revoke_requested_at = NULL
+    WHERE id = ${input.profileId}
+      AND showcase_status = 'pending'
+    RETURNING id
+  `
+  if (done.length === 0) {
+    return { error: '该用户不是待审核状态' }
+  }
+  return { slug }
+}
+
+export async function neonAdminRejectShowcaseApplication(input: {
+  profileId: string
+  reason: string
+}): Promise<void> {
+  const reason = input.reason.trim()
+  const sql = getNeonSql()
+  await sql`
+    UPDATE profiles
+    SET
+      showcase_status = 'rejected',
+      showcase_reviewed_at = now(),
+      showcase_rejection_reason = ${reason},
+      showcase_slug = NULL
+    WHERE id = ${input.profileId}
+      AND showcase_status = 'pending'
+  `
+}
+
+export async function neonAdminRevokeShowcasePublication(
+  profileId: string,
+): Promise<void> {
+  const sql = getNeonSql()
+  await sql`
+    UPDATE profiles
+    SET
+      showcase_status = 'none',
+      showcase_slug = NULL,
+      showcase_reviewed_at = now(),
+      showcase_rejection_reason = '已由管理员撤销公开发布',
+      showcase_revoke_requested_at = NULL
+    WHERE id = ${profileId}
+      AND showcase_status = 'approved'
+  `
+}
+
+export async function neonAdminSetPortalDisabledByAdmin(input: {
+  profileId: string
+  disabled: boolean
+}): Promise<void> {
+  const sql = getNeonSql()
+  await sql`
+    UPDATE profiles
+    SET portal_disabled_by_admin = ${input.disabled}
+    WHERE id = ${input.profileId}
+  `
 }

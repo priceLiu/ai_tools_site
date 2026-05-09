@@ -5,6 +5,7 @@ import { ToolCard } from '@/components/tool-card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import type { HomeListedTool } from '@/lib/types'
+import { accountPortalToolPath } from '@/lib/account-portal-path'
 import { ChevronDown, Clock, Flame } from 'lucide-react'
 
 interface ToolSectionProps {
@@ -20,6 +21,11 @@ interface ToolSectionProps {
    * 几百张 ToolCard 把弱机型 CPU 拖死。桌面（≥ md）通过 CSS 不受此限制。
    */
   mobileInitialCount?: number
+  /**
+   * 卡片详情链接策略（勿传函数：Server → Client 不可序列化）。
+   * `portal`：站内 `/account/home/tool/...`，当前标签打开。
+   */
+  toolCardLinkMode?: 'public' | 'portal'
 }
 
 export function ToolSection({
@@ -29,6 +35,7 @@ export function ToolSection({
   anchorId,
   imagePriorityFirstN = 0,
   mobileInitialCount = 8,
+  toolCardLinkMode = 'public',
 }: ToolSectionProps) {
   const [mobileExpanded, setMobileExpanded] = useState(false)
 
@@ -87,6 +94,12 @@ export function ToolSection({
                     tool={tool}
                     imagePriority={idx < imagePriorityFirstN}
                     fluid
+                    detailHrefOverride={
+                      toolCardLinkMode === 'portal'
+                        ? accountPortalToolPath(tool.slug)
+                        : undefined
+                    }
+                    openInNewTab={toolCardLinkMode !== 'portal'}
                   />
                 </div>
               )

@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 import type { NavigationMenuTreeNode } from '@/lib/types'
 import { slugFromCategoryMenuHref } from '@/lib/submit-category-choices'
 import { navigationIcon } from '@/lib/navigation-icons'
-import { ChevronDown, Plus, Sparkles, type LucideIcon } from 'lucide-react'
+import { Award, ChevronDown, Plus, Sparkles, type LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Collapsible,
@@ -352,7 +352,21 @@ export function SidebarFrame({
         )}
       </nav>
 
-      <div className="border-t border-border p-2">
+      <div className="space-y-2 border-t border-border p-2">
+        <Link href="/excellent-ai-solutions" onClick={onItemSelect}>
+          <Button
+            variant={
+              pathname?.startsWith('/excellent-ai-solutions')
+                ? 'secondary'
+                : 'outline'
+            }
+            className="w-full justify-center gap-2"
+            size="sm"
+          >
+            <Award className="h-4 w-4 shrink-0" />
+            <span className={submitTextClass}>优秀方案</span>
+          </Button>
+        </Link>
         <Link href="/submit" onClick={onItemSelect}>
           <Button className="w-full justify-center gap-2" size="sm">
             <Plus className="h-4 w-4" />

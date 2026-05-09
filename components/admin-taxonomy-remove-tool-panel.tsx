@@ -120,11 +120,11 @@ export function AdminTaxonomyRemoveToolPanel({
         return
       }
 
-      onListedBulk?.(
-        variant === 'scene'
-          ? r.publicListedToolsByTagCategoryId
-          : r.publicListedToolsByRoleCategoryId,
-      )
+      if (variant === 'scene' && 'publicListedToolsByTagCategoryId' in r) {
+        onListedBulk?.(r.publicListedToolsByTagCategoryId)
+      } else if ('publicListedToolsByRoleCategoryId' in r) {
+        onListedBulk?.(r.publicListedToolsByRoleCategoryId)
+      }
 
       toast.success(
         ids.length === 1

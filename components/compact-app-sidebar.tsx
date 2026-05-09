@@ -12,6 +12,7 @@ import {
   History,
   User,
   LayoutGrid,
+  LayoutDashboard,
   Users,
   Upload,
   Boxes,
@@ -24,6 +25,7 @@ import {
   UserSquare,
   Layers,
   BellRing,
+  Sparkles,
   type LucideIcon,
 } from 'lucide-react'
 import { AdminRegenerateStaticButton } from '@/components/admin-regenerate-static-button'
@@ -57,7 +59,7 @@ function isPersonalAreaActive(pathname: string, href: string) {
 
 /**
  * 个人中心 / 管理后台 共用顶部：左侧标识 + 邮箱。
- * - default 变体：头像 + "个人中心"，链接到 /account/profile；
+ * - default 变体：头像 + "个人中心"，链接到 /account；
  * - admin   变体：Shield 徽标 + "管理后台"，链接到 /admin（不再额外加底下的徽章）。
  */
 function SidebarHeader({
@@ -72,7 +74,7 @@ function SidebarHeader({
   onItemSelect?: () => void
 }) {
   const title = isAdmin ? '管理后台' : '个人中心'
-  const href = isAdmin ? '/admin' : '/account/profile'
+  const href = isAdmin ? '/admin' : '/account'
 
   return (
     <div className="mb-4 border-b border-sidebar-border/60 pb-3">
@@ -146,7 +148,7 @@ function NavRow({
  * 桌面 aside 与移动 Sheet 共用的内容主体。
  *
  * - 顶部统一 "个人中心" 头部（管理员另加 "管理后台" 徽章）；
- * - 个人变体：返回首页 / AI 工具提交 / 工具提交历史 / 我的收藏 / 个人信息；
+ * - 个人变体：返回首页 / 我的主页 / AI 工具提交 / 工具提交历史 / 我的收藏 / 我的关注 / 个人信息；
  *   注意「审核中的工具 / 审核列表」属于管理员审核队列，已从此处移除；用户要看自己的待审，
  *   走 "工具提交历史"（含全部状态）。
  * - 管理变体：在以上基础上再追加管理菜单 + 发布与维护卡片。
@@ -161,8 +163,10 @@ export function CompactAppSidebarFrame({
   const isAdmin = variant === 'admin'
 
   const homeActive = pathname === '/'
+  const excellentActive = pathname.startsWith('/excellent-ai-solutions')
 
   const personalLinks = [
+    { href: '/account/home', label: '我的主页', icon: LayoutDashboard },
     { href: '/submit', label: 'AI 工具提交', icon: Plus },
     { href: '/account/history', label: '工具提交历史', icon: History },
     { href: '/favorites', label: '我的收藏', icon: Heart },
@@ -182,6 +186,7 @@ export function CompactAppSidebarFrame({
     tagSceneAdminActive ||
     tagRoleAdminActive
   const usersAdminActive = pathname.startsWith('/admin/users')
+  const showcasesAdminActive = pathname.startsWith('/admin/showcases')
   const importAdminActive = pathname.startsWith('/admin/import-tools')
   const toolsStatsAdminActive = pathname.startsWith('/admin/stats')
   const toolsTaggingAdminActive = pathname.startsWith(
@@ -196,6 +201,7 @@ export function CompactAppSidebarFrame({
     !navigationAdminActive &&
     !menuCategoriesAdminActive &&
     !usersAdminActive &&
+    !showcasesAdminActive &&
     !importAdminActive &&
     !toolsStatsAdminActive &&
     !toolsTaggingAdminActive &&
@@ -216,6 +222,13 @@ export function CompactAppSidebarFrame({
           label="返回首页"
           Icon={Home}
           active={homeActive}
+          onItemSelect={onItemSelect}
+        />
+        <NavRow
+          href="/excellent-ai-solutions"
+          label="优秀 AI 解决方案"
+          Icon={Sparkles}
+          active={excellentActive}
           onItemSelect={onItemSelect}
         />
 
@@ -327,6 +340,13 @@ export function CompactAppSidebarFrame({
               className="pl-8 opacity-[0.92]"
             />
             <NavRow
+              href="/admin/showcases"
+              label="优秀方案审核"
+              Icon={Sparkles}
+              active={showcasesAdminActive}
+              onItemSelect={onItemSelect}
+            />
+            <NavRow
               href="/admin/users"
               label="用户管理"
               Icon={Users}
@@ -361,7 +381,7 @@ export function CompactAppSidebar(props: CompactAppSidebarProps) {
   return (
     <aside
       className={cn(
-        'fixed left-0 top-0 z-40 hidden h-screen w-[162px] flex-col border-r border-border bg-sidebar md:flex md:w-[178px]',
+        'fixed left-0 top-0 z-40 hidden h-screen w-[162px] flex-col border-r border-border bg-sidebar md:flex md:w-[208px]',
       )}
     >
       <CompactAppSidebarFrame {...props} />

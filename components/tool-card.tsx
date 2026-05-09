@@ -32,6 +32,10 @@ interface ToolCardProps {
    * 铺满网格单元（首页 5 列等）；默认 false 为固定约 350px 宽（分类页等）
    */
   fluid?: boolean
+  /** 默认 `/tool/[slug]`；个人门户内改为站内路径 */
+  detailHrefOverride?: string
+  /** 默认 true（新标签打开主站详情） */
+  openInNewTab?: boolean
 }
 
 export const TOOL_CARD_WIDTH = 350
@@ -48,6 +52,8 @@ export function ToolCard({
   favoritesCount,
   imagePriority = false,
   fluid = false,
+  detailHrefOverride,
+  openInNewTab = true,
 }: ToolCardProps) {
   const views = tool.view_count ?? 0
   const fav = favoritesCount ?? tool.favorite_count ?? 0
@@ -65,7 +71,8 @@ export function ToolCard({
   ).trim()
   const descLine = listingDescriptionLine(tool.description)
 
-  const detailHref = toolPublicPath(tool.slug)
+  const detailHref = detailHrefOverride ?? toolPublicPath(tool.slug)
+  const tabProps = openInNewTab ? blankRel : {}
   const logoBox = fluid ? 'h-[58px] w-[58px]' : 'h-[68px] w-[68px]'
 
   const cardInner = (
@@ -81,13 +88,15 @@ export function ToolCard({
       >
         <Link
           href={detailHref}
-          {...blankRel}
+          {...tabProps}
           onClick={() => recordToolViewBySlug(tool.slug)}
           className={cn(
             'relative block shrink-0 overflow-hidden rounded-lg bg-muted outline-none ring-offset-background transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring',
             logoBox,
           )}
-          aria-label={`${tool.name}（在新标签打开）`}
+          aria-label={
+            openInNewTab ? `${tool.name}（在新标签打开）` : `${tool.name}`
+          }
         >
           {showLogoImage ? (
             <Image
@@ -106,6 +115,7 @@ export function ToolCard({
         </Link>
         <Link
           href={detailHref}
+          {...tabProps}
           onClick={() => recordToolViewBySlug(tool.slug)}
           className={cn(
             'flex min-h-0 min-w-0 flex-1 flex-col justify-center outline-none',
