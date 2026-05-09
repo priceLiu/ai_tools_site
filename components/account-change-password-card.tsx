@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { PasswordInput } from '@/components/password-input'
 import { Card, CardContent, CardFooter } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import { changeOwnPasswordAction } from '@/app/actions/change-password'
@@ -49,9 +49,10 @@ export function AccountChangePasswordCard() {
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-4 pt-6">
           <div>
-            <h2 className="text-lg font-semibold text-foreground">修改密码</h2>
+            <h2 className="text-lg font-semibold text-foreground">登录密码</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              使用邮箱密码登录的账号可在此修改登录密码。
+              凭<strong className="font-medium text-foreground">当前密码</strong>
+              验证身份后设置新密码。忘记密码请联系管理员在「用户管理」中重置。
             </p>
           </div>
           {error ? (
@@ -68,9 +69,8 @@ export function AccountChangePasswordCard() {
             <label className="text-sm font-medium" htmlFor="cur_pw">
               当前密码
             </label>
-            <Input
+            <PasswordInput
               id="cur_pw"
-              type="password"
               autoComplete="current-password"
               value={currentPassword}
               onChange={(e) => {
@@ -84,9 +84,8 @@ export function AccountChangePasswordCard() {
             <label className="text-sm font-medium" htmlFor="new_pw">
               新密码
             </label>
-            <Input
+            <PasswordInput
               id="new_pw"
-              type="password"
               autoComplete="new-password"
               value={newPassword}
               onChange={(e) => {
@@ -102,9 +101,8 @@ export function AccountChangePasswordCard() {
             <label className="text-sm font-medium" htmlFor="new_pw2">
               确认新密码
             </label>
-            <Input
+            <PasswordInput
               id="new_pw2"
-              type="password"
               autoComplete="new-password"
               value={confirmPassword}
               onChange={(e) => {

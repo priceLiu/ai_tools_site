@@ -7,6 +7,11 @@ import type {
   PortalSectionConfigEntry,
   PortalThemeId,
 } from '@/lib/types'
+import {
+  computeShowcasePublishEligibility,
+  isShowcasePublishEligible,
+  loadAccountPortalBundle,
+} from '@/lib/account-portal-bundle'
 
 function canonSections(raw: PortalSectionConfigEntry[]): PortalSectionConfigEntry[] {
   const allowed = new Set(['follows', 'favorites', 'comments', 'submissions'])
@@ -81,9 +86,22 @@ export async function submitShowcaseApplicationAction(input: {
 }): Promise<{ error?: string }> {
   const user = await getAuthUser()
   if (!user) return { error: '请先登录' }
+  const portalProf = await neon.neonGetProfileById(user.id)
+  if (portalProf?.portal_disabled_by_admin === true) {
+    return { error: '管理员已关闭个人门户，无法申请公开发布' }
+  }
+  const bundle = await loadAccountPortalBundle(user.id)
+  const elig = computeShowcasePublishEligibility(bundle)
+  if (!isShowcasePublishEligible(elig)) {
+    return {
+      error:
+        '请先完善「我的关注」「我的收藏」与「AI 工具提交」后再申请',
+    }
+  }
   const r = await neon.neonSubmitShowcaseApplication(user.id, input)
   if (r.error) return r
   revalidatePath('/account/home')
+  revalidatePath('/account/profile')
   revalidatePath('/admin/showcases')
   return {}
 }
@@ -96,6 +114,7 @@ export async function requestShowcaseRevokePublicationAction(): Promise<{
   const r = await neon.neonRequestShowcaseRevokePublication(user.id)
   if (r.error) return r
   revalidatePath('/account/home')
+  revalidatePath('/account/profile')
   revalidatePath('/admin/showcases')
   return {}
 }

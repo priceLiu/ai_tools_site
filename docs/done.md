@@ -52,7 +52,7 @@
 
 - [`components/account-portal-body.tsx`](./components/account-portal-body.tsx)：分区标题（私密门户）；`followBlocks` → `ToolSection`；`PortalSubmissionsSection`；`showSectionHeadings`。
 - [`components/portal-submissions-section.tsx`](./components/portal-submissions-section.tsx)：提交工具默认收起 → 预览 8 → 展示全部分组。
-- [`components/account-portal-home-bar.tsx`](./components/account-portal-home-bar.tsx)：板块与样式、申请发布、**右上角通知撤销发布** / 状态徽章；与 [`components/account-portal-preference-card.tsx`](./components/account-portal-preference-card.tsx) 门户入口与个人设置联动。
+- [`components/account-portal-home-bar.tsx`](./components/account-portal-home-bar.tsx)：板块与样式 Sheet；公开发布入口精简（未满足条件时链至个人信息锚点 `#showcase-publish`）；[`components/account-showcase-publish-section.tsx`](./components/account-showcase-publish-section.tsx) 个人信息页完整卡片与申请对话框。
 - [`components/tool-section.tsx`](./components/tool-section.tsx)、[`components/tool-card.tsx`](./components/tool-card.tsx)：**`toolCardLinkMode`**（`public` \| `portal`），避免 Server→Client 传递函数；复用 `TOOL_TIP_CONTENT_CLASS`。
 - [`components/excellent-showcase-avatar-tile.tsx`](./components/excellent-showcase-avatar-tile.tsx)：汇总页方形格子、圆头像、桌面 Tooltip 概述。
 - [`components/excellent-solutions-fab.tsx`](./components/excellent-solutions-fab.tsx)：前台 FAB；**仅** `/admin`、`/auth`、`/diag`、`/echo` 隐藏。
@@ -62,7 +62,7 @@
 - [`components/account-chrome.tsx`](./components/account-chrome.tsx)、[`app/admin/layout.tsx`](./app/admin/layout.tsx)：主区 **`md:pl-[208px]`**。
 - [`components/mobile-account-sheet.tsx`](./components/mobile-account-sheet.tsx)：抽屉宽 **`192px`**（原 162 +30）。
 - [`components/admin-showcases-panel.tsx`](./components/admin-showcases-panel.tsx)：待审 / 已发布、「用户请求撤销」徽章。
-- [`components/admin-users-table.tsx`](./components/admin-users-table.tsx) + [`app/admin/users/actions.ts`](./app/admin/users/actions.ts)：关闭门户。
+- [`components/admin-users-table.tsx`](./components/admin-users-table.tsx) + [`app/admin/users/actions.ts`](./app/admin/users/actions.ts)：关闭门户；**重置登录密码**（无需旧密码）。
 - Root [`app/layout.tsx`](./app/layout.tsx)：`ExcellentSolutionsFab`。
 
 ---
@@ -90,6 +90,18 @@
 2. [`app/excellent-ai-solutions/[slug]/page.tsx`](./app/excellent-ai-solutions/[slug]/page.tsx)：返回链接文案改为「返回 AI 方案集」。
 3. [`components/excellent-solutions-fab.tsx`](./components/excellent-solutions-fab.tsx)：纵向标签 + `bg-primary` / `text-primary-foreground`。
 4. [`docs/ui-primary-theme.md`](./ui-primary-theme.md)：约定主按钮语义色与 `--primary` 用法。
+
+### 个人中心菜单 / 公开发布前置说明 / 密码与管理员重置
+
+**需求背景**：侧栏菜单顺序与分组；「AI 方案集」公开发布申请迁至个人信息页并写明前置数据条件；登录密码自助修改文案澄清；无手机/邮箱找回时管理员直接重置密码。
+
+**实现内容**：
+
+1. [`components/compact-app-sidebar.tsx`](./components/compact-app-sidebar.tsx)：我的主页 → 收藏 / 关注 → 分隔线 → AI 工具提交 / 提交历史 → 分隔线 → 个人信息。
+2. [`components/account-showcase-publish-section.tsx`](./components/account-showcase-publish-section.tsx)、[`app/account/profile/page.tsx`](./app/account/profile/page.tsx)：**已通过公开发布**时不再展示「申请发布」；未通过时对「我的关注」「我的收藏」「提交工具」做链接待满足后方可申请；[`app/account/home/actions.ts`](./app/account/home/actions.ts) 与服务端前置校验一致；[`lib/account-portal-bundle.ts`](./lib/account-portal-bundle.ts) `computeShowcasePublishEligibility` / `isShowcasePublishEligible`。
+3. [`components/account-change-password-card.tsx`](./components/account-change-password-card.tsx)：凭当前密码修改说明。
+4. [`app/account/profile/page.tsx`](./app/account/profile/page.tsx)：无 `auth_credentials` 时提示联系管理员重置。
+5. [`app/admin/users/actions.ts`](./app/admin/users/actions.ts) **`adminResetUserPasswordAction`**；[`components/admin-users-table.tsx`](./components/admin-users-table.tsx) 「重置密码」对话框（无需旧密码）。
 
 ---
 

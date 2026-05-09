@@ -1,8 +1,13 @@
 'use server'
 
+import bcrypt from 'bcryptjs'
 import { revalidatePath } from 'next/cache'
 import * as neon from '@/lib/neon/data'
 import { getAuthUser } from '@/lib/auth/session'
+import {
+  neonFindAuthCredentialsByUserId,
+  neonUpdateAuthCredentialsPasswordHash,
+} from '@/lib/auth/credentials-db'
 
 async function requireAdmin() {
   const user = await getAuthUser()
@@ -58,6 +63,22 @@ export async function adminSetProfileDisabledAction(
 
 // 删除用户的功能已移除（曾经的级联删除导致历史数据丢失）：
 // 管理员只能「禁用」用户。如有极端情况需要彻底清理，请走数据库 SQL Editor + 备份。
+
+export async function adminResetUserPasswordAction(
+  profileUserId: string,
+  newPassword: string,
+) {
+  await requireAdmin()
+  const pw = newPassword.trim()
+  if (pw.length < 6) throw new Error('新密码至少 6 位')
+  const row = await neonFindAuthCredentialsByUserId(profileUserId)
+  if (!row) {
+    throw new Error('该用户无邮箱密码登录记录，无法重置')
+  }
+  const hash = bcrypt.hashSync(pw, 10)
+  await neonUpdateAuthCredentialsPasswordHash(profileUserId, hash)
+  revalidatePath('/admin/users')
+}
 
 export async function adminSetPortalDisabledByAdminAction(
   profileUserId: string,

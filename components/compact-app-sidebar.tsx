@@ -148,7 +148,7 @@ function NavRow({
  * 桌面 aside 与移动 Sheet 共用的内容主体。
  *
  * - 顶部统一 "个人中心" 头部（管理员另加 "管理后台" 徽章）；
- * - 个人变体：返回首页 / 我的主页 / AI 工具提交 / 工具提交历史 / 我的收藏 / 我的关注 / 个人信息；
+ * - 个人变体：返回首页 / 我的主页 / 我的收藏 / 我的关注 / ── / AI 工具提交 / 工具提交历史 / ── / 个人信息；
  *   注意「审核中的工具 / 审核列表」属于管理员审核队列，已从此处移除；用户要看自己的待审，
  *   走 "工具提交历史"（含全部状态）。
  * - 管理变体：在以上基础上再追加管理菜单 + 发布与维护卡片。
@@ -165,14 +165,24 @@ export function CompactAppSidebarFrame({
   const homeActive = pathname === '/'
   const excellentActive = pathname.startsWith('/excellent-ai-solutions')
 
-  const personalLinks = [
-    { href: '/account/home', label: '我的主页', icon: LayoutDashboard },
-    { href: '/submit', label: 'AI 工具提交', icon: Plus },
-    { href: '/account/history', label: '工具提交历史', icon: History },
+  const personalHome = {
+    href: '/account/home',
+    label: '我的主页',
+    icon: LayoutDashboard,
+  } as const
+  const personalMid = [
     { href: '/favorites', label: '我的收藏', icon: Heart },
     { href: '/account/follows', label: '我的关注', icon: BellRing },
-    { href: '/account/profile', label: '个人信息', icon: User },
   ] as const
+  const personalSubmit = [
+    { href: '/submit', label: 'AI 工具提交', icon: Plus },
+    { href: '/account/history', label: '工具提交历史', icon: History },
+  ] as const
+  const personalProfile = {
+    href: '/account/profile',
+    label: '个人信息',
+    icon: User,
+  } as const
 
   const navigationAdminActive = pathname.startsWith('/admin/navigation')
   const tagSceneAdminActive = pathname.startsWith('/admin/tag-categories')
@@ -237,7 +247,14 @@ export function CompactAppSidebarFrame({
             <p className="mb-1 mt-3 px-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
               个人相关
             </p>
-            {personalLinks.map(({ href, label, icon: Icon }) => (
+            <NavRow
+              href={personalHome.href}
+              label={personalHome.label}
+              Icon={personalHome.icon}
+              active={isPersonalAreaActive(pathname, personalHome.href)}
+              onItemSelect={onItemSelect}
+            />
+            {personalMid.map(({ href, label, icon: Icon }) => (
               <NavRow
                 key={href}
                 href={href}
@@ -247,6 +264,31 @@ export function CompactAppSidebarFrame({
                 onItemSelect={onItemSelect}
               />
             ))}
+            <div
+              className="my-2 h-px w-full shrink-0 bg-border"
+              role="presentation"
+            />
+            {personalSubmit.map(({ href, label, icon: Icon }) => (
+              <NavRow
+                key={href}
+                href={href}
+                label={label}
+                Icon={Icon}
+                active={isPersonalAreaActive(pathname, href)}
+                onItemSelect={onItemSelect}
+              />
+            ))}
+            <div
+              className="my-2 h-px w-full shrink-0 bg-border"
+              role="presentation"
+            />
+            <NavRow
+              href={personalProfile.href}
+              label={personalProfile.label}
+              Icon={personalProfile.icon}
+              active={isPersonalAreaActive(pathname, personalProfile.href)}
+              onItemSelect={onItemSelect}
+            />
           </>
         )}
 

@@ -39,7 +39,10 @@ export default async function AdminUsersPage() {
           管理。
           <br />
           <span className="text-xs">
-            出于安全考虑，本页不提供「删除用户」功能；如确需彻底清理，请联系数据库管理员通过 SQL 操作。
+            出于安全考虑，本页不提供「删除用户」功能；如确需彻底清理，请联系数据库管理员通过 SQL
+            操作。尚未接入邮箱/短信找回时，可对
+            <strong className="font-medium text-foreground">有本地登录记录</strong>
+            的用户使用「重置密码」（无需旧密码）。
           </span>
         </p>
 

@@ -5,6 +5,10 @@ import type {
   RoleCategory,
   ToolCommentMineRow,
 } from '@/lib/types'
+import type { ShowcasePublishEligibilityCounts } from '@/lib/account-showcase-eligibility'
+
+export type { ShowcasePublishEligibilityCounts } from '@/lib/account-showcase-eligibility'
+export { isShowcasePublishEligible } from '@/lib/account-showcase-eligibility'
 
 function listedPublic(tool: Tool): boolean {
   return tool.status === 'approved' && tool.is_disabled !== true
@@ -154,5 +158,16 @@ export async function loadAccountPortalBundle(
     submissionTools: submissionsFiltered,
     scenesEnabled,
     rolesEnabled,
+  }
+}
+
+export function computeShowcasePublishEligibility(
+  bundle: AccountPortalBundle,
+): ShowcasePublishEligibilityCounts {
+  const followToolCount = portalFollowToolIds(bundle.followBlocks).size
+  return {
+    followToolCount,
+    favoriteCount: bundle.favoriteTools.length,
+    submissionCount: bundle.submissionTools.length,
   }
 }

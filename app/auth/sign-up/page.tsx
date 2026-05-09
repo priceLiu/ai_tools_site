@@ -9,6 +9,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { PasswordInput } from '@/components/password-input'
 import { Label } from '@/components/ui/label'
 import { Sparkles } from 'lucide-react'
 import Link from 'next/link'
@@ -93,9 +94,9 @@ export default function Page() {
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="password">密码</Label>
-                    <Input
+                    <PasswordInput
                       id="password"
-                      type="password"
+                      autoComplete="new-password"
                       required
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
@@ -103,9 +104,9 @@ export default function Page() {
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="repeat-password">确认密码</Label>
-                    <Input
+                    <PasswordInput
                       id="repeat-password"
-                      type="password"
+                      autoComplete="new-password"
                       required
                       value={repeatPassword}
                       onChange={(e) => setRepeatPassword(e.target.value)}

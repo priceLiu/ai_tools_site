@@ -24,11 +24,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
+import { PasswordInput } from '@/components/password-input'
 import { Label } from '@/components/ui/label'
 import {
   adminSetProfileAdminAction,
   adminSetProfileDisabledAction,
   adminSetPortalDisabledByAdminAction,
+  adminResetUserPasswordAction,
 } from '@/app/admin/users/actions'
 
 interface AdminUsersTableProps {
@@ -50,6 +52,12 @@ export function AdminUsersTable({
   const [pending, setPending] = useState<string | null>(null)
   const [disableTarget, setDisableTarget] = useState<Profile | null>(null)
   const [disableReason, setDisableReason] = useState('')
+  const [resetTarget, setResetTarget] = useState<Profile | null>(null)
+  const [resetPw1, setResetPw1] = useState('')
+  const [resetPw2, setResetPw2] = useState('')
+
+  const canResetPassword = (p: Profile) =>
+    Boolean(p.registration_email?.trim())
 
   if (!profiles.length) {
     return (
@@ -226,6 +234,22 @@ export function AdminUsersTable({
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex flex-col items-end gap-1 sm:flex-row sm:justify-end sm:gap-2">
+                      {canResetPassword(p) ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={pending === `${p.id}-pw`}
+                          title="无需旧密码；适用于尚未接入邮箱/手机找回的场景"
+                          onClick={() => {
+                            setResetPw1('')
+                            setResetPw2('')
+                            setResetTarget(p)
+                          }}
+                        >
+                          重置密码
+                        </Button>
+                      ) : null}
                       {!p.is_disabled ? (
                         <Button
                           type="button"
@@ -328,6 +352,101 @@ export function AdminUsersTable({
               onClick={submitDisable}
             >
               确认禁用
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={resetTarget != null}
+        onOpenChange={(o) => {
+          if (!o) setResetTarget(null)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>重置登录密码</DialogTitle>
+            <DialogDescription>
+              直接写入新密码哈希，用户下次登录请使用新密码。无需旧密码。
+            </DialogDescription>
+          </DialogHeader>
+          {resetTarget ? (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                账号：
+                <span className="font-mono text-foreground">
+                  {resetTarget.registration_email ?? shortId(resetTarget.id)}
+                </span>
+              </p>
+              <div className="space-y-2">
+                <Label htmlFor="admin-reset-pw1">新密码</Label>
+                <PasswordInput
+                  id="admin-reset-pw1"
+                  autoComplete="new-password"
+                  value={resetPw1}
+                  onChange={(e) => setResetPw1(e.target.value)}
+                  placeholder="至少 6 位"
+                  minLength={6}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="admin-reset-pw2">确认新密码</Label>
+                <PasswordInput
+                  id="admin-reset-pw2"
+                  autoComplete="new-password"
+                  value={resetPw2}
+                  onChange={(e) => setResetPw2(e.target.value)}
+                  minLength={6}
+                />
+              </div>
+            </div>
+          ) : null}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setResetTarget(null)}
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              disabled={
+                pending === `${resetTarget?.id}-pw` || resetTarget == null
+              }
+              onClick={() => {
+                const t = resetTarget
+                if (!t) return
+                const a = resetPw1.trim()
+                const b = resetPw2.trim()
+                if (a.length < 6) {
+                  toast.error('新密码至少 6 位')
+                  return
+                }
+                if (a !== b) {
+                  toast.error('两次输入的新密码不一致')
+                  return
+                }
+                setPending(`${t.id}-pw`)
+                startTransition(() => {
+                  void (async () => {
+                    try {
+                      await adminResetUserPasswordAction(t.id, a)
+                      toast.success('密码已重置')
+                      setResetTarget(null)
+                      setResetPw1('')
+                      setResetPw2('')
+                      router.refresh()
+                    } catch (e) {
+                      toast.error(e instanceof Error ? e.message : '重置失败')
+                    } finally {
+                      setPending(null)
+                    }
+                  })()
+                })
+              }}
+            >
+              确认重置
             </Button>
           </DialogFooter>
         </DialogContent>

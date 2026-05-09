@@ -4,6 +4,7 @@ import { getSessionProfile } from '@/lib/server-profile'
 import * as neon from '@/lib/neon/data'
 import { normalizePortalSections } from '@/lib/account-portal-section-defaults'
 import {
+  computeShowcasePublishEligibility,
   loadAccountPortalBundle,
   portalFollowToolIds,
 } from '@/lib/account-portal-bundle'
@@ -30,6 +31,7 @@ export default async function AccountHomePage() {
   }
 
   const bundle = await loadAccountPortalBundle(user.id)
+  const showcaseEligibility = computeShowcasePublishEligibility(bundle)
   const sections = normalizePortalSections(profile.portal_section_config)
 
   const followIdSet = portalFollowToolIds(bundle.followBlocks)
@@ -58,7 +60,11 @@ export default async function AccountHomePage() {
 
   return (
     <div>
-      <AccountPortalHomeBar profile={profile} email={user.email ?? ''} />
+      <AccountPortalHomeBar
+        profile={profile}
+        email={user.email ?? ''}
+        showcaseEligibility={showcaseEligibility}
+      />
       <AccountPortalBody
         portalTheme={profile.portal_theme}
         sections={sections}
