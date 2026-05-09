@@ -80,6 +80,17 @@
 
 前台与管理后台对外的精选创作者列表统一称 **「AI 方案集」**（窄位 UI 用简称「方案集」）；URL 仍为 **`/excellent-ai-solutions`**（未改路径以免外链失效）。
 
+### AI 方案集页面留白 / 返回文案 / FAB 与主色文档
+
+**需求背景**：汇总页「返回首页」上方留白过大；详情页返回链路与悬浮入口文案统一；悬浮入口纵向展示并与主站实心按钮同色。
+
+**实现内容**：
+
+1. [`app/excellent-ai-solutions/page.tsx`](./app/excellent-ai-solutions/page.tsx)：收紧主区内边距与标题区间距。
+2. [`app/excellent-ai-solutions/[slug]/page.tsx`](./app/excellent-ai-solutions/[slug]/page.tsx)：返回链接文案改为「返回 AI 方案集」。
+3. [`components/excellent-solutions-fab.tsx`](./components/excellent-solutions-fab.tsx)：纵向标签 + `bg-primary` / `text-primary-foreground`。
+4. [`docs/ui-primary-theme.md`](./ui-primary-theme.md)：约定主按钮语义色与 `--primary` 用法。
+
 ---
 
 ## 2026-05-08

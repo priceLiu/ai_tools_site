@@ -51,21 +51,6 @@ export function Header({ user, profile, mobileNav }: HeaderProps) {
        */}
       {mobileNav}
       <HeaderSearchForm />
-      <Button
-        asChild
-        variant="ghost"
-        size="sm"
-        className="shrink-0 gap-1.5 px-2 text-primary md:px-3"
-      >
-        <Link
-          href={excellentSolutionsListPath()}
-          title="AI 方案集"
-          className="flex items-center"
-        >
-          <Sparkles className="h-4 w-4 shrink-0" aria-hidden />
-          <span className="hidden font-medium sm:inline">方案集</span>
-        </Link>
-      </Button>
 
       {/* Actions */}
       <div className="flex items-center gap-2">

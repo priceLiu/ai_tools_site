@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
-import { Sparkles } from 'lucide-react'
+import Link from 'next/link'
+import { ArrowLeft } from 'lucide-react'
 import * as neon from '@/lib/neon/data'
 import { excellentSolutionsListPath } from '@/lib/account-portal-path'
 import { ExcellentShowcaseAvatarTile } from '@/components/excellent-showcase-avatar-tile'
@@ -33,18 +34,18 @@ export default async function ExcellentSolutionsIndexPage() {
         aria-hidden
       />
 
-      <div className="relative mx-auto max-w-[min(100%,110rem)] px-3 pb-16 pt-10 sm:px-6 sm:pt-14 md:px-8">
-        <header className="mx-auto mb-10 max-w-3xl text-center md:mb-12">
-          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/8 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">
-            <Sparkles className="h-3.5 w-3.5" aria-hidden />
-            Featured authors
-          </div>
+      <div className="relative mx-auto max-w-[min(100%,110rem)] px-3 pb-16 pt-3 sm:px-6 sm:pt-4 md:px-8">
+        <Link
+          href="/"
+          className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-primary md:mb-4"
+        >
+          <ArrowLeft className="h-4 w-4" aria-hidden />
+          返回首页
+        </Link>
+        <header className="mx-auto mb-8 max-w-3xl text-center md:mb-10">
           <h1 className="text-balance text-3xl font-bold tracking-tight text-foreground md:text-4xl">
             {SITE_SECTION_TITLE}
           </h1>
-          <p className="mx-auto mt-3 max-w-2xl text-pretty text-sm leading-relaxed text-muted-foreground md:text-base">
-            头像墙收录各创作者的公开发布页；悬停卡片可查看简介概述（桌面端），点击进入完整方案。
-          </p>
         </header>
 
         {cards.length === 0 ? (

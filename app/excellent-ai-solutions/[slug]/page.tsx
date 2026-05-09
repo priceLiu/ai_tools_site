@@ -94,7 +94,7 @@ export default async function ExcellentSolutionDetailPage({ params }: Props) {
       <Button asChild variant="ghost" size="sm" className="mb-6 -ml-2 gap-1">
         <Link href={excellentSolutionsListPath()}>
           <ArrowLeft className="h-4 w-4" />
-          返回汇总
+          返回 AI 方案集
         </Link>
       </Button>
 
