@@ -6,6 +6,19 @@
 
 ## 2026-05-09
 
+### 管理后台批量导入：菜单 / 场景 / 角色可选组合
+
+**需求背景**：`/admin/import-tools` 原先必选「目标分类」（产品线菜单）；运营需要在仅有场景或角色语境时导入，并把场景 / 角色名作为标签匹配提示（不自动挂载该维度下全部标签）。
+
+**实现内容**：
+1. **文案**：「目标分类」改为「首页左侧菜单分类」，该项可选；新增「场景分类」「角色分类」下拉（启用项）；三者 **至少选其一**，服务端与前端一致校验。
+2. **`buildSuggestedToolTagNames`**（[`lib/tool-tags-extract.ts`](./lib/tool-tags-extract.ts)）：可选 `sceneCategoryName`、`roleCategoryName`，与菜单名一并按顺序去重前置；[`lib/tool-tags-match-library.ts`](./lib/tool-tags-match-library.ts) 字典路径共用 `prependTaxonomyHintTagNames`。
+3. **数据层**：[`neonGetRoleCategoryById`](./lib/neon/data.ts)；导入时 `category_id` 可为 null，`neonFindDuplicateTool` 行为沿用既有 NULL 分支。
+4. **Actions / 页面**：[`app/admin/tools/import-actions.ts`](./app/admin/tools/import-actions.ts)、[`app/admin/import-tools/page.tsx`](./app/admin/import-tools/page.tsx)、[`components/admin-import-tools-form.tsx`](./components/admin-import-tools-form.tsx)。
+5. **文档**：[`docs/admin-batch-import.md`](./docs/admin-batch-import.md)。
+
+---
+
 ### 个人中心门户 ·「AI 方案集」· 公开发布与迭代（完整记录）
 
 **生产部署清单（环境与迁移）**：单独成文 [`docs/deployment-production-checklist.md`](./deployment-production-checklist.md)，涵盖 `.env.local` 与生产环境变量的区别、`DATABASE_URL` / `AUTH_SECRET` / `SITE_URL`、两条迁移执行顺序、上线后烟雾测试。**切勿将 `.env.local` 中的连接串或密钥写入仓库或文档正文。**
@@ -76,6 +89,10 @@
 - 管理员「关闭门户」后用户无法自行重新开启门户入口。
 - **本地 `.env.local`**：仅存开发机；上线时在平台配置等价变量，**轮换生产专用 `AUTH_SECRET` 与数据库口令**，勿复用本地文件中的密钥。
 
+#### 「菜单管理 → 分类表」同步（顶层直达）
+
+[`lib/sync-categories-from-navigation.ts`](./lib/sync-categories-from-navigation.ts)：`planMissingCategoriesFromNavigation` 除「折叠下一层子菜单」外，再 **扁平扫描所有叶子菜单行**（不作为其它导航行的 parent）：`href` 为 **`/category/{slug}`** 且 **`categories` 尚无该 slug** 时计划插入；`parent_id` 优先由 **父菜单行** 的 slug / 标题匹配已有分类解析，失败则 **根级**，覆盖折叠父级未对齐分类表或 **多级分组下仅有叶子链到 `/category/…`** 时原先遗漏的情形。
+
 ### 产品命名（2026-05-09）
 
 前台与管理后台对外的精选创作者列表统一称 **「AI 方案集」**（窄位 UI 用简称「方案集」）；URL 仍为 **`/excellent-ai-solutions`**（未改路径以免外链失效）。
@@ -90,6 +107,35 @@
 2. [`app/excellent-ai-solutions/[slug]/page.tsx`](./app/excellent-ai-solutions/[slug]/page.tsx)：返回链接文案改为「返回 AI 方案集」。
 3. [`components/excellent-solutions-fab.tsx`](./components/excellent-solutions-fab.tsx)：纵向标签 + `bg-primary` / `text-primary-foreground`。
 4. [`docs/ui-primary-theme.md`](./ui-primary-theme.md)：约定主按钮语义色与 `--primary` 用法。
+
+### 批量导入：目标分类仅限菜单树
+
+**需求背景**：下拉中追加「菜单未挂载」分类易造成误选；运营只希望导入到已在侧栏菜单中出现的 `/category/...`。
+
+**实现内容**：[`components/admin-import-tools-form.tsx`](./components/admin-import-tools-form.tsx) 仅使用 [`buildSubmitNavigationTier1List`](./lib/submit-category-choices.ts)，不再调用 [`appendOrphanCategoriesToSubmitTier1`](./lib/submit-category-choices.ts)。[`docs/admin-batch-import.md`](./admin-batch-import.md) 已同步。（[`appendOrphanCategoriesToSubmitTier1`](./lib/submit-category-choices.ts) 仍留在代码库中，若将来只需个别入口追加「未挂载」分类可复用。）
+
+### 菜单分类管理：删除空分类
+
+**需求背景**：误建的菜单产品线分类（如「AI应用」）需在后台自行删除，无需写 SQL。
+
+**实现内容**：[`lib/neon/data.ts`](./lib/neon/data.ts) `neonCountDistinctToolsReferencingMenuCategory`、`neonAdminDeleteMenuCategory`；[`app/admin/menu-categories/actions.ts`](./app/admin/menu-categories/actions.ts) `adminDeleteMenuCategoryAction`；[`components/admin-menu-category-manager.tsx`](./components/admin-menu-category-manager.tsx) 非 hot、无子分类且无工具挂载时可 **删除分类**（确认对话框）。
+
+### Curated 必须归属场景 +「待清理」口径文档
+
+**需求背景**：不允许「场景未分类」的官方词条（`is_curated` 为真但 `tag_category_id` 为空）；并把「待清理」统计与运营路径写入 taxonomy 文档避免误读。
+
+**实现内容**：
+
+1. [`app/admin/tags/actions.ts`](./app/admin/tags/actions.ts) `adminSetTagCuratedAction` 校验；`adminCreateTagAction` 角色/菜单入口禁止勾选 curated 创建。
+2. [`lib/neon/data.ts`](./lib/neon/data.ts) `neonAdminInsertTag`、`neonAdminAssignTagToCategory`（Curated 不可移出场景）。
+3. [`components/admin-tags-manager.tsx`](./components/admin-tags-manager.tsx)、[`components/admin-tag-create-card.tsx`](./components/admin-tag-create-card.tsx) UI 提示与禁用。
+4. [`docs/tag-taxonomy-admin-alignment.md`](./tag-taxonomy-admin-alignment.md) 新增 **§八**。
+
+### 标签合并：`postgres` 连接池事务（修复 UNSAFE_TRANSACTION）
+
+**需求背景**：`neonAdminMergeTags` 曾手写 `BEGIN`/`COMMIT`，在 `postgres`（连接池 `max>1`）下触发 **`UNSAFE_TRANSACTION: Only use sql.begin`**（合并标签如并入「PDF 处理」时报错）。
+
+**实现内容**：[`lib/neon/sql.ts`](./lib/neon/sql.ts) 暴露 **`neonSqlBegin`**，合并路径已全部迁入 **`sql.begin`**；[`lib/neon/data.ts`](./lib/neon/data.ts) `neonAdminMergeTags` 使用该事务 API。
 
 ### 个人中心菜单 / 公开发布前置说明 / 密码与管理员重置
 

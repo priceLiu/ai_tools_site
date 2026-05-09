@@ -61,6 +61,42 @@ function tagOrderIndex(name: string): number {
   return idx >= 0 ? idx : Number.POSITIVE_INFINITY
 }
 
+/**
+ * 按顺序将菜单 / 场景 / 角色分类名 prepend 为标签匹配提示（与 curated 词表对齐后去重）。
+ * 最多写入 `maxCount` 条（与外层 `limit` 对齐，含词典匹配前的占位）。
+ */
+export function prependTaxonomyHintTagNames(
+  out: string[],
+  seen: Set<string>,
+  hints: {
+    categoryName?: string | null | undefined
+    sceneCategoryName?: string | null | undefined
+    roleCategoryName?: string | null | undefined
+  },
+  maxCount: number,
+): void {
+  for (const raw of [
+    hints.categoryName,
+    hints.sceneCategoryName,
+    hints.roleCategoryName,
+  ]) {
+    if (out.length >= maxCount) break
+    const catRaw = (raw ?? '')
+      .normalize('NFKC')
+      .trim()
+      .replace(/\s+/g, ' ')
+    if (!catRaw) continue
+    const canonical = CURATED_TAG_NAMES.find(
+      (t) => t.toLowerCase() === catRaw.toLowerCase(),
+    )
+    const useName = canonical ?? catRaw
+    const k = useName.toLowerCase()
+    if (seen.has(k)) continue
+    out.push(useName)
+    seen.add(k)
+  }
+}
+
 /** 用 217 关键词词典对三段文本分别评分；返回 { tagName: score } */
 function scoreTagsForFields(fields: {
   name: string
@@ -87,15 +123,19 @@ export interface BuildSuggestedToolTagNamesInput {
   /** 富文本介绍（必填，匹配权重 1） */
   introduction: string
   introductionFormat: IntroductionFormat | string | null | undefined
-  /** 一级分类名（来自 categories.name），首位兜底；若属 217 词表会被规整为 curated 标准名 */
-  categoryName: string | null | undefined
+  /** 首页左侧菜单分类名（categories.name）；提示位，顺序优先于场景/角色 */
+  categoryName?: string | null | undefined
+  /** 场景分类名（tag_categories.name）；仅作标签匹配提示，不批量挂载该场景下全部标签 */
+  sceneCategoryName?: string | null | undefined
+  /** 角色分类名（role_categories.name）；同上 */
+  roleCategoryName?: string | null | undefined
   /** 自定义最多输出标签数（含分类名）；默认 `TOOL_TAGS_SUGGEST_MAX` (12) */
   limit?: number
 }
 
 /**
  * 组装完整标签建议：
- *   1) 第 1 个为分类名（若有；属 217 词表则规整为 curated 标准名）；
+ *   1) 前几位为所选菜单 / 场景 / 角色分类名提示（去重；顺序：菜单→场景→角色；若属 217 词表则规整为 curated 标准名）；
  *   2) 后续按 217 关键词词典评分排序（标题 5 + 描述 3 + 介绍 1）；
  *   3) 全部去重；总数 ≤ `limit`（默认 12，硬上限 `TOOL_TAGS_MAX` = 20）。
  */
@@ -124,19 +164,11 @@ export function buildSuggestedToolTagNames(
 
   const out: string[] = []
   const seen = new Set<string>()
-
-  const catRaw = (input.categoryName ?? '')
-    .normalize('NFKC')
-    .trim()
-    .replace(/\s+/g, ' ')
-  if (catRaw) {
-    const canonical = CURATED_TAG_NAMES.find(
-      (t) => t.toLowerCase() === catRaw.toLowerCase(),
-    )
-    const useName = canonical ?? catRaw
-    out.push(useName)
-    seen.add(useName.toLowerCase())
-  }
+  prependTaxonomyHintTagNames(out, seen, {
+    categoryName: input.categoryName,
+    sceneCategoryName: input.sceneCategoryName,
+    roleCategoryName: input.roleCategoryName,
+  }, limit)
 
   for (const [name] of ranked) {
     if (out.length >= limit) break

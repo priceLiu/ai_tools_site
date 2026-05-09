@@ -37,10 +37,74 @@ export type ImportTagPreviewRow = {
   tags: string[]
 }
 
+type BulkImportTaxonomyInput = {
+  categoryId?: string | null
+  sceneCategoryId?: string | null
+  roleCategoryId?: string | null
+}
+
+type ResolvedBulkImportTaxonomy =
+  | {
+      ok: true
+      categoryId: string | null
+      categoryName: string | null
+      sceneCategoryName: string | null
+      roleCategoryName: string | null
+    }
+  | { ok: false; error: string }
+
+async function resolveBulkImportTaxonomy(
+  input: BulkImportTaxonomyInput,
+): Promise<ResolvedBulkImportTaxonomy> {
+  const categoryId = input.categoryId?.trim() || null
+  const sceneCategoryId = input.sceneCategoryId?.trim() || null
+  const roleCategoryId = input.roleCategoryId?.trim() || null
+
+  if (!categoryId && !sceneCategoryId && !roleCategoryId) {
+    return {
+      ok: false,
+      error:
+        '请至少选择「首页左侧菜单分类」「场景分类」「角色分类」中的一项',
+    }
+  }
+
+  let categoryName: string | null = null
+  if (categoryId) {
+    categoryName = await neon.neonGetCategoryNameById(categoryId)
+    if (categoryName == null) {
+      return { ok: false, error: '所选首页左侧菜单分类不存在' }
+    }
+  }
+
+  let sceneCategoryName: string | null = null
+  if (sceneCategoryId) {
+    const tc = await neon.neonGetTagCategoryById(sceneCategoryId)
+    if (!tc) return { ok: false, error: '所选场景分类不存在' }
+    sceneCategoryName = tc.name
+  }
+
+  let roleCategoryName: string | null = null
+  if (roleCategoryId) {
+    const rc = await neon.neonGetRoleCategoryById(roleCategoryId)
+    if (!rc) return { ok: false, error: '所选角色分类不存在' }
+    roleCategoryName = rc.name
+  }
+
+  return {
+    ok: true,
+    categoryId,
+    categoryName,
+    sceneCategoryName,
+    roleCategoryName,
+  }
+}
+
 /** 批量导入：对一段条目预览关键词匹配后的标签（用于前台进度展示）。 */
 export async function batchSuggestTagsForImportAction(input: {
   items: unknown
-  categoryId: string
+  categoryId?: string | null
+  sceneCategoryId?: string | null
+  roleCategoryId?: string | null
   baseIndex: number
 }): Promise<{
   ok: boolean
@@ -52,11 +116,12 @@ export async function batchSuggestTagsForImportAction(input: {
   const adminOk = await neon.neonGetProfileIsAdmin(user.id)
   if (!adminOk) return { ok: false, error: '无权限' }
 
-  const categoryId = input.categoryId.trim()
-  if (!categoryId) return { ok: false, error: '请选择分类' }
-
-  const categoryName = await neon.neonGetCategoryNameById(categoryId)
-  if (categoryName == null) return { ok: false, error: '分类不存在' }
+  const tax = await resolveBulkImportTaxonomy({
+    categoryId: input.categoryId,
+    sceneCategoryId: input.sceneCategoryId,
+    roleCategoryId: input.roleCategoryId,
+  })
+  if (!tax.ok) return { ok: false, error: tax.error }
 
   const parsed = parseDocsToolsJson(input.items)
   if (!parsed.ok) return { ok: false, error: parsed.error }
@@ -66,7 +131,9 @@ export async function batchSuggestTagsForImportAction(input: {
     const item = parsed.items[i]
     const description = excerptForListing(item.introduction, 'markdown')
     const tags = buildSuggestedToolTagNames({
-      categoryName,
+      categoryName: tax.categoryName,
+      sceneCategoryName: tax.sceneCategoryName,
+      roleCategoryName: tax.roleCategoryName,
       name: toolNameDedupKey(item.name),
       description,
       introduction: item.introduction,
@@ -87,7 +154,9 @@ export async function batchSuggestTagsForImportAction(input: {
  */
 export async function importDocsToolsItemsAction(input: {
   items: unknown
-  categoryId: string
+  categoryId?: string | null
+  sceneCategoryId?: string | null
+  roleCategoryId?: string | null
   initialStatus: 'approved' | 'pending'
   tagByRelativeIndex?: Record<string, string[]>
   deferBundleRevalidate?: boolean
@@ -103,11 +172,12 @@ export async function importDocsToolsItemsAction(input: {
   const adminOk = await neon.neonGetProfileIsAdmin(user.id)
   if (!adminOk) return { ok: false, error: '无权限' }
 
-  const categoryId = input.categoryId.trim()
-  if (!categoryId) return { ok: false, error: '请选择分类' }
-
-  const categoryName = await neon.neonGetCategoryNameById(categoryId)
-  if (categoryName == null) return { ok: false, error: '分类不存在' }
+  const tax = await resolveBulkImportTaxonomy({
+    categoryId: input.categoryId,
+    sceneCategoryId: input.sceneCategoryId,
+    roleCategoryId: input.roleCategoryId,
+  })
+  if (!tax.ok) return { ok: false, error: tax.error }
 
   const parsed = parseDocsToolsJson(input.items)
   if (!parsed.ok) return { ok: false, error: parsed.error }
@@ -127,8 +197,10 @@ export async function importDocsToolsItemsAction(input: {
       tagMap[relKey] !== undefined ? tagMap[relKey] : undefined
     const rowRes = await importOneTool({
       item: items[i],
-      categoryId,
-      categoryName,
+      categoryId: tax.categoryId,
+      categoryName: tax.categoryName,
+      sceneCategoryName: tax.sceneCategoryName,
+      roleCategoryName: tax.roleCategoryName,
       userId: user.id,
       status: input.initialStatus,
       precomputedTags: pre,
@@ -151,7 +223,9 @@ export async function importDocsToolsItemsAction(input: {
 
 export async function importToolsFromDocsJsonAction(input: {
   rawJson: unknown
-  categoryId: string
+  categoryId?: string | null
+  sceneCategoryId?: string | null
+  roleCategoryId?: string | null
   initialStatus: 'approved' | 'pending'
   /** 与完整列表下标对齐：`"0"`…；若省略则导入时每条服务端自动算标签 */
   tagByRelativeIndex?: Record<string, string[]>
@@ -168,6 +242,8 @@ export async function importToolsFromDocsJsonAction(input: {
   return importDocsToolsItemsAction({
     items: parsed.items,
     categoryId: input.categoryId,
+    sceneCategoryId: input.sceneCategoryId,
+    roleCategoryId: input.roleCategoryId,
     initialStatus: input.initialStatus,
     tagByRelativeIndex: input.tagByRelativeIndex,
     deferBundleRevalidate: false,
@@ -176,14 +252,24 @@ export async function importToolsFromDocsJsonAction(input: {
 
 async function importOneTool(opts: {
   item: DocsToolJsonItem
-  categoryId: string
+  categoryId: string | null
   categoryName: string | null
+  sceneCategoryName: string | null
+  roleCategoryName: string | null
   userId: string
   status: 'approved' | 'pending'
   /** 若传入数组（可为空）则跳过词典计算，直接写入（上限截断） */
   precomputedTags?: string[]
 }): Promise<ImportToolsRowResult> {
-  const { item, categoryId, categoryName, userId, status } = opts
+  const {
+    item,
+    categoryId,
+    categoryName,
+    sceneCategoryName,
+    roleCategoryName,
+    userId,
+    status,
+  } = opts
   const name = item.name
 
   if (item.introduction.length > INTRO_LIMIT_RICH) {
@@ -278,6 +364,8 @@ async function importOneTool(opts: {
       ? opts.precomputedTags.slice(0, TOOL_TAGS_MAX)
       : buildSuggestedToolTagNames({
           categoryName,
+          sceneCategoryName,
+          roleCategoryName,
           name: toolNameDedupKey(item.name),
           description,
           introduction: item.introduction,

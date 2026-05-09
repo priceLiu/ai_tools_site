@@ -13,7 +13,19 @@ import {
 } from '@/app/admin/tools/import-actions'
 import { readFileAsTextWithProgress } from '@/lib/image-data-url'
 import { Progress } from '@/components/ui/progress'
-import type { Category, NavigationMenuTreeNode } from '@/lib/types'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import type {
+  Category,
+  NavigationMenuTreeNode,
+  RoleCategory,
+  TagCategory,
+} from '@/lib/types'
 import { idsEqual } from '@/lib/category-tree'
 import {
   buildSubmitNavigationTier1List,
@@ -35,11 +47,15 @@ const IMPORT_BATCH_SIZE = 3
 interface AdminImportToolsFormProps {
   categories: Category[]
   navigation: NavigationMenuTreeNode[]
+  tagCategories: TagCategory[]
+  roleCategories: RoleCategory[]
 }
 
 export function AdminImportToolsForm({
   categories,
   navigation,
+  tagCategories,
+  roleCategories,
 }: AdminImportToolsFormProps) {
   const router = useRouter()
   const [jsonText, setJsonText] = useState('')
@@ -87,6 +103,19 @@ export function AdminImportToolsForm({
   const resolvedCategoryId = useMemo(
     () => resolvedCategoryIdFromTierPick(tier1, primaryIdx, leafId),
     [tier1, primaryIdx, leafId],
+  )
+
+  const [sceneCategoryId, setSceneCategoryId] = useState('')
+  const [roleCategoryId, setRoleCategoryId] = useState('')
+
+  const hasTaxonomyPick = useMemo(
+    () =>
+      Boolean(
+        resolvedCategoryId ||
+          sceneCategoryId.trim() ||
+          roleCategoryId.trim(),
+      ),
+    [resolvedCategoryId, sceneCategoryId, roleCategoryId],
   )
 
   useEffect(() => {
@@ -224,7 +253,7 @@ export function AdminImportToolsForm({
   }, [autoMatchTags])
 
   const runMatchPreview = () => {
-    if (!validatedItems?.length || !resolvedCategoryId) return
+    if (!validatedItems?.length || !hasTaxonomyPick) return
     setMatchPhase('running')
     setMatchTotal(validatedItems.length)
     setMatchDoneCount(0)
@@ -241,7 +270,9 @@ export function AdminImportToolsForm({
         const slice = validatedItems.slice(offset, offset + MATCH_BATCH_SIZE)
         const res = await batchSuggestTagsForImportAction({
           items: slice,
-          categoryId: resolvedCategoryId,
+          categoryId: resolvedCategoryId || undefined,
+          sceneCategoryId: sceneCategoryId.trim() || undefined,
+          roleCategoryId: roleCategoryId.trim() || undefined,
           baseIndex: offset,
         })
         if (!res.ok || !res.rows) {
@@ -267,7 +298,7 @@ export function AdminImportToolsForm({
   }
 
   const runImport = () => {
-    if (!validatedItems?.length || !resolvedCategoryId) return
+    if (!validatedItems?.length || !hasTaxonomyPick) return
     if (autoMatchTags && matchPhase !== 'done') return
 
     setImportPhase('running')
@@ -303,7 +334,9 @@ export function AdminImportToolsForm({
 
         const res = await importDocsToolsItemsAction({
           items: slice,
-          categoryId: resolvedCategoryId,
+          categoryId: resolvedCategoryId || undefined,
+          sceneCategoryId: sceneCategoryId.trim() || undefined,
+          roleCategoryId: roleCategoryId.trim() || undefined,
           initialStatus,
           tagByRelativeIndex: hasExplicitTags ? tagByRelativeIndex : undefined,
           deferBundleRevalidate: offset + slice.length < total,
@@ -343,7 +376,7 @@ export function AdminImportToolsForm({
   const canMatch =
     validatedItems &&
     validatedItems.length > 0 &&
-    !!resolvedCategoryId &&
+    hasTaxonomyPick &&
     autoMatchTags &&
     matchPhase !== 'running' &&
     !isBusy
@@ -351,8 +384,7 @@ export function AdminImportToolsForm({
   const canImport =
     validatedItems &&
     validatedItems.length > 0 &&
-    !!resolvedCategoryId &&
-    tier1.length > 0 &&
+    hasTaxonomyPick &&
     (!autoMatchTags || matchPhase === 'done') &&
     importPhase !== 'running' &&
     !isBusy
@@ -442,18 +474,31 @@ export function AdminImportToolsForm({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-3 sm:col-span-2">
-          <Label>目标分类</Label>
+          <Label>分类与标签提示</Label>
+          <p className="text-xs text-muted-foreground">
+            <strong className="font-medium text-foreground">至少选一项</strong>
+            ：「首页左侧菜单分类」「场景分类」「角色分类」可任选其一或多项并用。
+            场景 / 角色名仅参与<strong className="font-medium text-foreground">
+              自动标签匹配提示
+            </strong>
+            （顺序：菜单→场景→角色；不会去全自动挂载该场景或角色下的全部标签）。
+          </p>
+          <Label className="text-sm">首页左侧菜单分类（可选）</Label>
           <p className="text-xs text-muted-foreground">
             与<strong className="font-medium text-foreground">工具提交页</strong>
-            一致：选项来自侧栏「菜单管理」结构。
+            同源：来自侧栏「菜单管理」。若不选，工具的{' '}
+            <code className="rounded-md bg-muted px-1.5 py-0.5 text-xs">
+              category_id
+            </code>{' '}
+            可为空；请改用下方场景或角色至少其一以满足上文要求。
           </p>
           {tier1.length === 0 ? (
             <p className="rounded-md border border-dashed border-border/80 bg-muted/20 px-3 py-2.5 text-sm text-muted-foreground">
-              侧栏中尚未配置可导入分类。请在「菜单管理」中为项填写{' '}
+              侧栏中尚未配置菜单指向的分类。可仅用下方的场景或角色分类完成导入；若需要挂载到产品线菜单，请在「菜单管理」中为项填写{' '}
               <code className="rounded-md bg-muted px-1.5 py-0.5 text-xs">
                 /category/slug
               </code>{' '}
-              链接。
+              链接后再选此处。
             </p>
           ) : (
             <div className="max-w-2xl space-y-3 rounded-lg border border-border bg-card/50 p-4">
@@ -472,6 +517,61 @@ export function AdminImportToolsForm({
               />
             </div>
           )}
+
+          <div className="grid max-w-2xl gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="admin-import-scene-cat" className="text-sm">
+                场景分类（可选）
+              </Label>
+              <Select
+                value={sceneCategoryId || '__none__'}
+                onValueChange={(v) =>
+                  setSceneCategoryId(v === '__none__' ? '' : v)
+                }
+              >
+                <SelectTrigger
+                  id="admin-import-scene-cat"
+                  className="h-10 w-full bg-background"
+                >
+                  <SelectValue placeholder="不选" />
+                </SelectTrigger>
+                <SelectContent position="popper">
+                  <SelectItem value="__none__">不选</SelectItem>
+                  {tagCategories.map((tc) => (
+                    <SelectItem key={tc.id} value={tc.id}>
+                      {tc.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="admin-import-role-cat" className="text-sm">
+                角色分类（可选）
+              </Label>
+              <Select
+                value={roleCategoryId || '__none__'}
+                onValueChange={(v) =>
+                  setRoleCategoryId(v === '__none__' ? '' : v)
+                }
+              >
+                <SelectTrigger
+                  id="admin-import-role-cat"
+                  className="h-10 w-full bg-background"
+                >
+                  <SelectValue placeholder="不选" />
+                </SelectTrigger>
+                <SelectContent position="popper">
+                  <SelectItem value="__none__">不选</SelectItem>
+                  {roleCategories.map((rc) => (
+                    <SelectItem key={rc.id} value={rc.id}>
+                      {rc.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
 
           <div className="max-w-2xl space-y-3 rounded-lg border border-border bg-muted/20 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">

@@ -259,10 +259,17 @@ export function AdminNavigationMenuEditor({
           <p className="font-medium text-foreground">分类表与菜单</p>
           <p className="text-muted-foreground">
             保存菜单后会<strong className="font-medium text-foreground">自动</strong>
-            尝试把折叠项下的一级子菜单补进「分类」表：优先按子项链接{' '}
+            尝试同步「分类」表：
+            <strong className="font-medium text-foreground">折叠项下的一级子菜单</strong>
+            优先按{' '}
             <code className="rounded bg-muted px-1">/category/xxx</code>
-            （缺省插入）；若无有效链接或与父级重复，则根据<strong>子项标题</strong>
-            生成 slug 并挂到父分类下（与「AI办公 → AI PPT」这类结构一致）。
+            补全；若无有效链接或与父级重复，则按<strong>子项标题</strong>
+            生成 slug 并挂到父分类下。
+            此外会扫描<strong className="font-medium text-foreground">所有叶子菜单</strong>
+            （不再带子项的行）：若链接为{' '}
+            <code className="rounded bg-muted px-1">/category/xxx</code>
+            且分类表尚无该 slug，则补一行分类；父级由<strong>上一行菜单</strong>
+            的 slug 或标题尽力对齐已有分类，对不齐则<strong>落为根级</strong>，避免出现后台 Tab / 批量导入选不到的情况。
           </p>
           {syncHint ? (
             <p className="text-xs text-foreground whitespace-pre-wrap">{syncHint}</p>
@@ -293,7 +300,9 @@ export function AdminNavigationMenuEditor({
                 setSyncHint(`未完成：${r.errors.join('；')}`)
                 toastError('同步未完全成功', r.errors.join('；'))
               } else {
-                setSyncHint('没有需要同步的项（子菜单 slug 在分类表里都已存在）。')
+                setSyncHint(
+                  '没有需要同步的项（折叠子菜单与所有叶子 /category 链接在分类表里均已存在）。',
+                )
               }
               invalidate()
             } finally {

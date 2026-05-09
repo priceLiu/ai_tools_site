@@ -153,16 +153,15 @@ set_tool_tags_for_tool(uuid, text[])  -- EXIT WHEN i >= 20
 
 | 视图 | 含义 | 何时用 |
 |---|---|---|
-| **Curated** | 受保护的官方 217 词表（`is_curated = true`） | 想确认某标签是否归属正确的一级分类 |
-| **待清理** | 历史落库的非官方词（`is_curated = false`） | 日常清洗——旧脏标签转移到 curated 标签上 |
-| **全部** | 上述两者合集 | 排查重名、查找别名 |
+| **Curated** | 受保护的官方词表（`is_curated = true`），且 **必须有场景归属**（`tag_category_id` → `tag_categories`） | 想确认某标签是否归属正确的场景分类 |
+| **待清理** | 历史落库的非官方词（`is_curated = false`）；与 Tab「未分类」（无 `tag_category_id`）不是同一概念 | 日常清洗——合并到 curated 目标或先选场景再标 Curated |
 
 ### 行内操作
 
 | 操作 | 行为 | 备注 |
 |---|---|---|
-| 改一级分类（下拉） | 写 `tags.tag_category_id` | 设为「未分类」就解绑；不影响 curated 状态 |
-| 标 / 取消 Curated | 写 `tags.is_curated` | 标 curated 的标签会受清洗保护 |
+| 改场景分类（下拉） | 写 `tags.tag_category_id` | **Curated 标签不可改为「未分类」**；未 curated 可选「未分类」解绑场景 |
+| 标 / 取消 Curated | 写 `tags.is_curated`（常与 `tag_category_id` 一并校验） | **标 Curated 须先选场景分类**；详见 [`docs/tag-taxonomy-admin-alignment.md`](./tag-taxonomy-admin-alignment.md) §八 |
 | 改名 | `UPDATE tags SET name = ?` | 撞已有标签则会被拒绝，改用「合并」 |
 | **合并** | 源 `tool_tags` 全部转目标；源名写入目标 `aliases`；删除源 | **不可逆**，事务执行；适合「图像编辑 → 图片编辑」类清洗 |
 | 删除 | `DELETE FROM tags ...` | 只在 `tool_count = 0` 时允许 |

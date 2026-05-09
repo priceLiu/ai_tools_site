@@ -10,8 +10,13 @@ export const metadata = {
 }
 
 export default async function AdminImportToolsPage() {
-  const categories = await neon.neonListCategoriesAll()
-  const navigation = await getNavigationMenuTree()
+  const [categories, tagCategories, roleCategories, navigation] =
+    await Promise.all([
+      neon.neonListCategoriesAll(),
+      neon.neonListTagCategoriesEnabled(),
+      neon.neonListRoleCategoriesEnabled(),
+      getNavigationMenuTree(),
+    ])
   return (
     <main className="p-3 md:p-5">
       <div className="mx-auto max-w-3xl">
@@ -35,16 +40,12 @@ export default async function AdminImportToolsPage() {
         </p>
 
         <div className="mt-6">
-          {categories.length === 0 ? (
-            <p className="text-sm text-destructive">
-              暂无分类，请先在数据库或菜单同步中配置分类。
-            </p>
-          ) : (
-            <AdminImportToolsForm
-              categories={categories}
-              navigation={navigation}
-            />
-          )}
+          <AdminImportToolsForm
+            categories={categories}
+            navigation={navigation}
+            tagCategories={tagCategories}
+            roleCategories={roleCategories}
+          />
         </div>
       </div>
     </main>

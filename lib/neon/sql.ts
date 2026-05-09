@@ -7,6 +7,7 @@ type SqlTaggedFn = (
   ...values: unknown[]
 ) => Promise<NeonRow[]>
 
+let pgClient: ReturnType<typeof postgres> | null = null
 let sqlTagged: SqlTaggedFn | null = null
 
 function formatConnectErr(err: unknown): string {
@@ -34,6 +35,66 @@ function isProbablyTransportFailure(text: string): boolean {
   )
 }
 
+function wrapSqlTagged(
+  run: (
+    strings: TemplateStringsArray,
+    ...values: unknown[]
+  ) => PromiseLike<any>,
+): SqlTaggedFn {
+  return async (strings, ...values) => {
+    try {
+      const rows = await run(strings, ...(values as never[]))
+      return rows as NeonRow[]
+    } catch (e) {
+      const chain = formatConnectErr(e)
+      if (!isProbablyTransportFailure(chain)) {
+        throw e
+      }
+      throw new Error(
+        [
+          '数据库连接失败（postgres TCP）。',
+          `详情: ${chain}`,
+          '排查：1) DATABASE_URL 是否正确（VPC 内网串 / 公网串） 2) 安全组是否放行 5432 端口 3) sslmode=require 是否携带',
+        ].join(' '),
+        { cause: e },
+      )
+    }
+  }
+}
+
+function ensurePgClient(): ReturnType<typeof postgres> {
+  const url = process.env.DATABASE_URL?.trim()
+  if (!url) {
+    throw new Error('DATABASE_URL is required')
+  }
+  if (!pgClient) {
+    pgClient = postgres(url, {
+      max: 10,
+      idle_timeout: 20,
+      connect_timeout: 60,
+      /** 复杂迁移 / Server Actions 偶有多语句，关闭 prepared statement 更稳。 */
+      prepare: false,
+    })
+  }
+  return pgClient
+}
+
+/**
+ * 在单连接事务中执行回调（postgres.js 要求：勿手写 BEGIN/COMMIT 分散占用连接池）。
+ * 回调成功则提交，抛错则回滚。
+ */
+export async function neonSqlBegin<T>(fn: (sql: SqlTaggedFn) => Promise<T>): Promise<T> {
+  const sql = ensurePgClient()
+  const out = await sql.begin(async (tx) => {
+    const txSql: SqlTaggedFn = async (strings, ...values) => {
+      const rows = await tx(strings, ...(values as never[]))
+      return rows as NeonRow[]
+    }
+    return fn(txSql)
+  })
+  return out as T
+}
+
 /**
  * 数据库 tagged template 客户端。
  *
@@ -46,37 +107,11 @@ function isProbablyTransportFailure(text: string): boolean {
  * 后续若整体改名 `lib/db/`，再批量替换。
  */
 export function getNeonSql() {
-  const url = process.env.DATABASE_URL?.trim()
-  if (!url) {
-    throw new Error('DATABASE_URL is required')
-  }
+  const client = ensurePgClient()
   if (!sqlTagged) {
-    const client = postgres(url, {
-      max: 10,
-      idle_timeout: 20,
-      connect_timeout: 60,
-      /** 复杂迁移 / Server Actions 偶有多语句，关闭 prepared statement 更稳。 */
-      prepare: false,
-    })
-    sqlTagged = async (strings, ...values) => {
-      try {
-        const rows = await client(strings, ...(values as never[]))
-        return rows as NeonRow[]
-      } catch (e) {
-        const chain = formatConnectErr(e)
-        if (!isProbablyTransportFailure(chain)) {
-          throw e
-        }
-        throw new Error(
-          [
-            '数据库连接失败（postgres TCP）。',
-            `详情: ${chain}`,
-            '排查：1) DATABASE_URL 是否正确（VPC 内网串 / 公网串） 2) 安全组是否放行 5432 端口 3) sslmode=require 是否携带',
-          ].join(' '),
-          { cause: e },
-        )
-      }
-    }
+    sqlTagged = wrapSqlTagged((strings, ...values) =>
+      client(strings, ...(values as never[])),
+    )
   }
   return sqlTagged
 }

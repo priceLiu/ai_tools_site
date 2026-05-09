@@ -87,6 +87,15 @@ export async function adminSetTagCuratedAction(input: {
   const gate = await requireAdmin()
   if (gate) return { ok: false, error: gate.error }
 
+  const cid = input.tagCategoryId?.trim() ?? ''
+  if (input.isCurated && !cid) {
+    return {
+      ok: false,
+      error:
+        'Curated 标签必须归属某个场景分类。请先在「场景分类」下拉中选择归属，再标 Curated。',
+    }
+  }
+
   await neon.neonAdminSetTagCurated(input)
   revalidateTagSurfaces()
   return { ok: true }
@@ -152,10 +161,17 @@ export async function adminCreateTagAction(
   if (input.kind === 'role') {
     const rid = input.roleCategoryId.trim()
     if (!rid) return { ok: false, error: '请选择角色分类' }
+    if (input.isCurated) {
+      return {
+        ok: false,
+        error:
+          '此处新建不会写入场景归属（tags.tag_category_id）。请先取消「标为 curated」，创建后到「标签清理」选择场景分类后再标 Curated。',
+      }
+    }
     const r = await neon.neonAdminInsertTag({
       name: input.name,
       tagCategoryId: null,
-      isCurated: input.isCurated,
+      isCurated: false,
     })
     if (!r.ok) return { ok: false, error: r.error }
     const link = await neon.neonAdminLinkTagToRoleCategory({
@@ -172,10 +188,17 @@ export async function adminCreateTagAction(
 
   const mid = input.menuCategoryId.trim()
   if (!mid) return { ok: false, error: '请选择菜单分类' }
+  if (input.isCurated) {
+    return {
+      ok: false,
+      error:
+        '此处新建不会写入场景归属（tags.tag_category_id）。请先取消「标为 curated」，创建后到「标签清理」选择场景分类后再标 Curated。',
+    }
+  }
   const r = await neon.neonAdminInsertTag({
     name: input.name,
     tagCategoryId: null,
-    isCurated: input.isCurated,
+    isCurated: false,
   })
   if (!r.ok) return { ok: false, error: r.error }
   const link = await neon.neonAdminLinkTagToMenuCategory({

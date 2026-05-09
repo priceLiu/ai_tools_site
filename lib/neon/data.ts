@@ -1,4 +1,4 @@
-import { getNeonSql } from '@/lib/neon/sql'
+import { getNeonSql, neonSqlBegin } from '@/lib/neon/sql'
 import {
   mapAdRow,
   mapAdminCommentRow,
@@ -1992,7 +1992,7 @@ export async function neonRejectTool(
 export async function neonInsertCategory(input: {
   name: string
   slug: string
-  parent_id: string
+  parent_id: string | null
   sort_order: number
   icon: string | null
 }): Promise<void> {
@@ -2064,6 +2064,65 @@ export async function neonCountChildCategories(
     SELECT count(*)::int AS n FROM categories WHERE parent_id = ${parentId}
   `
   return Number((rows[0] as { n: number }).n ?? 0)
+}
+
+/** 主分类或 junction 任一侧指向该菜单产品线即计数一次（同一工具只算 1）。 */
+export async function neonCountDistinctToolsReferencingMenuCategory(
+  categoryId: string,
+): Promise<number> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT count(*)::int AS n
+    FROM (
+      SELECT DISTINCT id
+      FROM tools
+      WHERE category_id = ${categoryId}
+      UNION
+      SELECT DISTINCT tool_id AS id
+      FROM tool_categories
+      WHERE category_id = ${categoryId}
+    ) sub
+  `
+  return Number((rows[0] as { n: number }).n ?? 0)
+}
+
+/** 删除空产品线分类：`hot`、仍有子分类、仍有工具关联时不允许。 */
+export async function neonAdminDeleteMenuCategory(params: {
+  categoryId: string
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const id = params.categoryId.trim()
+  if (!id.length) return { ok: false, error: '缺少分类' }
+
+  const slug = await neonCategorySlugById(id)
+  if (!slug) return { ok: false, error: '菜单分类不存在' }
+  if (slug === 'hot') return { ok: false, error: '不能删除 slug 为 hot 的热门产品线' }
+
+  const childN = await neonCountChildCategories(id)
+  if (childN > 0) {
+    return {
+      ok: false,
+      error: `仍有 ${childN} 个子分类，请先删除或移动子分类`,
+    }
+  }
+
+  const toolN = await neonCountDistinctToolsReferencingMenuCategory(id)
+  if (toolN > 0) {
+    return {
+      ok: false,
+      error: `仍有 ${toolN} 个工具以主分类或挂载关联本条，请先在后台移除挂载或改掉主分类`,
+    }
+  }
+
+  try {
+    await neonDeleteCategoryById(id)
+    return { ok: true }
+  } catch (e) {
+    return {
+      ok: false,
+      error:
+        e instanceof Error ? e.message : '删除失败（可能存在数据库约束冲突）',
+    }
+  }
 }
 
 export async function neonDeleteCategoryById(id: string): Promise<void> {
@@ -3737,6 +3796,7 @@ export async function neonListTagsSuggestDictionary(): Promise<
 /**
  * 管理员新建标签（可控词表扩充）。
  * `tag_category_id` 为场景归属（tag_categories）；可为 null——词表仍参与匹配，再通过 role/menu 联结表挂角色或产品线。
+ * **`is_curated = true` 时必须有场景归属**，与本应用后台约束一致。
  */
 export async function neonAdminInsertTag(params: {
   name: string
@@ -3748,6 +3808,13 @@ export async function neonAdminInsertTag(params: {
   const catRaw = params.tagCategoryId?.trim() ?? ''
   const tagCatVal =
     catRaw === '' ? null : catRaw.trim().toLowerCase()
+  if (params.isCurated && tagCatVal == null) {
+    return {
+      ok: false,
+      error:
+        'Curated 标签必须归属场景分类（tags.tag_category_id）；请先选择 tag_categories 或改为未 curated。',
+    }
+  }
   const sql = getNeonSql()
   const dup = await sql`
     SELECT id FROM tags WHERE lower(trim(name)) = lower(${n}) LIMIT 1
@@ -3882,6 +3949,19 @@ export async function neonGetRoleCategoryBySlug(
       WHERE slug = ${slug} AND COALESCE(is_disabled, false) = false
       LIMIT 1
     `
+  const r = rows[0] as Record<string, unknown> | undefined
+  return r ? mapRoleCategoryRow(r) : null
+}
+
+export async function neonGetRoleCategoryById(
+  roleCategoryId: string,
+): Promise<RoleCategory | null> {
+  const sql = getNeonSql()
+  const rows = await sql`
+    SELECT id, name, slug, icon, sort_order, tagline, description, created_at,
+           COALESCE(is_disabled, false) AS is_disabled
+    FROM role_categories WHERE id = ${roleCategoryId} LIMIT 1
+  `
   const r = rows[0] as Record<string, unknown> | undefined
   return r ? mapRoleCategoryRow(r) : null
 }
@@ -4121,7 +4201,7 @@ export async function neonAdminAssignTagToCategory(params: {
   const sql = getNeonSql()
   const tagId = String(params.tagId).trim().toLowerCase()
   const tagRows = await sql`
-    SELECT id FROM tags WHERE id = ${tagId} LIMIT 1
+    SELECT id, is_curated FROM tags WHERE id = ${tagId} LIMIT 1
   `
   if (!tagRows[0]) return { ok: false, error: '标签不存在' }
 
@@ -4136,6 +4216,15 @@ export async function neonAdminAssignTagToCategory(params: {
       SELECT id FROM tag_categories WHERE id = ${cid} LIMIT 1
     `
     if (!catRows[0]) return { ok: false, error: '场景分类不存在' }
+  }
+
+  const curatedFlag = Boolean((tagRows[0] as { is_curated?: boolean }).is_curated)
+  if (cid == null && curatedFlag) {
+    return {
+      ok: false,
+      error:
+        'Curated 标签不能移出场景分类。请先在「标签清理」取消 Curated，再移出。',
+    }
   }
 
   try {
@@ -4280,45 +4369,41 @@ export async function neonAdminMergeTags(input: {
   )[0] as { id: string; name: string; aliases: string[] | null } | undefined
   if (!src || !dst) return { ok: false, error: '标签不存在', movedTools: 0 }
 
-  await sql`BEGIN`
   try {
-    /** 把 source 上的 tool_tags 转过来；冲突（同 tool 已有 target）的直接删源 */
-    const updated = await sql`
-      UPDATE tool_tags tt
-      SET tag_id = ${input.targetTagId}
-      WHERE tt.tag_id = ${input.sourceTagId}
-        AND NOT EXISTS (
-          SELECT 1 FROM tool_tags x
-          WHERE x.tool_id = tt.tool_id AND x.tag_id = ${input.targetTagId}
-        )
-      RETURNING tool_id
-    `
-    /** 剩下的（同 tool 已有 target）直接删源 */
-    await sql`
-      DELETE FROM tool_tags WHERE tag_id = ${input.sourceTagId}
-    `
-    /** 把 source.name 加入 target.aliases（去重） */
-    const newAlias = (src.name ?? '').trim()
-    if (newAlias) {
-      await sql`
-        UPDATE tags
-        SET aliases = (
-          SELECT array_agg(DISTINCT v)
-          FROM unnest(COALESCE(aliases, '{}') || ARRAY[${newAlias}]::text[]) AS v
-          WHERE v <> ''
-        )
-        WHERE id = ${input.targetTagId}
+    const movedTools = await neonSqlBegin(async (sql) => {
+      /** 把 source 上的 tool_tags 转过来；冲突（同 tool 已有 target）的直接删源 */
+      const updated = await sql`
+        UPDATE tool_tags tt
+        SET tag_id = ${input.targetTagId}
+        WHERE tt.tag_id = ${input.sourceTagId}
+          AND NOT EXISTS (
+            SELECT 1 FROM tool_tags x
+            WHERE x.tool_id = tt.tool_id AND x.tag_id = ${input.targetTagId}
+          )
+        RETURNING tool_id
       `
-    }
-    await sql`DELETE FROM tags WHERE id = ${input.sourceTagId}`
-    await sql`COMMIT`
-    return { ok: true, movedTools: updated.length }
+      /** 剩下的（同 tool 已有 target）直接删源 */
+      await sql`
+        DELETE FROM tool_tags WHERE tag_id = ${input.sourceTagId}
+      `
+      /** 把 source.name 加入 target.aliases（去重） */
+      const newAlias = (src.name ?? '').trim()
+      if (newAlias) {
+        await sql`
+          UPDATE tags
+          SET aliases = (
+            SELECT array_agg(DISTINCT v)
+            FROM unnest(COALESCE(aliases, '{}') || ARRAY[${newAlias}]::text[]) AS v
+            WHERE v <> ''
+          )
+          WHERE id = ${input.targetTagId}
+        `
+      }
+      await sql`DELETE FROM tags WHERE id = ${input.sourceTagId}`
+      return updated.length
+    })
+    return { ok: true, movedTools }
   } catch (e) {
-    try {
-      await sql`ROLLBACK`
-    } catch {
-      /* ignore */
-    }
     return {
       ok: false,
       error: e instanceof Error ? e.message : '合并失败',

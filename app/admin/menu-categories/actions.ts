@@ -220,3 +220,17 @@ export async function adminSearchToolsForHotPickerAction(input: {
     }
   }
 }
+
+export async function adminDeleteMenuCategoryAction(input: {
+  categoryId: string
+}): Promise<{ ok: boolean; error?: string }> {
+  const gate = await requireAdmin()
+  if (gate) return { ok: false, error: gate.error }
+
+  const r = await neon.neonAdminDeleteMenuCategory({
+    categoryId: input.categoryId.trim(),
+  })
+  if (!r.ok) return { ok: false, error: r.error }
+  revalidateMenuCategorySurfaces()
+  return { ok: true }
+}

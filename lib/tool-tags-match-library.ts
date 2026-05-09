@@ -2,7 +2,8 @@
  * 基于 **当前数据库中全部标签**（name + aliases），辅以 `TAG_KEYWORDS` 的补充词，
  * 对工具名称 / 概述 / 介绍做子串命中与分段权重打分，供「自动提取标签」使用。
  *
- * 语义与 `buildSuggestedToolTagNames` 对齐：首个为产品线分类名兜底，后续为按分排序的标签名（标准名为 DB 中的 `name`）。
+ * 语义与 `buildSuggestedToolTagNames` 对齐：前几位为所选菜单/场景/角色分类名提示（去重），
+ * 后续为按分排序的标签名（标准名为 DB 中的 `name`）。
  */
 
 import type { IntroductionFormat } from '@/lib/introduction-format'
@@ -15,6 +16,7 @@ import {
   TOOL_TAGS_MAX,
   TOOL_TAGS_SUGGEST_MAX,
   introductionToTagScanText,
+  prependTaxonomyHintTagNames,
   type BuildSuggestedToolTagNamesInput,
 } from '@/lib/tool-tags-extract'
 
@@ -122,19 +124,11 @@ export function buildSuggestedToolTagNamesFromDictionary(
 
   const out: string[] = []
   const seen = new Set<string>()
-
-  const catRaw = (input.categoryName ?? '')
-    .normalize('NFKC')
-    .trim()
-    .replace(/\s+/g, ' ')
-  if (catRaw) {
-    const canonical = CURATED_TAG_NAMES.find(
-      (t) => t.toLowerCase() === catRaw.toLowerCase(),
-    )
-    const useName = canonical ?? catRaw
-    out.push(useName)
-    seen.add(useName.toLowerCase())
-  }
+  prependTaxonomyHintTagNames(out, seen, {
+    categoryName: input.categoryName,
+    sceneCategoryName: input.sceneCategoryName,
+    roleCategoryName: input.roleCategoryName,
+  }, limit)
 
   for (const [nm] of ranked) {
     if (out.length >= limit) break

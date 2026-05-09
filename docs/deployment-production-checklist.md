@@ -35,6 +35,24 @@
 
 若漏跑：**前台门户 / AI 方案集 / 撤销请求** 会因缺列或约束报错。
 
+### 故障排除：`column "showcase_revoke_requested_at" does not exist`
+
+说明 **第 2 条迁移未在当前 `DATABASE_URL` 指向的库上执行**。在与 **`DATABASE_URL` 对应的 PostgreSQL** 上执行即可（任选其一）：云数据库控制台自带的 **SQL 窗口**、`psql`、DataGrip / DBeaver 等客户端连接到同一实例后执行。下面脚本含 **`IF NOT EXISTS`**，可重复执行：
+
+```sql
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS showcase_revoke_requested_at timestamptz;
+
+COMMENT ON COLUMN public.profiles.showcase_revoke_requested_at IS
+  '用户点击「通知撤销」的时间；管理员下架或重新审核后应清空';
+```
+
+也可在项目根目录用 **`psql`**（连接串与运行时 **`DATABASE_URL` 一致**）：
+
+```bash
+psql "$DATABASE_URL" -f supabase/migrations/20260509133000_showcase_revoke_requested.sql
+```
+
 ---
 
 ## 三、构建与发布

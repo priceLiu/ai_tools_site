@@ -145,6 +145,8 @@ export function AdminTagsManager({
           场景 Tab：<strong className="text-foreground">加粗</strong>
           为与首页一致的<strong>收录工具数</strong>；「· N词」为该场景词条总数；若与表内条数不一致，表示当前视图（Curated
           / 待清理 / 搜索）过滤了列表。
+          <strong className="text-foreground"> Curated 必须先选场景分类</strong>
+          （不允许「场景未分类」的官方词条）。
         </p>
 
         <div className="min-w-[220px] flex-1">
@@ -448,8 +450,20 @@ function TagRowView({
             disabled={pending}
             onChange={(e) => setCategoryId(e.target.value || null)}
             className="h-8 rounded-md border bg-background px-2 text-xs"
+            title={
+              row.is_curated
+                ? 'Curated 标签不可改为「未分类」。请先取消 Curated。'
+                : undefined
+            }
           >
-            <option value="">未分类</option>
+            {!row.is_curated ? (
+              <option value="">未分类</option>
+            ) : row.tag_category_id &&
+              String(row.tag_category_id).trim() !== '' ? null : (
+              <option value="" disabled>
+                Curated 须选场景
+              </option>
+            )}
             {tagCategories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -462,7 +476,19 @@ function TagRowView({
             size="sm"
             variant={row.is_curated ? 'outline' : 'default'}
             onClick={() => toggleCurated(!row.is_curated)}
-            disabled={pending}
+            disabled={
+              pending ||
+              (!row.is_curated &&
+                (row.tag_category_id == null ||
+                  String(row.tag_category_id).trim() === ''))
+            }
+            title={
+              !row.is_curated &&
+              (row.tag_category_id == null ||
+                String(row.tag_category_id).trim() === '')
+                ? '请先在下拉框选择场景分类，再标 Curated'
+                : undefined
+            }
             className="h-8 gap-1"
           >
             {pending ? (

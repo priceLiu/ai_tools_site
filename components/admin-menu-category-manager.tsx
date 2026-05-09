@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import {
   adminAddToolToHotFeaturedAction,
   adminCreateMenuCategoryAction,
+  adminDeleteMenuCategoryAction,
   adminLinkToolToMenuCategoryAction,
   adminRemoveToolFromHotFeaturedAction,
   adminSearchToolsForHotPickerAction,
@@ -34,6 +35,16 @@ import {
 import { Spinner } from '@/components/ui/spinner'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { idsEqual } from '@/lib/category-tree'
 import type { Category } from '@/lib/types'
 import { ChevronsUpDown, Trash2 } from 'lucide-react'
 
@@ -57,19 +68,24 @@ function MenuCategoryToolsBlock({
   toolsInCat,
   pending,
   parentLabel,
+  childCategoryCount,
   onToggleDisabled,
   onAssignTool,
   onRemoveTool,
+  onDeleteCategory,
 }: {
   cat: Category
   toolsInCat: MenuCategoryToolMembershipRow[]
   pending: boolean
   parentLabel: string | null
+  childCategoryCount: number
   onToggleDisabled: (disabled: boolean) => void
   onAssignTool: (toolId: string) => void
   onRemoveTool: (toolId: string) => void
+  onDeleteCategory: () => void
 }) {
   const [pickOpen, setPickOpen] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [pickQuery, setPickQuery] = useState('')
   const [pickBusy, setPickBusy] = useState(false)
   const [pickCandidates, setPickCandidates] = useState<
@@ -121,6 +137,14 @@ function MenuCategoryToolsBlock({
       ? `下列 ${totalMounted} 个工具与首页「热门工具」区块一致（is_featured · 已通过 · 未隐藏），可直接在此取消热门或添加更多`
       : `前台可见 ${publicListed} 个（已通过且未隐藏）；后台挂载 ${totalMounted} 条`
 
+  const deleteBlockedReason = isHotSlug
+    ? '热门产品线不可删除'
+    : childCategoryCount > 0
+      ? `仍有 ${childCategoryCount} 个子分类，请先处理子分类`
+      : toolsInCat.length > 0
+        ? '请先移除本分类下的工具挂载'
+        : null
+
   return (
     <section className="rounded-lg border border-border bg-card/40 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/80 pb-3">
@@ -141,7 +165,71 @@ function MenuCategoryToolsBlock({
           ) : null}
           <p className="text-xs text-muted-foreground">{summaryLine}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {!isHotSlug ? (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={pending || deleteBlockedReason != null}
+                title={deleteBlockedReason ?? '从数据库删除该分类（categories）'}
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => setDeleteDialogOpen(true)}
+              >
+                删除分类
+              </Button>
+              <AlertDialog
+                open={deleteDialogOpen}
+                onOpenChange={setDeleteDialogOpen}
+              >
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>
+                      删除菜单分类「{cat.name}」？
+                    </AlertDialogTitle>
+                    <AlertDialogDescription asChild>
+                      <div className="space-y-2 text-sm text-muted-foreground">
+                        <p>
+                          将删除{' '}
+                          <span className="font-mono text-foreground">
+                            categories
+                          </span>{' '}
+                          中 slug 为{' '}
+                          <span className="font-mono text-foreground">
+                            {cat.slug}
+                          </span>{' '}
+                          的一行；{' '}
+                          <span className="font-mono text-foreground">
+                            category_tags
+                          </span>{' '}
+                          等联结会一并删除。若「菜单管理」里仍有指向{' '}
+                          <span className="font-mono">
+                            /category/{cat.slug}
+                          </span>{' '}
+                          的链接，请自行清理以免死链。
+                        </p>
+                      </div>
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel type="button">取消</AlertDialogCancel>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      disabled={pending}
+                      onClick={() => {
+                        setDeleteDialogOpen(false)
+                        onDeleteCategory()
+                      }}
+                    >
+                      确认删除
+                    </Button>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </>
+          ) : null}
           <span className="text-xs text-muted-foreground">禁用</span>
           <Switch
             checked={disabledNow}
@@ -388,6 +476,18 @@ export function AdminMenuCategoryManager({
     })
   }
 
+  const deleteCategory = (categoryId: string) => {
+    startTransition(async () => {
+      const r = await adminDeleteMenuCategoryAction({ categoryId })
+      if (!r.ok) {
+        toast.error(r.error ?? '删除失败')
+        return
+      }
+      toast.success('已删除菜单分类')
+      router.refresh()
+    })
+  }
+
   return (
     <div className="space-y-6">
       <section className="rounded-lg border border-dashed border-border bg-muted/20 p-4">
@@ -479,6 +579,9 @@ export function AdminMenuCategoryManager({
             const pid = cat.parent_id?.trim()
             const parentLabel =
               pid && catById.has(pid) ? catById.get(pid)!.name : null
+            const childCategoryCount = categories.filter((c) =>
+              idsEqual(c.parent_id, cat.id),
+            ).length
 
             return (
               <TabsContent
@@ -491,9 +594,11 @@ export function AdminMenuCategoryManager({
                   toolsInCat={toolsInCat}
                   pending={pending}
                   parentLabel={parentLabel}
+                  childCategoryCount={childCategoryCount}
                   onToggleDisabled={(v) => toggleDisabled(cat.id, v)}
                   onAssignTool={(toolId) => assignTool(toolId, cat.id)}
                   onRemoveTool={(toolId) => removeTool(toolId, cat.id)}
+                  onDeleteCategory={() => deleteCategory(cat.id)}
                 />
               </TabsContent>
             )

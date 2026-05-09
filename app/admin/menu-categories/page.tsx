@@ -146,6 +146,11 @@ export default async function AdminMenuCategoriesPage() {
               联结，不删工具、不影响其它菜单分类。
             </p>
             <p>
+              · 无子分类且列表中无任何工具时，可用 Tab 内的「删除分类」移除整条产品线；{' '}
+              <code className="rounded bg-muted px-1">slug = hot</code>{' '}
+              不可删除。
+            </p>
+            <p>
               · <code className="rounded bg-muted px-1">category_tags</code>{' '}
               仍为菜单↔标签的运营联结（与工具挂载无关）；标签新建与清洗请在「标签清理」等页面操作。
             </p>

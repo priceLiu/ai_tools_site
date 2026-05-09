@@ -41,7 +41,8 @@ function uniqueSlugFromNavChildLabel(
 export type PlannedCategoryInsert = {
   name: string
   slug: string
-  parent_id: string
+  /** `null` 表示根级分类（顶层菜单单项直达 `/category/slug`） */
+  parent_id: string | null
   sort_order: number
   icon: string | null
   /** 创建分类后把该菜单项 href 写成 `/category/{slug}`（子项原为 # 或与父级重复时尤其需要） */
@@ -49,10 +50,9 @@ export type PlannedCategoryInsert = {
 }
 
 /**
- * 对比侧栏树与 categories：「一级折叠项」下的直接子菜单若缺少对应分类行则计划插入：
- * - 子项含有效且不等于父级 slug 的 `/category/xxx` 时，用该 slug；
- * - 否则在父分类下按子项标题生成唯一 slug。
- * 仅处理一层子项（与侧栏 NavNode 一致）。
+ * 对比侧栏树与 categories：
+ * 1) 「一级折叠项」下的直接子菜单若缺少对应分类行则计划插入（与侧栏 NavNode 一致）；
+ * 2) **任意层级叶子菜单行**（导航表里不作为其它行的 parent）且 `href` 为 `/category/{slug}`，若库里尚无该 slug，亦计划插入；父级优先由 **上一行菜单** 的 `/category/{slug}` 或标题匹配已有根分类解析，失败则 **根级**（保证后台 Tab / 批量导入能选到）。
  */
 export function planMissingCategoriesFromNavigation(
   navRows: NavigationMenuItemRow[],
@@ -137,6 +137,67 @@ export function planMissingCategoriesFromNavigation(
       })
       seenSlugs.add(gen)
     }
+  }
+
+  const rootCatsForSortOrder = categories.filter(
+    (c) =>
+      c.slug !== 'hot' &&
+      (c.parent_id == null || String(c.parent_id).trim() === ''),
+  )
+  let nextRootOrder =
+    rootCatsForSortOrder.reduce((m, c) => Math.max(m, c.sort_order), 0) + 1
+
+  const rowsById = new Map(navRows.map((r) => [r.id, r]))
+  const idsWithChildren = new Set<string>()
+  for (const r of navRows) {
+    if (r.parent_id) idsWithChildren.add(r.parent_id)
+  }
+
+  for (const row of navRows) {
+    if (idsWithChildren.has(row.id)) continue
+
+    const slug = slugFromCategoryMenuHref(row.href)
+    if (!slug || slug === 'hot') continue
+    if (slugToCat.has(slug)) continue
+    if (seenSlugs.has(slug)) continue
+
+    const label = (row.label || '').trim()
+
+    let parentIdDb: string | null = null
+    let inheritedSortBase: number | null = null
+
+    const leafPid = row.parent_id
+    if (leafPid) {
+      const parentRow = rowsById.get(leafPid)
+      if (parentRow) {
+        const pSlug = slugFromCategoryMenuHref(parentRow.href)
+        let pc: Category | undefined = pSlug ? slugToCat.get(pSlug) : undefined
+        if (!pc) {
+          pc = topLevelCandidates.find((c) =>
+            menuTitleMatchesCategoryName(parentRow.label, c.name),
+          )
+        }
+        if (pc && pc.slug !== 'hot') {
+          parentIdDb = pc.id
+          inheritedSortBase = pc.sort_order
+        }
+      }
+    }
+
+    const sortOrder =
+      inheritedSortBase != null
+        ? inheritedSortBase * 1000 + row.sort_order
+        : nextRootOrder++
+
+    planned.push({
+      name: label || slug,
+      slug,
+      parent_id: parentIdDb,
+      sort_order: sortOrder,
+      icon: row.icon_name?.trim() || 'Sparkles',
+      navigationMenuItemId: row.id,
+    })
+    seenSlugs.add(slug)
   }
 
   return planned

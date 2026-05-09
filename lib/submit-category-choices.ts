@@ -699,6 +699,43 @@ export function buildSubmitNavigationTier1List(
   return out
 }
 
+/**
+ * 管理端批量导入等：在菜单驱动选项之后追加「仅有 categories 行、当前侧栏菜单树未解析到」的分类，
+ * 避免仅在「菜单分类管理」新建分类、尚未在「菜单管理」挂载 `/category/{slug}` 时无法选择目标分类。
+ */
+export function appendOrphanCategoriesToSubmitTier1(
+  tier1: SubmitNavigationCategoryTier1[],
+  categories: Category[],
+): SubmitNavigationCategoryTier1[] {
+  const seen = new Set<string>()
+  for (const row of tier1) {
+    if (row.kind === 'menu_leaf') seen.add(row.categoryId)
+    else for (const ch of row.children) seen.add(ch.categoryId)
+  }
+  const orphans: Array<
+    Extract<SubmitNavigationCategoryTier1, { kind: 'menu_leaf' }>
+  > = []
+  for (const c of categories) {
+    if (c.slug === 'hot') continue
+    if (c.is_disabled === true) continue
+    if (seen.has(c.id)) continue
+    orphans.push({
+      kind: 'menu_leaf',
+      categoryId: c.id,
+      label: `${c.name}（菜单未挂载）`,
+    })
+  }
+  orphans.sort((a, b) => {
+    const ca = categories.find((x) => idsEqual(x.id, a.categoryId))
+    const cb = categories.find((x) => idsEqual(x.id, b.categoryId))
+    return (
+      (ca?.sort_order ?? 0) - (cb?.sort_order ?? 0) ||
+      (ca?.name ?? '').localeCompare(cb?.name ?? '', 'zh-CN')
+    )
+  })
+  return [...tier1, ...orphans]
+}
+
 /** 首页版块：与侧栏同一套菜单分组解析子分类（不依赖 categories.parent_id 与菜单严格一致） */
 export type HomeNavCategoryGroup = {
   rootCategory: Category
