@@ -34,6 +34,10 @@ function parseSceneFilter(scene: string): AdminTagSceneFilter | null {
 
 export async function adminSearchToolsForTaggingAction(input: {
   query: string
+  /** 页大小（taxonomy 挂载/移除每页最多 50） */
+  limit?: number
+  /** 偏移（taxonomy 挂载/移除分页；通用打标签应为 0） */
+  offset?: number
   /** 场景分类挂载工具：排除已挂上该场景词条的工具 */
   excludeListedInTagCategoryId?: string | null
   /** 角色分类挂载工具：排除已挂上该角色词条的工具 */
@@ -43,7 +47,11 @@ export async function adminSearchToolsForTaggingAction(input: {
   /** 角色移除挂载：仅列出至少挂载本品关联词条的工具 */
   onlyListedInRoleCategoryId?: string | null
 }): Promise<
-  | { ok: true; tools: { id: string; name: string; slug: string; status: string }[] }
+  | {
+      ok: true
+      tools: { id: string; name: string; slug: string; status: string }[]
+      total: number
+    }
   | { ok: false; error: string }
 > {
   const gate = await requireAdmin()
@@ -76,12 +84,14 @@ export async function adminSearchToolsForTaggingAction(input: {
     }
   }
 
-  const tools = await neonAdminSearchToolsForTagging({
+  const { tools, total } = await neonAdminSearchToolsForTagging({
     query: input.query ?? '',
+    limit: input.limit,
+    offset: input.offset,
     excludeListedInTaxonomy,
     onlyListedInTaxonomy,
   })
-  return { ok: true, tools }
+  return { ok: true, tools, total }
 }
 
 export async function adminSearchTagsForPickerAction(input: {

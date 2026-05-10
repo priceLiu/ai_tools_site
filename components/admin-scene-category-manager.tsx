@@ -32,6 +32,7 @@ import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { compareAdminTagRowByDisplayName } from '@/lib/tag-name-sort'
 import type { AdminTagRow, TagCategory } from '@/lib/types'
+import { ADMIN_TAXONOMY_LIST_SCROLL_CLASS } from '@/lib/admin-taxonomy-scroll'
 import { ChevronsUpDown, Trash2 } from 'lucide-react'
 
 function canonSceneCatKey(id: string): string {
@@ -128,6 +129,11 @@ function CategoryBlock({
             <span className="font-medium text-foreground tabular-nums">
               {listedTools}
             </span>
+            <span className="block pt-0.5 text-[11px] leading-snug">
+              「收录」为去重计数；关联标签里的「工具数」为各词条在全库{' '}
+              <code className="rounded bg-muted px-0.5 text-[10px]">tool_tags</code>{' '}
+              条数，不可相加对齐收录。
+            </span>
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -143,14 +149,26 @@ function CategoryBlock({
 
       <Tabs defaultValue="tags" className="mt-3 w-full gap-2">
         <TabsList className="h-auto min-h-9 w-full min-w-0 flex-wrap justify-start gap-1">
-          <TabsTrigger value="tags" className="px-2.5 text-[11px] sm:text-xs">
-            关联标签
+          <TabsTrigger
+            value="tags"
+            className="px-2.5 text-[11px] sm:text-xs"
+            title={`本场景标签库词条数（tags.tag_category_id）：${sortedIn.length}`}
+          >
+            关联标签 ({sortedIn.length})
           </TabsTrigger>
-          <TabsTrigger value="tools" className="px-2.5 text-[11px] sm:text-xs">
-            挂载工具
+          <TabsTrigger
+            value="tools"
+            className="px-2.5 text-[11px] sm:text-xs"
+            title={`已通过且至少挂载一条本场景启用词条的去重工具数（与顶部「首页同款收录工具」一致）：${listedTools}`}
+          >
+            挂载工具 ({listedTools})
           </TabsTrigger>
-          <TabsTrigger value="unmount" className="px-2.5 text-[11px] sm:text-xs">
-            移除挂载
+          <TabsTrigger
+            value="unmount"
+            className="px-2.5 text-[11px] sm:text-xs"
+            title={`同上：列表仅含此类工具，用于摘掉本场景词条：${listedTools}`}
+          >
+            移除挂载 ({listedTools})
           </TabsTrigger>
         </TabsList>
         <TabsContent value="tags" className="mt-3 focus-visible:outline-none">
@@ -203,7 +221,7 @@ function CategoryBlock({
               尚无标签挂载；可使用上方选择器迁入，或通过「新建标签」挂到本分类。
             </p>
           ) : (
-            <ul className="mt-3 max-h-[min(520px,55vh)] divide-y divide-border overflow-y-auto rounded-md border overscroll-contain">
+            <ul className={`mt-3 ${ADMIN_TAXONOMY_LIST_SCROLL_CLASS}`}>
               {sortedIn.map((t) => (
                 <li
                   key={t.id}

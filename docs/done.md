@@ -4,6 +4,21 @@
 
 ---
 
+## 2026-05-10
+
+### 场景 / 角色分类管理：列表高度、子 Tab 数字与计数说明
+
+**需求背景**：挂载 / 移除工具候选列表过矮；子 Tab 需展示数量；运营核对「词条 / 收录 / 各行工具数」关系。
+
+**实现内容**：
+1. [`lib/admin-taxonomy-scroll.ts`](./lib/admin-taxonomy-scroll.ts)：`ADMIN_TAXONOMY_LIST_SCROLL_CLASS`，与关联标签列表同高（`max-h-[min(520px,55vh)]`）。
+2. [`components/admin-taxonomy-add-tool-panel.tsx`](./components/admin-taxonomy-add-tool-panel.tsx)、[`components/admin-taxonomy-remove-tool-panel.tsx`](./components/admin-taxonomy-remove-tool-panel.tsx) 候选 `<ul>` 改用上述类。
+3. [`components/admin-scene-category-manager.tsx`](./components/admin-scene-category-manager.tsx)、[`components/admin-role-category-manager.tsx`](./components/admin-role-category-manager.tsx)：子 Tab `关联标签 (N)`、`挂载工具 / 移除挂载 (收录数)`；详情区补充「收录」与各行「工具数」口径说明。
+4. [`neonAdminSearchToolsForTagging`](./lib/neon/data.ts)：`COUNT(*) + LIMIT/OFFSET` 分页，返回 **`total`**；taxonomy **每页最多 50**，翻页再请求；[`adminSearchToolsForTaggingAction`](./app/admin/tools-tagging/actions.ts) 支持 **`limit` / `offset`**。
+5. 挂载/移除面板：**上一页 / 下一页**、跨页多选后批量提交；文案与 [`docs/tool-tag-taxonomy-counting.md`](./tool-tag-taxonomy-counting.md) 锚点表同步。
+
+---
+
 ## 2026-05-09
 
 ### 管理后台批量导入：菜单 / 场景 / 角色可选组合

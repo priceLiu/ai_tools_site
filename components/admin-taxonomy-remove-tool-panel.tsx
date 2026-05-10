@@ -11,6 +11,10 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
+import {
+  ADMIN_TAXONOMY_LIST_SCROLL_CLASS,
+  ADMIN_TAXONOMY_TOOL_PAGE_SIZE,
+} from '@/lib/admin-taxonomy-scroll'
 
 type ToolHit = { id: string; name: string; slug: string }
 
@@ -37,6 +41,8 @@ export function AdminTaxonomyRemoveToolPanel({
     () => new Map(),
   )
   const [searching, setSearching] = useState(false)
+  const [page, setPage] = useState(0)
+  const [total, setTotal] = useState(0)
 
   const selectedOrdered = useMemo(
     () => [...selectedById.values()],
@@ -52,6 +58,19 @@ export function AdminTaxonomyRemoveToolPanel({
   const searchSeq = useRef(0)
 
   useEffect(() => {
+    setPage(0)
+  }, [q, variant, taxonomyId])
+
+  useEffect(() => {
+    if (total <= 0) return
+    const maxPage = Math.max(
+      0,
+      Math.ceil(total / ADMIN_TAXONOMY_TOOL_PAGE_SIZE) - 1,
+    )
+    if (page > maxPage) setPage(maxPage)
+  }, [total, page])
+
+  useEffect(() => {
     const seq = ++searchSeq.current
     const timer = setTimeout(() => {
       ;(async () => {
@@ -59,6 +78,8 @@ export function AdminTaxonomyRemoveToolPanel({
         try {
           const r = await adminSearchToolsForTaggingAction({
             query: q,
+            limit: ADMIN_TAXONOMY_TOOL_PAGE_SIZE,
+            offset: page * ADMIN_TAXONOMY_TOOL_PAGE_SIZE,
             onlyListedInTagCategoryId:
               variant === 'scene' ? taxonomyId : undefined,
             onlyListedInRoleCategoryId:
@@ -68,8 +89,10 @@ export function AdminTaxonomyRemoveToolPanel({
           if (!r.ok) {
             toast.error(r.error)
             setHits([])
+            setTotal(0)
             return
           }
+          setTotal(r.total)
           setHits(r.tools.map((t) => ({ id: t.id, name: t.name, slug: t.slug })))
         } finally {
           if (searchSeq.current === seq) setSearching(false)
@@ -78,7 +101,9 @@ export function AdminTaxonomyRemoveToolPanel({
     }, SEARCH_DEBOUNCE_MS)
 
     return () => clearTimeout(timer)
-  }, [q, variant, taxonomyId])
+  }, [q, variant, taxonomyId, page])
+
+  const totalPages = Math.max(1, Math.ceil(total / ADMIN_TAXONOMY_TOOL_PAGE_SIZE))
 
   const toggleMulti = (h: ToolHit) => {
     setSelectedById((prev) => {
@@ -174,6 +199,11 @@ export function AdminTaxonomyRemoveToolPanel({
         。
       </p>
 
+      <p className="text-[11px] leading-snug text-muted-foreground">
+        下列列表按更新时间排序，支持<strong className="text-foreground">分页翻页</strong>
+        遍历全部「已挂载且可移除」工具（与顶部收录计数同源）；亦可用关键词筛选。多选可跨页累积后批量移除。
+      </p>
+
       <div className="flex flex-wrap items-end gap-2">
         <div className="min-w-[min(100%,240px)] flex-1 space-y-1">
           <Label htmlFor={`tax-rm-q-${taxonomyId}`} className="text-xs">
@@ -200,7 +230,7 @@ export function AdminTaxonomyRemoveToolPanel({
         </div>
       </div>
 
-      {hits.length > 0 ? (
+      {hits.length > 0 || total > 0 || searching ? (
         <div className="space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Label className="text-xs text-muted-foreground">候选工具</Label>
@@ -248,7 +278,7 @@ export function AdminTaxonomyRemoveToolPanel({
                     disabled={submitPending || hits.length === 0}
                     onClick={() => toggleSelectAllHits()}
                   >
-                    {allHitsSelected ? '取消全选' : '全选当前列表'}
+                    {allHitsSelected ? '取消全选' : '全选当前页'}
                   </Button>
                   <Button
                     type="button"
@@ -265,57 +295,106 @@ export function AdminTaxonomyRemoveToolPanel({
             </div>
           </div>
 
-          <ul className="max-h-36 divide-y overflow-y-auto rounded-md border">
-            {hits.map((h) => {
-              const checked = selectedById.has(h.id)
-              const rowId = `tax-rm-hit-${taxonomyId}-${h.id}`
-              if (selectionMode === 'single') {
+          {hits.length > 0 ? (
+            <ul className={ADMIN_TAXONOMY_LIST_SCROLL_CLASS}>
+              {hits.map((h) => {
+                const checked = selectedById.has(h.id)
+                const rowId = `tax-rm-hit-${taxonomyId}-${h.id}`
+                if (selectionMode === 'single') {
+                  return (
+                    <li key={h.id}>
+                      <button
+                        type="button"
+                        disabled={submitPending}
+                        className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-accent/60 ${
+                          checked ? 'bg-accent/40' : ''
+                        }`}
+                        onClick={() => selectSingle(h)}
+                      >
+                        <span className="font-medium">{h.name}</span>
+                        <span className="truncate font-mono text-[11px] text-muted-foreground">
+                          {h.slug}
+                        </span>
+                      </button>
+                    </li>
+                  )
+                }
                 return (
                   <li key={h.id}>
-                    <button
-                      type="button"
-                      disabled={submitPending}
-                      className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-accent/60 ${
-                        checked ? 'bg-accent/40' : ''
+                    <div
+                      className={`flex items-center gap-2 px-2 py-1.5 hover:bg-accent/40 ${
+                        checked ? 'bg-accent/25' : ''
                       }`}
-                      onClick={() => selectSingle(h)}
                     >
-                      <span className="font-medium">{h.name}</span>
-                      <span className="truncate font-mono text-[11px] text-muted-foreground">
-                        {h.slug}
-                      </span>
-                    </button>
+                      <Checkbox
+                        id={rowId}
+                        checked={checked}
+                        disabled={submitPending}
+                        onCheckedChange={() => toggleMulti(h)}
+                      />
+                      <button
+                        type="button"
+                        className="flex min-w-0 flex-1 cursor-pointer items-center justify-between gap-2 py-0.5 text-left text-sm leading-none"
+                        onClick={() => toggleMulti(h)}
+                      >
+                        <span className="font-medium">{h.name}</span>
+                        <span className="truncate font-mono text-[11px] text-muted-foreground">
+                          {h.slug}
+                        </span>
+                      </button>
+                    </div>
                   </li>
                 )
-              }
-              return (
-                <li key={h.id}>
-                  <div
-                    className={`flex items-center gap-2 px-2 py-1.5 hover:bg-accent/40 ${
-                      checked ? 'bg-accent/25' : ''
-                    }`}
-                  >
-                    <Checkbox
-                      id={rowId}
-                      checked={checked}
-                      disabled={submitPending}
-                      onCheckedChange={() => toggleMulti(h)}
-                    />
-                    <button
-                      type="button"
-                      className="flex min-w-0 flex-1 cursor-pointer items-center justify-between gap-2 py-0.5 text-left text-sm leading-none"
-                      onClick={() => toggleMulti(h)}
-                    >
-                      <span className="font-medium">{h.name}</span>
-                      <span className="truncate font-mono text-[11px] text-muted-foreground">
-                        {h.slug}
-                      </span>
-                    </button>
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
+              })}
+            </ul>
+          ) : !searching ? (
+            <p className="rounded-md border border-dashed border-border/70 px-3 py-6 text-center text-xs text-muted-foreground">
+              {total > 0
+                ? '本页暂无行，请使用上一页/下一页或调整关键词。'
+                : '暂无数据。'}
+            </p>
+          ) : (
+            <div className="flex justify-center py-8">
+              <Spinner className="h-6 w-6 text-muted-foreground" />
+            </div>
+          )}
+
+          {!searching && total > 0 ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-2">
+              <span className="text-[11px] tabular-nums text-muted-foreground">
+                共 {total} 条
+                {total > ADMIN_TAXONOMY_TOOL_PAGE_SIZE
+                  ? ` · 第 ${page + 1} / ${totalPages} 页`
+                  : null}
+              </span>
+              <div className="flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-2 text-[11px]"
+                  disabled={submitPending || searching || page <= 0}
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                >
+                  上一页
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-2 text-[11px]"
+                  disabled={
+                    submitPending ||
+                    searching ||
+                    (page + 1) * ADMIN_TAXONOMY_TOOL_PAGE_SIZE >= total
+                  }
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  下一页
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : !searching ? (
         <p className="text-xs text-muted-foreground">
@@ -349,7 +428,7 @@ export function AdminTaxonomyRemoveToolPanel({
               <span className="font-medium text-foreground">
                 {selectedNotInHits.length}
               </span>{' '}
-              个不在当前搜索结果里，仍会一并处理；修改关键词不会取消已选。
+              个不在当前页列表里，仍会一并处理；翻页或改关键词不会取消已选。
             </p>
           ) : null}
         </div>

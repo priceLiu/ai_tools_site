@@ -183,7 +183,7 @@ flowchart TB
 | 角色收录工具 bulk 计数 | [`neonCountPublicListedToolsByRoleCategoriesBulk`](../lib/neon/data.ts) |
 | 挂载合并逻辑 | [`neonAdminAppendListedToolTags`](../lib/neon/data.ts) |
 | 场景剥离 / 角色剥离 | [`neonAdminStripSceneTagsFromListedTool`](../lib/neon/data.ts)、[`neonAdminStripRoleTagsFromListedTool`](../lib/neon/data.ts) |
-| 找人搜索（exclude / onlyListed） | [`neonAdminSearchToolsForTagging`](../lib/neon/data.ts) |
+| 找人搜索（exclude / onlyListed） | [`neonAdminSearchToolsForTagging`](../lib/neon/data.ts)；通用选人单次默认 30、封顶 50。**场景/角色挂载·移除** 固定 **每页最多 50**，带 **`offset`**；每次翻页单独查库；并行 `COUNT(*)` 取 **`total`**。 |
 | 详情页场景 chips | [`neonListPublicSceneSummariesForTool`](../lib/neon/data.ts) |
 
 ---

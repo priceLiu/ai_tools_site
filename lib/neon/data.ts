@@ -2494,10 +2494,12 @@ export async function neonAdminSearchTagsForPicker(params: {
   return (rows as Record<string, unknown>[]).map(mapAdminTagPickerRow)
 }
 
-/** 管理后台：按名称/slug 搜索工具（仅 `status = approved` 且未隐藏），用于打标签选人。 */
+/** 管理后台：按名称/slug 搜索工具（仅 `status = approved` 且未隐藏），用于打标签选人。返回分页信息与总数。 */
 export async function neonAdminSearchToolsForTagging(params: {
   query: string
   limit?: number
+  /** taxonomy「挂载 / 移除挂载」分页偏移；通用打标签不传或为 0 */
+  offset?: number
   /**
    * 挂载工具选人：排除「已挂上本分类词条」的工具（NOT EXISTS 不计 tag 是否禁用，含失效词条）。
    * 场景：`tags.tag_category_id = 该场景`
@@ -2512,9 +2514,20 @@ export async function neonAdminSearchToolsForTagging(params: {
   onlyListedInTaxonomy?:
     | { kind: 'scene'; tagCategoryId: string }
     | { kind: 'role'; roleCategoryId: string }
-}): Promise<{ id: string; name: string; slug: string; status: string }[]> {
+}): Promise<{
+  tools: { id: string; name: string; slug: string; status: string }[]
+  total: number
+}> {
   const sql = getNeonSql()
-  const lim = Math.min(Math.max(params.limit ?? 30, 1), 50)
+  const taxonomyPick =
+    params.onlyListedInTaxonomy != null ||
+    params.excludeListedInTaxonomy != null
+  const defaultLim = taxonomyPick ? 50 : 30
+  const maxLim = 50
+  const lim = Math.min(Math.max(params.limit ?? defaultLim, 1), maxLim)
+  const off = taxonomyPick
+    ? Math.max(0, Math.floor(Number(params.offset ?? 0)))
+    : 0
   const q = params.query.normalize('NFKC').trim()
   const only = params.onlyListedInTaxonomy
   const ex = params.excludeListedInTaxonomy
@@ -2527,49 +2540,37 @@ export async function neonAdminSearchToolsForTagging(params: {
       status: String(r.status ?? ''),
     }))
 
+  async function countedPair(
+    countRows: Promise<unknown[]>,
+    pageRows: Promise<unknown[]>,
+  ): Promise<{
+    tools: ReturnType<typeof mapRows>
+    total: number
+  }> {
+    const [nRows, rows] = await Promise.all([countRows, pageRows])
+    const total = Number((nRows[0] as { n?: number } | undefined)?.n ?? 0)
+    return { tools: mapRows(rows as Record<string, unknown>[]), total }
+  }
+
   if (only) {
     if (only.kind === 'scene') {
       const cid = String(only.tagCategoryId).trim().toLowerCase()
-      const rows =
-        q.length === 0
-          ? await sql`
-              SELECT t.id::text AS id, t.name, t.slug, t.status::text AS status
-              FROM tools t
-              WHERE t.status = 'approved'
-                AND COALESCE(t.is_disabled, false) = false
-                AND EXISTS (
-                  SELECT 1
-                  FROM tool_tags tt
-                  INNER JOIN tags tg ON tg.id = tt.tag_id
-                    AND tg.tag_category_id = ${cid}
-                  WHERE tt.tool_id = t.id
-                )
-              ORDER BY t.updated_at DESC NULLS LAST
-              LIMIT ${lim}
-            `
-          : await sql`
-              SELECT t.id::text AS id, t.name, t.slug, t.status::text AS status
-              FROM tools t
-              WHERE t.status = 'approved'
-                AND COALESCE(t.is_disabled, false) = false
-                AND (t.name ILIKE ${'%' + q + '%'} OR t.slug ILIKE ${'%' + q + '%'})
-                AND EXISTS (
-                  SELECT 1
-                  FROM tool_tags tt
-                  INNER JOIN tags tg ON tg.id = tt.tag_id
-                    AND tg.tag_category_id = ${cid}
-                  WHERE tt.tool_id = t.id
-                )
-              ORDER BY t.updated_at DESC NULLS LAST
-              LIMIT ${lim}
-            `
-      return mapRows(rows as Record<string, unknown>[])
-    }
-
-    const rid = String(only.roleCategoryId).trim().toLowerCase()
-    const rows =
-      q.length === 0
-        ? await sql`
+      if (q.length === 0) {
+        return countedPair(
+          sql`
+            SELECT COUNT(*)::int AS n
+            FROM tools t
+            WHERE t.status = 'approved'
+              AND COALESCE(t.is_disabled, false) = false
+              AND EXISTS (
+                SELECT 1
+                FROM tool_tags tt
+                INNER JOIN tags tg ON tg.id = tt.tag_id
+                  AND tg.tag_category_id = ${cid}
+                WHERE tt.tool_id = t.id
+              )
+          `,
+          sql`
             SELECT t.id::text AS id, t.name, t.slug, t.status::text AS status
             FROM tools t
             WHERE t.status = 'approved'
@@ -2578,131 +2579,295 @@ export async function neonAdminSearchToolsForTagging(params: {
                 SELECT 1
                 FROM tool_tags tt
                 INNER JOIN tags tg ON tg.id = tt.tag_id
-                INNER JOIN role_category_tags rct ON rct.tag_id = tg.id
-                  AND rct.role_category_id = ${rid}
-                WHERE tt.tool_id = t.id
-              )
-            ORDER BY t.updated_at DESC NULLS LAST
-            LIMIT ${lim}
-          `
-        : await sql`
-            SELECT t.id::text AS id, t.name, t.slug, t.status::text AS status
-            FROM tools t
-            WHERE t.status = 'approved'
-              AND COALESCE(t.is_disabled, false) = false
-              AND (t.name ILIKE ${'%' + q + '%'} OR t.slug ILIKE ${'%' + q + '%'})
-              AND EXISTS (
-                SELECT 1
-                FROM tool_tags tt
-                INNER JOIN tags tg ON tg.id = tt.tag_id
-                INNER JOIN role_category_tags rct ON rct.tag_id = tg.id
-                  AND rct.role_category_id = ${rid}
-                WHERE tt.tool_id = t.id
-              )
-            ORDER BY t.updated_at DESC NULLS LAST
-            LIMIT ${lim}
-          `
-    return mapRows(rows as Record<string, unknown>[])
-  }
-
-  if (!ex) {
-    const rows =
-      q.length === 0
-        ? await sql`
-            SELECT t.id::text AS id, t.name, t.slug, t.status::text AS status
-            FROM tools t
-            WHERE t.status = 'approved'
-              AND COALESCE(t.is_disabled, false) = false
-            ORDER BY t.updated_at DESC NULLS LAST
-            LIMIT ${lim}
-          `
-        : await sql`
-            SELECT t.id::text AS id, t.name, t.slug, t.status::text AS status
-            FROM tools t
-            WHERE t.status = 'approved'
-              AND COALESCE(t.is_disabled, false) = false
-              AND (t.name ILIKE ${'%' + q + '%'} OR t.slug ILIKE ${'%' + q + '%'})
-            ORDER BY t.updated_at DESC NULLS LAST
-            LIMIT ${lim}
-          `
-    return mapRows(rows as Record<string, unknown>[])
-  }
-
-  if (ex.kind === 'scene') {
-    const cid = String(ex.tagCategoryId).trim().toLowerCase()
-    const rows =
-      q.length === 0
-        ? await sql`
-            SELECT t.id::text AS id, t.name, t.slug, t.status::text AS status
-            FROM tools t
-            WHERE t.status = 'approved'
-              AND COALESCE(t.is_disabled, false) = false
-              AND NOT EXISTS (
-                SELECT 1
-                FROM tool_tags tt
-                INNER JOIN tags tg ON tg.id = tt.tag_id
                   AND tg.tag_category_id = ${cid}
                 WHERE tt.tool_id = t.id
               )
             ORDER BY t.updated_at DESC NULLS LAST
-            LIMIT ${lim}
-          `
-        : await sql`
-            SELECT t.id::text AS id, t.name, t.slug, t.status::text AS status
-            FROM tools t
-            WHERE t.status = 'approved'
-              AND COALESCE(t.is_disabled, false) = false
-              AND (t.name ILIKE ${'%' + q + '%'} OR t.slug ILIKE ${'%' + q + '%'})
-              AND NOT EXISTS (
-                SELECT 1
-                FROM tool_tags tt
-                INNER JOIN tags tg ON tg.id = tt.tag_id
-                  AND tg.tag_category_id = ${cid}
-                WHERE tt.tool_id = t.id
-              )
-            ORDER BY t.updated_at DESC NULLS LAST
-            LIMIT ${lim}
-          `
-    return mapRows(rows as Record<string, unknown>[])
-  }
-
-  const rid = String(ex.roleCategoryId).trim().toLowerCase()
-  const rows =
-    q.length === 0
-      ? await sql`
-          SELECT t.id::text AS id, t.name, t.slug, t.status::text AS status
+            LIMIT ${lim} OFFSET ${off}
+          `,
+        )
+      }
+      return countedPair(
+        sql`
+          SELECT COUNT(*)::int AS n
           FROM tools t
           WHERE t.status = 'approved'
             AND COALESCE(t.is_disabled, false) = false
-            AND NOT EXISTS (
+            AND (t.name ILIKE ${'%' + q + '%'} OR t.slug ILIKE ${'%' + q + '%'})
+            AND EXISTS (
               SELECT 1
               FROM tool_tags tt
               INNER JOIN tags tg ON tg.id = tt.tag_id
-              INNER JOIN role_category_tags rct ON rct.tag_id = tg.id
+                AND tg.tag_category_id = ${cid}
               WHERE tt.tool_id = t.id
-                AND rct.role_category_id = ${rid}
             )
-          ORDER BY t.updated_at DESC NULLS LAST
-          LIMIT ${lim}
-        `
-      : await sql`
+        `,
+        sql`
           SELECT t.id::text AS id, t.name, t.slug, t.status::text AS status
           FROM tools t
           WHERE t.status = 'approved'
             AND COALESCE(t.is_disabled, false) = false
             AND (t.name ILIKE ${'%' + q + '%'} OR t.slug ILIKE ${'%' + q + '%'})
-            AND NOT EXISTS (
+            AND EXISTS (
+              SELECT 1
+              FROM tool_tags tt
+              INNER JOIN tags tg ON tg.id = tt.tag_id
+                AND tg.tag_category_id = ${cid}
+              WHERE tt.tool_id = t.id
+            )
+          ORDER BY t.updated_at DESC NULLS LAST
+          LIMIT ${lim} OFFSET ${off}
+        `,
+      )
+    }
+
+    const rid = String(only.roleCategoryId).trim().toLowerCase()
+    if (q.length === 0) {
+      return countedPair(
+        sql`
+          SELECT COUNT(*)::int AS n
+          FROM tools t
+          WHERE t.status = 'approved'
+            AND COALESCE(t.is_disabled, false) = false
+            AND EXISTS (
               SELECT 1
               FROM tool_tags tt
               INNER JOIN tags tg ON tg.id = tt.tag_id
               INNER JOIN role_category_tags rct ON rct.tag_id = tg.id
-              WHERE tt.tool_id = t.id
                 AND rct.role_category_id = ${rid}
+              WHERE tt.tool_id = t.id
+            )
+        `,
+        sql`
+          SELECT t.id::text AS id, t.name, t.slug, t.status::text AS status
+          FROM tools t
+          WHERE t.status = 'approved'
+            AND COALESCE(t.is_disabled, false) = false
+            AND EXISTS (
+              SELECT 1
+              FROM tool_tags tt
+              INNER JOIN tags tg ON tg.id = tt.tag_id
+              INNER JOIN role_category_tags rct ON rct.tag_id = tg.id
+                AND rct.role_category_id = ${rid}
+              WHERE tt.tool_id = t.id
             )
           ORDER BY t.updated_at DESC NULLS LAST
-          LIMIT ${lim}
-        `
-  return mapRows(rows as Record<string, unknown>[])
+          LIMIT ${lim} OFFSET ${off}
+        `,
+      )
+    }
+    return countedPair(
+      sql`
+        SELECT COUNT(*)::int AS n
+        FROM tools t
+        WHERE t.status = 'approved'
+          AND COALESCE(t.is_disabled, false) = false
+          AND (t.name ILIKE ${'%' + q + '%'} OR t.slug ILIKE ${'%' + q + '%'})
+          AND EXISTS (
+            SELECT 1
+            FROM tool_tags tt
+            INNER JOIN tags tg ON tg.id = tt.tag_id
+            INNER JOIN role_category_tags rct ON rct.tag_id = tg.id
+              AND rct.role_category_id = ${rid}
+            WHERE tt.tool_id = t.id
+          )
+      `,
+      sql`
+        SELECT t.id::text AS id, t.name, t.slug, t.status::text AS status
+        FROM tools t
+        WHERE t.status = 'approved'
+          AND COALESCE(t.is_disabled, false) = false
+          AND (t.name ILIKE ${'%' + q + '%'} OR t.slug ILIKE ${'%' + q + '%'})
+          AND EXISTS (
+            SELECT 1
+            FROM tool_tags tt
+            INNER JOIN tags tg ON tg.id = tt.tag_id
+            INNER JOIN role_category_tags rct ON rct.tag_id = tg.id
+              AND rct.role_category_id = ${rid}
+            WHERE tt.tool_id = t.id
+          )
+        ORDER BY t.updated_at DESC NULLS LAST
+        LIMIT ${lim} OFFSET ${off}
+      `,
+    )
+  }
+
+  if (!ex) {
+    if (q.length === 0) {
+      return countedPair(
+        sql`
+          SELECT COUNT(*)::int AS n
+          FROM tools t
+          WHERE t.status = 'approved'
+            AND COALESCE(t.is_disabled, false) = false
+        `,
+        sql`
+          SELECT t.id::text AS id, t.name, t.slug, t.status::text AS status
+          FROM tools t
+          WHERE t.status = 'approved'
+            AND COALESCE(t.is_disabled, false) = false
+          ORDER BY t.updated_at DESC NULLS LAST
+          LIMIT ${lim} OFFSET ${off}
+        `,
+      )
+    }
+    return countedPair(
+      sql`
+        SELECT COUNT(*)::int AS n
+        FROM tools t
+        WHERE t.status = 'approved'
+          AND COALESCE(t.is_disabled, false) = false
+          AND (t.name ILIKE ${'%' + q + '%'} OR t.slug ILIKE ${'%' + q + '%'})
+      `,
+      sql`
+        SELECT t.id::text AS id, t.name, t.slug, t.status::text AS status
+        FROM tools t
+        WHERE t.status = 'approved'
+          AND COALESCE(t.is_disabled, false) = false
+          AND (t.name ILIKE ${'%' + q + '%'} OR t.slug ILIKE ${'%' + q + '%'})
+        ORDER BY t.updated_at DESC NULLS LAST
+        LIMIT ${lim} OFFSET ${off}
+      `,
+    )
+  }
+
+  if (ex.kind === 'scene') {
+    const cid = String(ex.tagCategoryId).trim().toLowerCase()
+    if (q.length === 0) {
+      return countedPair(
+        sql`
+          SELECT COUNT(*)::int AS n
+          FROM tools t
+          WHERE t.status = 'approved'
+            AND COALESCE(t.is_disabled, false) = false
+            AND NOT EXISTS (
+              SELECT 1
+              FROM tool_tags tt
+              INNER JOIN tags tg ON tg.id = tt.tag_id
+                AND tg.tag_category_id = ${cid}
+              WHERE tt.tool_id = t.id
+            )
+        `,
+        sql`
+          SELECT t.id::text AS id, t.name, t.slug, t.status::text AS status
+          FROM tools t
+          WHERE t.status = 'approved'
+            AND COALESCE(t.is_disabled, false) = false
+            AND NOT EXISTS (
+              SELECT 1
+              FROM tool_tags tt
+              INNER JOIN tags tg ON tg.id = tt.tag_id
+                AND tg.tag_category_id = ${cid}
+              WHERE tt.tool_id = t.id
+            )
+          ORDER BY t.updated_at DESC NULLS LAST
+          LIMIT ${lim} OFFSET ${off}
+        `,
+      )
+    }
+    return countedPair(
+      sql`
+        SELECT COUNT(*)::int AS n
+        FROM tools t
+        WHERE t.status = 'approved'
+          AND COALESCE(t.is_disabled, false) = false
+          AND (t.name ILIKE ${'%' + q + '%'} OR t.slug ILIKE ${'%' + q + '%'})
+          AND NOT EXISTS (
+            SELECT 1
+            FROM tool_tags tt
+            INNER JOIN tags tg ON tg.id = tt.tag_id
+              AND tg.tag_category_id = ${cid}
+            WHERE tt.tool_id = t.id
+          )
+      `,
+      sql`
+        SELECT t.id::text AS id, t.name, t.slug, t.status::text AS status
+        FROM tools t
+        WHERE t.status = 'approved'
+          AND COALESCE(t.is_disabled, false) = false
+          AND (t.name ILIKE ${'%' + q + '%'} OR t.slug ILIKE ${'%' + q + '%'})
+          AND NOT EXISTS (
+            SELECT 1
+            FROM tool_tags tt
+            INNER JOIN tags tg ON tg.id = tt.tag_id
+              AND tg.tag_category_id = ${cid}
+            WHERE tt.tool_id = t.id
+          )
+        ORDER BY t.updated_at DESC NULLS LAST
+        LIMIT ${lim} OFFSET ${off}
+      `,
+    )
+  }
+
+  const rid = String(ex.roleCategoryId).trim().toLowerCase()
+  if (q.length === 0) {
+    return countedPair(
+      sql`
+        SELECT COUNT(*)::int AS n
+        FROM tools t
+        WHERE t.status = 'approved'
+          AND COALESCE(t.is_disabled, false) = false
+          AND NOT EXISTS (
+            SELECT 1
+            FROM tool_tags tt
+            INNER JOIN tags tg ON tg.id = tt.tag_id
+            INNER JOIN role_category_tags rct ON rct.tag_id = tg.id
+            WHERE tt.tool_id = t.id
+              AND rct.role_category_id = ${rid}
+          )
+      `,
+      sql`
+        SELECT t.id::text AS id, t.name, t.slug, t.status::text AS status
+        FROM tools t
+        WHERE t.status = 'approved'
+          AND COALESCE(t.is_disabled, false) = false
+          AND NOT EXISTS (
+            SELECT 1
+            FROM tool_tags tt
+            INNER JOIN tags tg ON tg.id = tt.tag_id
+            INNER JOIN role_category_tags rct ON rct.tag_id = tg.id
+            WHERE tt.tool_id = t.id
+              AND rct.role_category_id = ${rid}
+          )
+        ORDER BY t.updated_at DESC NULLS LAST
+        LIMIT ${lim} OFFSET ${off}
+      `,
+    )
+  }
+  return countedPair(
+    sql`
+      SELECT COUNT(*)::int AS n
+      FROM tools t
+      WHERE t.status = 'approved'
+        AND COALESCE(t.is_disabled, false) = false
+        AND (t.name ILIKE ${'%' + q + '%'} OR t.slug ILIKE ${'%' + q + '%'})
+        AND NOT EXISTS (
+          SELECT 1
+          FROM tool_tags tt
+          INNER JOIN tags tg ON tg.id = tt.tag_id
+          INNER JOIN role_category_tags rct ON rct.tag_id = tg.id
+          WHERE tt.tool_id = t.id
+            AND rct.role_category_id = ${rid}
+        )
+    `,
+    sql`
+      SELECT t.id::text AS id, t.name, t.slug, t.status::text AS status
+      FROM tools t
+      WHERE t.status = 'approved'
+        AND COALESCE(t.is_disabled, false) = false
+        AND (t.name ILIKE ${'%' + q + '%'} OR t.slug ILIKE ${'%' + q + '%'})
+        AND NOT EXISTS (
+          SELECT 1
+          FROM tool_tags tt
+          INNER JOIN tags tg ON tg.id = tt.tag_id
+          INNER JOIN role_category_tags rct ON rct.tag_id = tg.id
+          WHERE tt.tool_id = t.id
+            AND rct.role_category_id = ${rid}
+        )
+      ORDER BY t.updated_at DESC NULLS LAST
+      LIMIT ${lim} OFFSET ${off}
+    `,
+  )
 }
 
 /** 个人中心「我的关注」搜索可加关注的工具（已通过且未隐藏；返回完整 `Tool` 供卡片/hover） */
