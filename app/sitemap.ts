@@ -1,6 +1,6 @@
 import type { MetadataRoute } from 'next'
 import * as neon from '@/lib/neon/data'
-import { getSiteUrl } from '@/lib/site-url'
+import { getSiteUrlForSeo } from '@/lib/site-url'
 
 /**
  * Sitemap：每小时构建一次（与 Next ISR 配合，Vercel 上请求会命中已生成的版本）。
@@ -20,7 +20,7 @@ import { getSiteUrl } from '@/lib/site-url'
 export const revalidate = 3600
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const base = getSiteUrl()
+  const base = await getSiteUrlForSeo()
   const now = new Date()
 
   const staticEntries: MetadataRoute.Sitemap = [

@@ -1,8 +1,8 @@
 import type { MetadataRoute } from 'next'
-import { getSiteUrl } from '@/lib/site-url'
+import { getSiteUrlForSeo } from '@/lib/site-url'
 
-/** 与 `app/sitemap.ts` 一致：按运行时 `SITE_URL` 刷新，避免构建期未注入域名时 robots 永久指向占位域名。 */
-export const revalidate = 3600
+/** 每次请求按 `SITE_URL` 或当前 Host 生成，禁止构建期静态固化为占位域名。 */
+export const dynamic = 'force-dynamic'
 
 /**
  * 公开收录：默认允许整站抓取；仅通过 disallow 排除不需收录的路径。
@@ -16,8 +16,8 @@ export const revalidate = 3600
  *   - 站内搜索：/search 容易被 SEO spam 利用
  *   - 诊断：/diag /echo
  */
-export default function robots(): MetadataRoute.Robots {
-  const base = getSiteUrl()
+export default async function robots(): Promise<MetadataRoute.Robots> {
+  const base = await getSiteUrlForSeo()
 
   return {
     rules: [
