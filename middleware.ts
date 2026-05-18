@@ -5,8 +5,8 @@ import { type NextRequest } from 'next/server'
 export async function middleware(request: NextRequest) {
   /**
    * HTTP→HTTPS 强制跳转交给前置网关（CloudBase / CDN / Nginx）。
-   * 应用层不做该跳转，避免 CloudBase 把 `Host` 透传成容器监听地址 `0.0.0.0:3000`
-   * 时，我们错把用户重定向到 `https://0.0.0.0:3000` 导致 `ERR_CONNECTION_CLOSED`。
+   * 应用层不做协议跳转；鉴权等中间件内的 Location 使用 `getPublicRequestOrigin`，在
+   * `Host` 误为 `0.0.0.0:3000` 时改依 `X-Forwarded-Host` / `SITE_URL`，避免跳到不可达地址。
    */
   const res = await runAuthMiddleware(request)
   /**

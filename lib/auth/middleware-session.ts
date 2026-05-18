@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { getPublicRequestOrigin } from '@/lib/request-public-origin'
 import { SESSION_COOKIE_NAME } from './constants'
 import { verifySessionToken } from './jwt'
 
@@ -21,7 +22,10 @@ export function maybeRedirectToolSlug(request: NextRequest): NextResponse | null
           }
         })
         .join('/')
-      const url = request.nextUrl.clone()
+      const url = new URL(
+        `${request.nextUrl.pathname}${request.nextUrl.search}`,
+        getPublicRequestOrigin(request),
+      )
       url.pathname = `/tool/${encodeURIComponent(slug)}`
       return NextResponse.redirect(url, 308)
     }
@@ -48,8 +52,7 @@ export async function runAuthMiddleware(
     user?.disabled &&
     !request.nextUrl.pathname.startsWith('/auth/account-disabled')
   ) {
-    const disabledUrl = request.nextUrl.clone()
-    disabledUrl.pathname = '/auth/account-disabled'
+    const disabledUrl = new URL('/auth/account-disabled', getPublicRequestOrigin(request))
     const redirectResponse = NextResponse.redirect(disabledUrl)
     redirectResponse.cookies.delete(SESSION_COOKIE_NAME)
     return redirectResponse
@@ -59,8 +62,7 @@ export async function runAuthMiddleware(
     request.nextUrl.pathname.startsWith('/protected') &&
     !user
   ) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/auth/login'
+    const url = new URL('/auth/login', getPublicRequestOrigin(request))
     return NextResponse.redirect(url)
   }
 
