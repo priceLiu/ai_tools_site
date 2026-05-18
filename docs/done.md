@@ -17,6 +17,7 @@
 4. [`docs/deployment-production-checklist.md`](./deployment-production-checklist.md)：第三节扩充 CloudBase / CI / **`docker build --build-arg`** 说明。
 5. [`docs/release-seo-build-footer.md`](./release-seo-build-footer.md)：发布检查清单与构建示例。
 6. **自动构建**：[`docs/ci-auto-build-database-url.md`](./ci-auto-build-database-url.md)；[`scripts/docker-build-ci.sh`](../scripts/docker-build-ci.sh)；[`.github/workflows/docker-build.yml`](../.github/workflows/docker-build.yml)；[`package.json`](../package.json) 脚本 **`pnpm run docker:build:ci`**。
+7. **Host=0.0.0.0 跳转修复**：[`lib/middleware-https-redirect.ts`](../lib/middleware-https-redirect.ts) 在 HTTP→HTTPS 前用 **`X-Forwarded-Host`** 纠正目标，避免 `308` 到 `https://0.0.0.0`；部署清单新增第五节故障表。
 
 ---
 
