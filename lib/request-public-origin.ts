@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server'
 import { getSiteUrl } from '@/lib/site-url'
 
 /** 监听占位 Host；浏览器无法访问，不能做 Location / cookie Domain。 */
-function isBrokenRedirectHostname(hostname: string): boolean {
+export function isBrokenRedirectHostname(hostname: string): boolean {
   return hostname.toLowerCase() === '0.0.0.0'
 }
 
