@@ -1,17 +1,13 @@
 import { deployTargetHeaders } from '@/lib/deploy-target'
 import { runAuthMiddleware } from '@/lib/auth/middleware-session'
-import { maybeHttpsRedirect } from '@/lib/middleware-https-redirect'
 import { type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
-  const httpsRedirect = maybeHttpsRedirect(request)
-  if (httpsRedirect) {
-    for (const [k, v] of Object.entries(deployTargetHeaders())) {
-      httpsRedirect.headers.set(k, v)
-    }
-    return httpsRedirect
-  }
-
+  /**
+   * HTTP→HTTPS 强制跳转交给前置网关（CloudBase / CDN / Nginx）。
+   * 应用层不做该跳转，避免 CloudBase 把 `Host` 透传成容器监听地址 `0.0.0.0:3000`
+   * 时，我们错把用户重定向到 `https://0.0.0.0:3000` 导致 `ERR_CONNECTION_CLOSED`。
+   */
   const res = await runAuthMiddleware(request)
   /**
    * 双跑期间在所有响应里附带部署/数据库识别头。

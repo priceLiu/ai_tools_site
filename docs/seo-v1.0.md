@@ -21,7 +21,7 @@
    生产必须配置 **`SITE_URL=https://你的域名`**（浏览器能打开的地址，无尾斜杠）。[`lib/site-url.ts`](../lib/site-url.ts) 驱动 **`robots.txt` 的 `sitemap` / `host`**、canonical、结构化数据绝对 URL。**不要**把 **`http://0.0.0.0:3000`** 当作站点 URL：`0.0.0.0` 只是容器「监听所有网卡」，在浏览器里等同访问本机或连接被关闭（`ERR_CONNECTION_CLOSED`）；端口 **`3000`** 多在容器内，外网通常走 **80/443** 由平台转发。
 
 2. **HTTP 进站**  
-   用户从 `http://` 书签进入会显示浏览器「不安全」。生产环境 [`middleware.ts`](../middleware.ts) 会在 **`X-Forwarded-Proto: http`** 等条件下 **308 → HTTPS**；CDN / Nginx 须 **透传 `X-Forwarded-Proto`**。
+   用户从 `http://` 书签进入会显示浏览器「不安全」。**HTTP→HTTPS 强制跳转交给前置网关**（CloudBase 自定义域名 / CDN / Nginx），应用层不做此跳转（曾尝试后回退，详见 [`docs/done.md`](./done.md) 2026-05-11 第 7 条）。请在网关启用 HTTPS 跳转 + HSTS，并把 **`X-Forwarded-Proto`** 透传给容器（cookie `Secure` 判定仍需要）。
 
 3. **构建期未连库 → 未预生成工具路径**  
    若 **`pnpm build` / `docker build` 阶段没有可用的 `DATABASE_URL`**，`app/tool/[slug]/page.tsx` 内 **`generateStaticParams`** 会捕获异常并 **`return []`**：**镜像内没有构建期静态页**，首次访问仍以 **服务端 ISR** 生成 HTML（对 Google 通常仍可索引），但缺少「构建即带好几百页」的预热。  

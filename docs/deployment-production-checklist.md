@@ -19,8 +19,7 @@
      - **推荐**：在 Nginx / CLB / Ingress 上向应用转发 **`X-Forwarded-Proto: https`**（及按需 `X-Forwarded-Host`）。  
      - **可选**：设置 **`SESSION_COOKIE_SECURE=true`**（强制 Secure）或 **`SESSION_COOKIE_SECURE=false`**（强制不 Secure，仅用于排查或纯 HTTP 环境；正式 HTTPS 站点优先修代理头）。  
    - **`SITE_URL`（首选）或 `NEXT_PUBLIC_SITE_URL`**：生产站点 **对外访问用的根 URL**（浏览器能打开的域名），形如 **`https://ai-code8.com`**（无尾斜杠），用于 canonical、sitemap、OG（见 [`lib/site-url.ts`](../lib/site-url.ts)）。**腾讯云 / 自建部署没有 `VERCEL_URL`**；不配此项时会回落到仓库占位域名。**切勿**填 **`http://0.0.0.0:3000`**：`0.0.0.0` 只是 Dockerfile 里容器 **监听地址**，不是网址；在浏览器里访问只会连本机或出现 **`ERR_CONNECTION_CLOSED`**。云托管用户请用 **HTTPS + 备案域名** 或环境 **`*.app.tcloudbase.com`**（并已在「HTTP 访问服务」配置路由）。若误写 `http://`，生产环境 [`getSiteUrl()`](../lib/site-url.ts) 会改为 `https://`；**`0.0.0.0` / `localhost` / `127.0.0.1` 在生产会被视为无效并忽略。**  
-   - **HTTP→HTTPS（应用层）**：[`middleware.ts`](../middleware.ts) 在生产环境对 **非 localhost** 请求执行 [`maybeHttpsRedirect`](../lib/middleware-https-redirect.ts)：当 **`X-Forwarded-Proto: http`**（用户经 http 访问 CDN/入口）或未传该头且直连 Node 为 `http:` 时，**308** 重定向到同源 **HTTPS**。需在 **Nginx / 阿里云 SLB / CDN / 云托管网关** 向应用透传 **`X-Forwarded-Proto`**（与上文 cookie `Secure` 一致）。  
-     **若浏览器 / 网关错误地把 `Host` 设为 `0.0.0.0:3000`**（监听地址误当网址），中间件会尝试用 **`X-Forwarded-Host`** 修正跳转目标；请务必在网关配置 **`X-Forwarded-Host: 用户访问的域名`**，否则无法自动纠正。  
+   - **HTTP→HTTPS（仅在网关侧做）**：**应用层不再做**强制跳转（曾在 2026-05-11 引入，因 CloudBase 在部分链路把 `Host` 透传成 `0.0.0.0:3000`，应用回 `Location: https://0.0.0.0:3000` 触发 `ERR_CONNECTION_CLOSED`，已回退）。请在 **CDN / 阿里云 SLB / CloudBase 自定义域名 / Nginx** 里启用 **HTTP→HTTPS 跳转 + HSTS**，并透传 **`X-Forwarded-Proto`**（cookie `Secure` 判定仍需要）。  
    - **`NEXT_PUBLIC_SUPABASE_*`**：若前台仍通过 `@supabase/supabase-js` 访问 Supabase，按现有项目约定配置（名称以代码为准）。  
    - **`NEON_DRIVER=postgres`**：注释写明多见于本地 Neon TCP；生产若在 Serverless 上用 Neon HTTP 等，**按运行环境删除或改写**，避免多余假设。
 
@@ -91,7 +90,7 @@ psql "$DATABASE_URL" -f supabase/migrations/20260509133000_showcase_revoke_reque
 | 现象 | 说明与处理 |
 |------|------------|
 | 浏览器访问 **`http://0.0.0.0:3000`** | **`0.0.0.0` 不是网站地址**，只是容器内「监听所有网卡」。请改用 **`https://备案域名`** 或 CloudBase **`*.app.tcloudbase.com`**（并已配置 HTTP 访问服务路由）。 |
-| 跳转后仍停留在 `0.0.0.0` | 网关把 **`Host`** 写成了 `0.0.0.0:3000`。请在 **CDN / 负载均衡 / Nginx** 上设置 **`X-Forwarded-Host`** 为真实域名（与 [`maybeHttpsRedirect`](../lib/middleware-https-redirect.ts) 行为一致）。 |
+| 跳转后仍停留在 `0.0.0.0` | 网关把 **`Host`** 写成了 `0.0.0.0:3000`，且**前置网关自己**返回了到 `0.0.0.0:3000` 的 302。请在 **CDN / 负载均衡 / Nginx / CloudBase 自定义域名** 里关闭这类 hairpin 跳转，并把 **`X-Forwarded-Host`** 设为真实域名后再回源。应用层不会再向 `0.0.0.0` 发跳转。 |
 | `SITE_URL` 误配 | 控制台 **`SITE_URL`** 必须为 **`https://你的域名`**，见第一节；[`getSiteUrl()`](../lib/site-url.ts) 在生产会忽略 `0.0.0.0` / `localhost` 等。 |
 
 ---
