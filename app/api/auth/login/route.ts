@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
     if (disabled === null) {
       return NextResponse.json({ error: '账号数据异常' }, { status: 500 })
     }
-    await setSessionCookie(row.user_id, row.email, false)
+    await setSessionCookie(row.user_id, row.email, false, req)
     return NextResponse.json({ ok: true })
   } catch (e) {
     const raw = e instanceof Error ? e.message : String(e)

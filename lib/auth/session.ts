@@ -1,9 +1,32 @@
 import { cookies } from 'next/headers'
+import type { NextRequest } from 'next/server'
 import { redirect } from 'next/navigation'
 import { cache } from 'react'
 import { neonGetProfileIsDisabled } from '@/lib/neon/data'
 import { SESSION_COOKIE_NAME, SESSION_MAX_AGE_SEC } from './constants'
 import { signSessionToken, verifySessionToken } from './jwt'
+
+/**
+ * 是否给会话 cookie 加 `Secure`。生产环境若在反向代理后终止 TLS，请转发 **`X-Forwarded-Proto: https`**，
+ * 否则 Node 侧看到的可能是 `http`，此处会 correctly 设为不强制 Secure（避免浏览器拒收 cookie → 「登录成功仍显示未登录」）。
+ * 亦可显式设置环境变量 **`SESSION_COOKIE_SECURE`**（`true`/`false`）。
+ */
+export function inferSessionCookieSecure(req: NextRequest): boolean {
+  const exp = process.env.SESSION_COOKIE_SECURE?.trim().toLowerCase()
+  if (exp === 'false' || exp === '0') return false
+  if (exp === 'true' || exp === '1') return true
+
+  if (process.env.NODE_ENV !== 'production') return false
+
+  const xf =
+    req.headers.get('x-forwarded-proto')?.split(',')[0]?.trim().toLowerCase() ??
+    ''
+  if (xf === 'https') return true
+  if (xf === 'http') return false
+
+  const proto = req.nextUrl.protocol.replace(':', '').toLowerCase()
+  return proto === 'https'
+}
 
 export type AuthUser = { id: string; email: string }
 
@@ -66,12 +89,13 @@ export async function setSessionCookie(
   userId: string,
   email: string,
   isDisabled = false,
+  req: NextRequest,
 ) {
   const token = await signSessionToken(userId, email, isDisabled)
   const cookieStore = await cookies()
   cookieStore.set(SESSION_COOKIE_NAME, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: inferSessionCookieSecure(req),
     sameSite: 'lax',
     path: '/',
     maxAge: SESSION_MAX_AGE_SEC,

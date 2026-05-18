@@ -15,6 +15,9 @@
      - 应用部署在腾讯云 VPC 内时，优先使用 **内网地址 + 内网端口**（延迟与安全更好）；不要在生产长期使用「仅用于迁移验证」的宽松策略（例如不必要的 `sslmode=disable`），应以云厂商文档为准启用 TLS。  
      - 若暂用公网串：在安全组 / 防火墙中**仅限应用出口 IP**，禁止 `0.0.0.0/0` 裸露端口（除非你确认并接受风险）。  
    - **`AUTH_SECRET`**：**独立生成**一条足够长的随机串（≥32 字符），**勿与开发机 `.env.local` 共用**，否则会话可被伪造。  
+   - **登录 cookie（生产常见故障）**：会话为 HttpOnly Cookie；若生产 **`NODE_ENV=production`** 且对浏览器表现为 **HTTPS**，但反向代理到 Node 时未转发协议头，可能导致 **`Secure` cookie 与实际情况不符**，浏览器直接丢弃 Set-Cookie，现象为 **点登录无报错却一直是未登录**。  
+     - **推荐**：在 Nginx / CLB / Ingress 上向应用转发 **`X-Forwarded-Proto: https`**（及按需 `X-Forwarded-Host`）。  
+     - **可选**：设置 **`SESSION_COOKIE_SECURE=true`**（强制 Secure）或 **`SESSION_COOKIE_SECURE=false`**（强制不 Secure，仅用于排查或纯 HTTP 环境；正式 HTTPS 站点优先修代理头）。  
    - **`SITE_URL` 或 `NEXT_PUBLIC_SITE_URL`**：生产站点绝对根 URL（无尾斜杠），用于 canonical、sitemap、OG（见 [`lib/site-url.ts`](../lib/site-url.ts)）。  
    - **`NEXT_PUBLIC_SUPABASE_*`**：若前台仍通过 `@supabase/supabase-js` 访问 Supabase，按现有项目约定配置（名称以代码为准）。  
    - **`NEON_DRIVER=postgres`**：注释写明多见于本地 Neon TCP；生产若在 Serverless 上用 Neon HTTP 等，**按运行环境删除或改写**，避免多余假设。

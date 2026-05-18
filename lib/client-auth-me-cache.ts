@@ -71,7 +71,10 @@ export async function loadAuthMe(): Promise<AuthMe> {
   if (inflight) return inflight
   inflight = (async () => {
     try {
-      const r = await fetch('/api/auth/me', { cache: 'no-store' })
+      const r = await fetch('/api/auth/me', {
+        cache: 'no-store',
+        credentials: 'include',
+      })
       if (!r.ok) return { user: null, profile: null }
       const j = (await r.json()) as AuthMe & { error?: string }
       const v: AuthMe = { user: j.user ?? null, profile: j.profile ?? null }
