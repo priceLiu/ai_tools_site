@@ -54,6 +54,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
+# 容器内监听地址（非浏览器访问 URL）；用户请打开备案域名或 CloudBase 分配的 *.app.tcloudbase.com，勿在地址栏填 0.0.0.0:3000
 ENV HOSTNAME=0.0.0.0
 
 # 非 root 用户运行

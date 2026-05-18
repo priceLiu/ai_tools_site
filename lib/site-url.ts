@@ -7,19 +7,65 @@
  *   3. `VERCEL_URL`（仅 Vercel 自动注入；**腾讯云 / 自建机不会有此项**）
  *   4. 兜底：`https://ai-tools-site-xi.vercel.app`（历史占位；**非 Vercel 生产环境务必配置 1 或 2，否则 canonical/sitemap 全错**）
  *
+ * 生产环境 **勿**将 `SITE_URL` 设为 `0.0.0.0`、`127.0.0.1`、`localhost`：那是监听地址 / 本机，浏览器无法用来访问线上站点。
+ *
  * Vercel `VERCEL_URL` 不带 protocol，自动补 `https://`。
  */
 let warnedMissingSiteUrl = false
+let warnedInvalidSiteUrlHost = false
+
+/** 生产环境下不可作为对外站点 canonical 的主机名（监听地址 / 本机回环）。 */
+function isForbiddenProductionSiteHost(hostname: string): boolean {
+  const h = hostname.toLowerCase()
+  return (
+    h === '0.0.0.0' ||
+    h === '127.0.0.1' ||
+    h === 'localhost' ||
+    h === '[::1]' ||
+    h === '::1'
+  )
+}
+
+/** @returns 规范化后的站点 origin（无路径、无尾斜杠），非法或解析失败返回 null */
+function tryNormalizeExplicitSiteUrl(raw: string): string | null {
+  let u = raw.trim().replace(/\/$/, '')
+  if (!u) return null
+
+  const isProd = process.env.NODE_ENV === 'production'
+  if (isProd && u.startsWith('http://')) {
+    u = `https://${u.slice('http://'.length)}`
+  }
+
+  let parsed: URL
+  try {
+    parsed = new URL(u.includes('://') ? u : `https://${u}`)
+  } catch {
+    return null
+  }
+
+  if (isProd && isForbiddenProductionSiteHost(parsed.hostname)) {
+    return null
+  }
+
+  return parsed.origin
+}
 
 export function getSiteUrl(): string {
   const explicit = process.env.SITE_URL?.trim() || process.env.NEXT_PUBLIC_SITE_URL?.trim()
   if (explicit) {
-    let u = explicit.replace(/\/$/, '')
-    // 生产环境公网站点不应再用 http:// canonical / OG；避免 env 误写成 http 拖垮 SEO 与混合内容判断。
-    if (process.env.NODE_ENV === 'production' && u.startsWith('http://')) {
-      u = `https://${u.slice('http://'.length)}`
+    const normalized = tryNormalizeExplicitSiteUrl(explicit)
+    if (normalized) {
+      return normalized
     }
-    return u
+    if (process.env.NODE_ENV === 'production' && !warnedInvalidSiteUrlHost) {
+      warnedInvalidSiteUrlHost = true
+      console.error(
+        '[site-url] SITE_URL / NEXT_PUBLIC_SITE_URL 无效（例如 0.0.0.0、localhost、127.0.0.1）。' +
+          ' Dockerfile 中 HOSTNAME=0.0.0.0 仅表示容器监听所有网卡，不能在浏览器地址栏访问。' +
+          ' 请改为正式域名，例如 SITE_URL=https://ai-code8.com',
+      )
+    }
+    // 无效时 fall through，避免 canonical/sitemap 指向不可达地址
   }
 
   const vercelUrl = process.env.VERCEL_URL?.trim()

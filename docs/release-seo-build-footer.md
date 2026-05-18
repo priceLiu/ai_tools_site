@@ -19,7 +19,7 @@
 
 ## 2. 发布前检查（运维）
 
-- [ ] **`SITE_URL`**：生产为 **`https://ai-code8.com`**（或当前正式域名），无尾斜杠，`https`。  
+- [ ] **`SITE_URL`**：生产为 **`https://ai-code8.com`**（或当前正式域名），无尾斜杠，`https`。**勿**写成 **`http://0.0.0.0:3000`**（监听地址不是访问地址，见 [`deployment-production-checklist.md`](./deployment-production-checklist.md) 第一节）。  
 - [ ] **CDN / 反代**：回源携带 **`X-Forwarded-Proto`**；HTTP 访问应跳转到 HTTPS（CDN + 应用 [`middleware`](../middleware.ts) 双层兜底）。  
 - [ ] **数据库迁移**：仍按 [`deployment-production-checklist.md`](./deployment-production-checklist.md) 第二节执行（若尚未执行）。
 

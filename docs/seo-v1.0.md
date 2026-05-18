@@ -18,7 +18,7 @@
 ## 二、为何仍可能「收录慢 / 抓取异常」（排查顺序）
 
 1. **正式域名与环境变量**  
-   生产必须配置 **`SITE_URL=https://你的域名`**（无尾斜杠）。[`lib/site-url.ts`](../lib/site-url.ts) 驱动 **`robots.txt` 的 `sitemap` / `host`**、canonical、结构化数据绝对 URL。未配置时会回落到仓库占位域名，站长工具与爬虫路径易错乱。
+   生产必须配置 **`SITE_URL=https://你的域名`**（浏览器能打开的地址，无尾斜杠）。[`lib/site-url.ts`](../lib/site-url.ts) 驱动 **`robots.txt` 的 `sitemap` / `host`**、canonical、结构化数据绝对 URL。**不要**把 **`http://0.0.0.0:3000`** 当作站点 URL：`0.0.0.0` 只是容器「监听所有网卡」，在浏览器里等同访问本机或连接被关闭（`ERR_CONNECTION_CLOSED`）；端口 **`3000`** 多在容器内，外网通常走 **80/443** 由平台转发。
 
 2. **HTTP 进站**  
    用户从 `http://` 书签进入会显示浏览器「不安全」。生产环境 [`middleware.ts`](../middleware.ts) 会在 **`X-Forwarded-Proto: http`** 等条件下 **308 → HTTPS**；CDN / Nginx 须 **透传 `X-Forwarded-Proto`**。
