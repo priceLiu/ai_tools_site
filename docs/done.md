@@ -4,6 +4,22 @@
 
 ---
 
+## 2026-05-11
+
+### SEO：Docker 构建期预生成、页脚文案与文档修订（发布）
+
+**需求背景**：澄清本站非纯 CSR；构建期缺少 `DATABASE_URL` 时工具路由无法在镜像内预生成；页脚「内容由 AI 生成」不利于收录观感；统一发布说明供运维执行。
+
+**实现内容**：
+1. [`Dockerfile`](../Dockerfile)：构建阶段 **`ARG DATABASE_URL` / `ARG BUILD_DATABASE_URL`**，合并后执行 `pnpm run build`；注释说明 CloudBase 与 CI 差异。
+2. [`components/site-footer.tsx`](../components/site-footer.tsx)：去掉「内容由 AI 生成」表述，改为「AI 协助开发」与版权异议联系说明。
+3. [`docs/seo-v1.0.md`](./seo-v1.0.md)：重写为与代码一致的审计备忘（ISR、`SITE_URL`、构建期 DB、`dynamicParams` 等）。
+4. [`docs/deployment-production-checklist.md`](./deployment-production-checklist.md)：第三节扩充 CloudBase / CI / **`docker build --build-arg`** 说明。
+5. [`docs/release-seo-build-footer.md`](./release-seo-build-footer.md)：发布检查清单与构建示例。
+6. **自动构建**：[`docs/ci-auto-build-database-url.md`](./ci-auto-build-database-url.md)；[`scripts/docker-build-ci.sh`](../scripts/docker-build-ci.sh)；[`.github/workflows/docker-build.yml`](../.github/workflows/docker-build.yml)；[`package.json`](../package.json) 脚本 **`pnpm run docker:build:ci`**。
+
+---
+
 ## 2026-05-10
 
 ### 场景 / 角色分类管理：列表高度、子 Tab 数字与计数说明

@@ -9,8 +9,7 @@ export function SiteFooter() {
     >
       <div className="mx-auto max-w-3xl space-y-3 text-xs leading-relaxed md:text-sm">
         <p>
-          本站由 AI 开发完成，本站的内容由 AI
-          生成，如有版权或内容的不同，请联系本站。
+          本站由 AI 协助开发完成。如有版权或内容异议，请联系本站。
         </p>
         <p>本站基于 AI 爱好者互相学习的目的构建。</p>
       </div>

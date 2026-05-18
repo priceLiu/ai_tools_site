@@ -63,12 +63,19 @@ psql "$DATABASE_URL" -f supabase/migrations/20260509133000_showcase_revoke_reque
 
 1. **`pnpm install` / `pnpm build`**：与 lockfile 一致；Docker / CI 参考仓库既有 [`Dockerfile`](../Dockerfile)、[`pnpm-workspace.yaml`](../pnpm-workspace.yaml)、[`.npmrc`](../.npmrc)。  
 2. **Node / pnpm 版本**：与 [`package.json`](../package.json) 的 `packageManager`、`engines`（若有）一致。  
-3. **Docker / CI 构建与 `DATABASE_URL`**：`pnpm run build` 阶段会为多个路由做静态预渲染。[`/app/excellent-ai-solutions/page.tsx`](../app/excellent-ai-solutions/page.tsx) 使用 **`dynamic = 'force-dynamic'`**，在**未注入 `DATABASE_URL` 的镜像构建**中也可完成编译（列表在容器运行时读库渲染）。若希望改为构建期生成静态 HTML，需在 **`docker build` 传入可用的 `DATABASE_URL`（BuildKit secret）**，可自行去掉该页的 `force-dynamic` 并恢复 ISR。
+3. **Docker / CI 构建与 `DATABASE_URL`**：`pnpm run build` 阶段会为多个路由执行 **`generateStaticParams`**（若此时能连库）。  
+   - **CloudBase 控制台自动部署**：运行时环境变量 **通常不会**进入 Docker `RUN pnpm build`，构建期预渲染需 **流水线传入 `--build-arg`** 或改用「镜像拉取」——详见 **[`docs/ci-auto-build-database-url.md`](./ci-auto-build-database-url.md)**。  
+   - **推荐（任意能跑 docker build 的 CI）**：`docker build --build-arg DATABASE_URL="..."` 或使用 **[`scripts/docker-build-ci.sh`](../scripts/docker-build-ci.sh)**（环境变量 **`DATABASE_URL`** 或 **`BUILD_DATABASE_URL`**）；流水线应对日志 **掩码**。Dockerfile 支持 **`ARG DATABASE_URL`** 与备用 **`ARG BUILD_DATABASE_URL`**。  
+   - **GitHub 仓库**：推送 `main`/`master` 触发 [`.github/workflows/docker-build.yml`](../.github/workflows/docker-build.yml)，在 Actions Secrets 配置 **`DATABASE_URL`** 或 **`BUILD_DATABASE_URL`** 后即自动 **带参构建**（默认不 push 镜像，可自行追加推送步骤）。  
+   - **未传入 build-arg**：构建仍可完成，对应路由依赖运行时 **ISR / 按需生成**。  
+   - [`/app/excellent-ai-solutions/page.tsx`](../app/excellent-ai-solutions/page.tsx) 使用 **`dynamic = 'force-dynamic'`**，列表仅在运行时读库；与工具详情 **ISR** 策略不同。
 4. **ISR / 缓存**：[`app/excellent-ai-solutions/[slug]/page.tsx`](../app/excellent-ai-solutions/[slug]/page.tsx) 等仍可使用 `revalidate`；发布后若需立即见效，可对相关路径做一次 **`revalidatePath`** 或等待 TTL。
 
 ---
 
 ## 四、上线后烟雾测试（建议）
+
+**SEO / 收录相关扩展清单**：见 [`docs/release-seo-build-footer.md`](./release-seo-build-footer.md) 第四节；**自动构建与 CloudBase**：见 [`docs/ci-auto-build-database-url.md`](./ci-auto-build-database-url.md)。
 
 - [ ] 登录 → `/account/home` 门户加载正常（关注分块、收藏、评论、提交三步展开）。  
 - [ ] `/excellent-ai-solutions` 头像墙与 Tooltip（桌面）。  

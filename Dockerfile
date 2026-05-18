@@ -7,6 +7,14 @@
 #     -e DATABASE_URL="postgresql://..." \
 #     -e AUTH_SECRET="$(openssl rand -base64 32)" \
 #     ai-tools:local
+#
+# SEO / 静态预生成（可选）：
+#   - CloudBase Run 控制台里配的「环境变量」多在容器运行时生效，Dockerfile 的 RUN pnpm build 往往拿不到 →
+#     见 docs/ci-auto-build-database-url.md（GitHub Actions / 自建 CI / 镜像拉取三种做法）。
+#   - 任意能执行 docker build 的流水线：传入可读库的 DATABASE_URL（或 BUILD_DATABASE_URL）即可预渲染。
+#   示例：
+#     docker build --build-arg DATABASE_URL="postgresql://..." -t ai-tools:local .
+#     ./scripts/docker-build-ci.sh -t ai-tools:local
 
 # ---------- Stage 1: deps ----------
 FROM node:22-alpine AS deps
@@ -28,7 +36,17 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
-RUN pnpm run build
+# 构建期连库：DATABASE_URL 为主；BUILD_DATABASE_URL 为备用 ARG（流水线密钥可与运行时区分命名）。
+ARG DATABASE_URL=
+ARG BUILD_DATABASE_URL=
+RUN MERGED_DB="${DATABASE_URL:-${BUILD_DATABASE_URL}}" \
+ && export DATABASE_URL="$MERGED_DB" \
+ && if [ -z "$DATABASE_URL" ]; then \
+      echo "[docker build] 未注入 DATABASE_URL/BUILD_DATABASE_URL → 构建期不连库预渲染（CloudBase 默认常如此）；见 docs/ci-auto-build-database-url.md"; \
+    else \
+      echo "[docker build] 已注入 DATABASE_URL，执行 next build（含 generateStaticParams）"; \
+    fi \
+ && pnpm run build
 
 # ---------- Stage 3: runtime ----------
 FROM node:22-alpine AS runtime
