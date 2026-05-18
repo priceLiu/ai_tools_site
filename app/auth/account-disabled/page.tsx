@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { ShieldOff } from 'lucide-react'
 
 export const metadata = {
-  title: '账号已禁用 - AI工具集',
+  title: '账号已禁用 - 智选AI',
 }
 
 export default function AccountDisabledPage() {

@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic'
 
 const SITE_SECTION_TITLE = 'AI 方案集'
 const SITE_SECTION_DESC =
-  '社区精选的 AI 工具组合与实践心得，经管理员审核后在主站公开发布。'
+  '社区精选的 AI 工具组合与实践心得，由智选AI审核后在主站公开发布。'
 
 export const metadata: Metadata = {
   title: SITE_SECTION_TITLE,

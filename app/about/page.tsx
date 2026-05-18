@@ -21,20 +21,20 @@ export const revalidate = false
 export const metadata: Metadata = {
   title: '项目简介',
   description:
-    '汇集全网热门 AI 工具，按场景分类，支持用户提交新工具、社区共建。注册登录后可提交工具，经管理员审核后免费上架。',
+    '智选AI汇集全网热门 AI 工具，按场景分类，支持用户提交新工具、社区共建。注册登录后可提交工具，经管理员审核后免费上架。',
   keywords:
-    'AI 工具, 人工智能, AI 工具集, AI 导航, AI 写作, AI 绘画, AI 编程, AI 学术, 工具提交',
+    '智选AI, AI 工具, 人工智能, AI 导航, AI 写作, AI 绘画, AI 编程, AI 学术, 工具提交',
   alternates: { canonical: '/about' },
   openGraph: {
     type: 'website',
     url: '/about',
-    title: 'AI 工具集 · 项目简介',
-    description: '汇集全网热门 AI 工具，按场景分类，社区共建。',
+    title: '智选AI · 项目简介',
+    description: '智选AI汇集全网热门 AI 工具，按场景分类，社区共建。',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'AI 工具集 · 项目简介',
-    description: '汇集全网热门 AI 工具，按场景分类，社区共建。',
+    title: '智选AI · 项目简介',
+    description: '智选AI汇集全网热门 AI 工具，按场景分类，社区共建。',
   },
 }
 
@@ -119,7 +119,7 @@ export default function AboutPage() {
               <Sparkles className="h-5 w-5 text-primary-foreground" />
             </span>
             <span className="text-base font-bold text-foreground md:text-lg">
-              AI 工具集
+              智选AI
             </span>
           </Link>
           <Link

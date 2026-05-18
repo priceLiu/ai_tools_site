@@ -27,7 +27,7 @@ import type { Tool } from '@/lib/types'
 import type { AdminToolTab } from '@/lib/neon/data'
 
 export const metadata = {
-  title: '管理后台 - AI工具集',
+  title: '管理后台 - 智选AI',
 }
 
 export const dynamic = 'force-dynamic'

@@ -13,6 +13,7 @@ import {
 import { getNavigationMenuTreeStatic } from '@/lib/navigation-menu'
 import * as neon from '@/lib/neon/data'
 import { toolPublicPath } from '@/lib/tool-public-path'
+import { SITE_BRAND_NAME } from '@/lib/site-brand'
 import { getSiteUrl } from '@/lib/site-url'
 
 /** 60s ISR：后台保存通过 `revalidatePath` 立即推送 */
@@ -54,14 +55,14 @@ export async function generateMetadata({
   }
   const desc =
     (tool.description ?? '').trim() ||
-    `了解 ${tool.name} 的功能、定价与使用方式，更多 AI 工具尽在 AI 工具集。`
+    `了解 ${tool.name} 的功能、定价与使用方式，更多 AI 工具尽在 ${SITE_BRAND_NAME}。`
   const path = toolPublicPath(slug)
   const ogImages = tool.logo_url ? [{ url: tool.logo_url, alt: tool.name }] : undefined
   const cat = tool.category?.name
   return {
     title: cat ? `${tool.name} · ${cat}` : tool.name,
     description: desc,
-    keywords: [tool.name, cat, 'AI 工具', 'AI 工具推荐']
+    keywords: [tool.name, cat, 'AI 工具', SITE_BRAND_NAME, 'AI 工具推荐']
       .filter(Boolean)
       .join(', '),
     alternates: { canonical: path },
@@ -98,8 +99,8 @@ export default async function ToolPage({ params }: ToolPageProps) {
   const toolUrl = `${siteUrl}${toolPublicPath(slug)}`
 
   /**
-   * Schema.org `SoftwareApplication`：让 Google 富片段可以拿到工具名、描述、分类、图、收藏数（作为评分基数）。
-   * 仅在有非空 description 与 website_url 时才输出，避免把空内容塞给爬虫。
+   * Schema.org `SoftwareApplication`：工具名、描述、分类、图。
+   * 收藏数用 `interactionStatistic`（Like），勿用 `aggregateRating` 冒充用户评价。
    */
   const jsonLd: Record<string, unknown> = {
     '@context': 'https://schema.org',
@@ -113,12 +114,10 @@ export default async function ToolPage({ params }: ToolPageProps) {
     image: tool.logo_url || undefined,
   }
   if (typeof tool.favorite_count === 'number' && tool.favorite_count > 0) {
-    jsonLd.aggregateRating = {
-      '@type': 'AggregateRating',
-      ratingValue: 5,
-      ratingCount: tool.favorite_count,
-      bestRating: 5,
-      worstRating: 1,
+    jsonLd.interactionStatistic = {
+      '@type': 'InteractionCounter',
+      interactionType: 'https://schema.org/LikeAction',
+      userInteractionCount: tool.favorite_count,
     }
   }
 

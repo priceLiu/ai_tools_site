@@ -8,6 +8,7 @@ import {
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Sparkles, CheckCircle2 } from 'lucide-react'
+import { SITE_BRAND_NAME } from '@/lib/site-brand'
 
 export default function Page() {
   return (
@@ -19,7 +20,7 @@ export default function Page() {
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary">
                 <Sparkles className="h-6 w-6 text-primary-foreground" />
               </div>
-              <span className="text-xl font-bold text-foreground">AI工具集</span>
+              <span className="text-xl font-bold text-foreground">{SITE_BRAND_NAME}</span>
             </Link>
           </div>
 

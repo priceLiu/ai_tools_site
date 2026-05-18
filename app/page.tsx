@@ -11,6 +11,7 @@ import { getHomeToolBundle } from '@/lib/cached-home-data'
 import { getHomeAdsBundle } from '@/lib/cached-home-ads'
 import { getHomeTagCategoryCards } from '@/lib/cached-home-tag-categories'
 import { getNavigationMenuTreeStatic } from '@/lib/navigation-menu'
+import { SITE_BRAND_NAME } from '@/lib/site-brand'
 import { getSiteUrl } from '@/lib/site-url'
 
 /** ISR：60s TTL；后台变更通过 `revalidateTag` / `revalidatePath('/')` 立即推送 */
@@ -38,7 +39,7 @@ export default async function HomePage() {
   const websiteLd = {
     '@context': 'https://schema.org',
     '@type': 'WebSite',
-    name: 'AI 工具集',
+    name: SITE_BRAND_NAME,
     url: `${siteUrl}/`,
     potentialAction: {
       '@type': 'SearchAction',
@@ -49,7 +50,7 @@ export default async function HomePage() {
   const orgLd = {
     '@context': 'https://schema.org',
     '@type': 'Organization',
-    name: 'AI 工具集',
+    name: SITE_BRAND_NAME,
     url: `${siteUrl}/`,
     /**
      * Schema.org Organization logo：用 PNG（部分爬虫对 WebP 兼容差）。
@@ -77,14 +78,14 @@ export default async function HomePage() {
              */}
             <Image
               src="/logo-zhixuanai.png"
-              alt="智选 AI · 打工人、创业老板、自由职业，找 AI 上智选"
+              alt="智选AI · 打工人、创业老板、自由职业，找 AI 上智选"
               width={512}
               height={512}
               priority
               className="h-auto w-40 md:w-56"
             />
             {/* h1 留给 SEO，视觉上不显示，避免与 logo 文字重复 */}
-            <h1 className="sr-only">智选 AI · 发现最适合你的 AI 工具</h1>
+            <h1 className="sr-only">智选AI · 发现最适合你的 AI 工具</h1>
           </div>
 
           <div className="mx-auto mb-6 w-full max-w-[min(100%,94rem)] space-y-4 md:mb-8">

@@ -41,7 +41,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     : 'AI 方案集'
   const desc =
     profile?.showcase_summary?.trim() ||
-    '用户分享的 AI 工具与实践精选，由智选 AI 审核发布。'
+    '用户分享的 AI 工具与实践精选，由智选AI审核发布。'
   const path = `/excellent-ai-solutions/${encodeURIComponent(slug)}`
   return {
     title,

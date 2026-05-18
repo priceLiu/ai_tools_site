@@ -2,7 +2,9 @@ import type { MetadataRoute } from 'next'
 import { getSiteUrl } from '@/lib/site-url'
 
 /**
- * 公开收录：首页 / about / 分类 / 工具详情。
+ * 公开收录：默认允许整站抓取；仅通过 disallow 排除不需收录的路径。
+ * （不在此列举 Allow：部分爬虫对 Allow 白名单解读不一致，且与 sitemap 中的
+ *   /tag、/tag-category、/role、/excellent-ai-solutions 等易不一致。）
  *
  * 屏蔽：
  *   - 后台与账户体系：admin / account / favorites / my-submissions / submit
@@ -18,7 +20,6 @@ export default function robots(): MetadataRoute.Robots {
     rules: [
       {
         userAgent: '*',
-        allow: ['/', '/about', '/category/', '/tool/'],
         disallow: [
           '/admin/',
           '/account/',

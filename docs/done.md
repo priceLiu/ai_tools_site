@@ -30,7 +30,29 @@
 2. **`buildSuggestedToolTagNames`**（[`lib/tool-tags-extract.ts`](./lib/tool-tags-extract.ts)）：可选 `sceneCategoryName`、`roleCategoryName`，与菜单名一并按顺序去重前置；[`lib/tool-tags-match-library.ts`](./lib/tool-tags-match-library.ts) 字典路径共用 `prependTaxonomyHintTagNames`。
 3. **数据层**：[`neonGetRoleCategoryById`](./lib/neon/data.ts)；导入时 `category_id` 可为 null，`neonFindDuplicateTool` 行为沿用既有 NULL 分支。
 4. **Actions / 页面**：[`app/admin/tools/import-actions.ts`](./app/admin/tools/import-actions.ts)、[`app/admin/import-tools/page.tsx`](./app/admin/import-tools/page.tsx)、[`components/admin-import-tools-form.tsx`](./components/admin-import-tools-form.tsx)。
-5. **文档**：[`docs/admin-batch-import.md`](./docs/admin-batch-import.md)。
+5. **文档**：[`docs/admin-batch-import.md`](./admin-batch-import.md)。
+
+---
+
+### 全站品牌口径统一为「智选AI」
+
+**需求背景**：首页视觉与 slogan 已为智选 AI，全局 metadata / 结构化数据 / 侧栏与鉴权页等处仍混用「AI 工具集」，需统一为「智选AI」以利于品牌检索与社交卡片一致性。
+
+**实现内容**：
+1. [`lib/site-brand.ts`](../lib/site-brand.ts)：集中定义 `SITE_BRAND_NAME`、`SITE_BRAND_TITLE`、`SITE_BRAND_DESCRIPTION`、`SITE_BRAND_KEYWORDS`。
+2. [`app/layout.tsx`](../app/layout.tsx) 默认 title/description/keywords/OG/Twitter；[`app/page.tsx`](../app/page.tsx) `WebSite` / `Organization` JSON-LD 与首页无障碍标题；[`app/about/page.tsx`](../app/about/page.tsx)、[`app/tool/[slug]/page.tsx`](../app/tool/[slug]/page.tsx)、[`app/excellent-ai-solutions/page.tsx`](../app/excellent-ai-solutions/page.tsx) 等文案对齐。
+3. [`components/sidebar.tsx`](../components/sidebar.tsx)、[`app/auth/login/page.tsx`](../app/auth/login/page.tsx)、[`app/auth/sign-up/page.tsx`](../app/auth/sign-up/page.tsx)、[`app/auth/sign-up-success/page.tsx`](../app/auth/sign-up-success/page.tsx)、[`app/admin/page.tsx`](../app/admin/page.tsx)、[`app/auth/account-disabled/page.tsx`](../app/auth/account-disabled/page.tsx) 露出品牌处改为常量或统一文案。
+
+---
+
+### 生产环境 HTTP → HTTPS（中间件）
+
+**需求背景**：域名已配置证书且 https 可访问，但用户从 http 书签或外链进入时浏览器仍显示「不安全」；应用层此前未做强制跳转。
+
+**实现内容**：
+1. [`lib/middleware-https-redirect.ts`](../lib/middleware-https-redirect.ts)：`maybeHttpsRedirect`，生产环境且非 localhost 时，依据 `x-forwarded-proto: http` 或未传该头且请求为 `http:` 时 **308** 跳到同源 HTTPS。
+2. [`middleware.ts`](../middleware.ts)：在鉴权逻辑之前执行上述跳转。
+3. [`lib/site-url.ts`](../lib/site-url.ts)：生产环境若 `SITE_URL` / `NEXT_PUBLIC_SITE_URL` 误写为 `http://`，规范为 `https://`。
 
 ---
 

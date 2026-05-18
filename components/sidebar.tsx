@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
 import type { NavigationMenuTreeNode } from '@/lib/types'
+import { SITE_BRAND_NAME } from '@/lib/site-brand'
 import { slugFromCategoryMenuHref } from '@/lib/submit-category-choices'
 import { navigationIcon } from '@/lib/navigation-icons'
 import { Award, ChevronDown, Plus, Sparkles, type LucideIcon } from 'lucide-react'
@@ -327,7 +328,7 @@ export function SidebarFrame({
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
             <Sparkles className="h-5 w-5 text-primary-foreground" />
           </div>
-          <span className={logoTextClass}>AI工具集</span>
+          <span className={logoTextClass}>{SITE_BRAND_NAME}</span>
         </Link>
       </div>
 

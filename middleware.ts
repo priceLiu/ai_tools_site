@@ -1,8 +1,17 @@
 import { deployTargetHeaders } from '@/lib/deploy-target'
 import { runAuthMiddleware } from '@/lib/auth/middleware-session'
+import { maybeHttpsRedirect } from '@/lib/middleware-https-redirect'
 import { type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
+  const httpsRedirect = maybeHttpsRedirect(request)
+  if (httpsRedirect) {
+    for (const [k, v] of Object.entries(deployTargetHeaders())) {
+      httpsRedirect.headers.set(k, v)
+    }
+    return httpsRedirect
+  }
+
   const res = await runAuthMiddleware(request)
   /**
    * 双跑期间在所有响应里附带部署/数据库识别头。

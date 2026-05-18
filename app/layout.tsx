@@ -4,21 +4,22 @@ import { Analytics } from '@vercel/analytics/next'
 import { TooltipProvider } from '@radix-ui/react-tooltip'
 import { SiteFooter } from '@/components/site-footer'
 import { ExcellentSolutionsFab } from '@/components/excellent-solutions-fab'
+import {
+  SITE_BRAND_DESCRIPTION as SITE_DESCRIPTION,
+  SITE_BRAND_KEYWORDS,
+  SITE_BRAND_NAME as SITE_NAME,
+  SITE_BRAND_TITLE as SITE_TITLE,
+} from '@/lib/site-brand'
 import { getSiteUrlObject } from '@/lib/site-url'
 import './globals.css'
 
 const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
-const SITE_NAME = 'AI 工具集'
-const SITE_TITLE = 'AI 工具集 - 发现最好用的 AI 工具'
-const SITE_DESCRIPTION =
-  '汇集全网优质 AI 工具，覆盖 AI 对话、AI 写作、AI 绘画、AI 视频、AI 编程、论文学术、公文办公、新媒体营销等各类场景，社区共建、严格审核，帮你找到最适合自己的 AI 工具。'
-
 /**
  * 全站默认 metadata：
  *  - `metadataBase`：让所有相对 URL（OG image、canonical）自动转绝对，详见 `lib/site-url.ts`。
- *  - `title.template`：子页 metadata 只写「工具名 / 分类名」即可，自动拼成 "X | AI 工具集"。
+ *  - `title.template`：子页 metadata 只写「工具名 / 分类名」即可，自动拼成 "X | 智选AI"。
  *  - `robots`：默认允许收录；后台 / 鉴权 / 诊断在各自 layout 或 page 中覆盖为 noindex。
  *  - `openGraph` / `twitter`：站点级默认值，子页可补 type=article、images。
  */
@@ -29,18 +30,7 @@ export const metadata: Metadata = {
     template: `%s | ${SITE_NAME}`,
   },
   description: SITE_DESCRIPTION,
-  keywords: [
-    'AI 工具',
-    'AI 工具集',
-    '人工智能',
-    'AI 导航',
-    'AI 写作',
-    'AI 绘画',
-    'AI 编程',
-    'AI 视频',
-    'ChatGPT',
-    'AI 工具推荐',
-  ],
+  keywords: [...SITE_BRAND_KEYWORDS],
   applicationName: SITE_NAME,
   alternates: {
     canonical: '/',
@@ -52,11 +42,13 @@ export const metadata: Metadata = {
     url: '/',
     title: SITE_TITLE,
     description: SITE_DESCRIPTION,
+    images: [{ url: '/logo-zhixuanai.png', width: 512, height: 512, alt: SITE_NAME }],
   },
   twitter: {
     card: 'summary_large_image',
     title: SITE_TITLE,
     description: SITE_DESCRIPTION,
+    images: ['/logo-zhixuanai.png'],
   },
   robots: {
     index: true,
